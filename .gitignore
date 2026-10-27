@@ -1,0 +1,53 @@
+# Prerequisites
+*.d
+
+# Compiled Object files
+*.slo
+*.lo
+*.o
+*.obj
+
+# Precompiled Headers
+*.gch
+*.pch
+
+# Compiled Dynamic libraries
+*.so
+*.dylib
+*.dll
+
+# Fortran module files
+*.mod
+*.smod
+
+# Compiled Static libraries
+*.lai
+*.la
+*.a
+*.lib
+
+# Executables
+*.exe
+*.out
+*.app
+
+# Build directory (CMake)
+build/
+bin/
+lib/
+CMakeUserPresets.json
+
+# Clangd and clang-tidy caches
+.cache/
+compile_commands.json
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# IDEs and Editors
+.idea/
+*.swp
+*.swo
+*~

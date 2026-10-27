@@ -1,0 +1,32 @@
+{
+    "workbench.colorTheme": "Default Dark Modern",
+    "workbench.colorCustomizations": {
+        "editor.background": "#131314",
+        "editor.foreground": "#e3e3e3",
+        "sideBar.background": "#18181b",
+        "sideBar.border": "#27272a",
+        "activityBar.background": "#18181b",
+        "activityBar.border": "#27272a",
+        "statusBar.background": "#18181b",
+        "statusBar.foreground": "#a1a1aa",
+        "statusBar.border": "#27272a",
+        "tab.activeBackground": "#1e1e20",
+        "tab.inactiveBackground": "#131314",
+        "tab.border": "#27272a",
+        "panel.background": "#131314",
+        "panel.border": "#27272a",
+        "terminal.background": "#131314"
+    },
+    "clangd.arguments": [
+        "--compile-commands-dir=${workspaceFolder}/build",
+        "--background-index",
+        "--clang-tidy",
+        "--header-insertion=never"
+    ],
+    "editor.fontFamily": "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace",
+    "editor.fontLigatures": true,
+    "editor.fontSize": 14,
+    "editor.lineHeight": 22,
+    "editor.renderLineHighlight": "gutter",
+    "editor.cursorBlinking": "smooth"
+}
