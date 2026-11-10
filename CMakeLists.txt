@@ -23,7 +23,7 @@ add_library(arche::arche ALIAS arche)
 
 # --- Test Target --------------------------------------------------------------
 add_executable(arche_tests
-    tests/test_main.cpp
+    tests/entity_tests.cpp
 )
 
 target_link_libraries(arche_tests PRIVATE
