@@ -1,0 +1,31 @@
+BasedOnStyle: LLVM
+ColumnLimit: 80
+
+# 1. Keep the return type on the same line as the function name
+BreakAfterReturnType: None
+AlwaysBreakAfterReturnType: None
+
+# 2. Force the closing ')' onto its own separate line
+AlignAfterOpenBracket: BlockIndent
+
+# 3. Disallow packing multiple arguments on one line
+BinPackParameters: false
+BinPackArguments: false
+
+# 4. Do not collapse lines even if they seem short
+AllowAllParametersOfDeclarationOnNextLine: false
+
+# Disable automatic trailing namespace comments
+FixNamespaceComments: false
+
+# "Never put the return type on its own line just to fit 80 columns; break the parameters instead
+PenaltyReturnTypeOnItsOwnLine: 1000
+
+# Heavily penalize breaking immediately after '='
+PenaltyBreakAssignment: 500
+
+
+BreakBeforeTernaryOperators: true
+
+
+AlignOperands: DontAlign

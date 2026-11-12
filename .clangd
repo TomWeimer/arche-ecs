@@ -1,0 +1,7 @@
+Documentation:
+  CommentFormat: Doxygen
+
+CompileFlags:
+  Add:
+    - -Wno-extra-semi
+    - -Wno-missing-designated-field-initializers

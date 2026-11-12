@@ -119,7 +119,7 @@ public:
       const ComponentMask &query
   ) const noexcept {
     return ((words[0] & query.words[0]) == query.words[0]) &&
-           ((words[1] & query.words[1]) == query.words[1]);
+        ((words[1] & query.words[1]) == query.words[1]);
   }
 
   /**
@@ -132,7 +132,7 @@ public:
       const ComponentMask &excluded
   ) const noexcept {
     return ((words[0] & excluded.words[0]) == 0) &&
-           ((words[1] & excluded.words[1]) == 0);
+        ((words[1] & excluded.words[1]) == 0);
   }
 
   /**
@@ -144,7 +144,7 @@ public:
       const ComponentMask &filter
   ) const noexcept {
     return ((words[0] & filter.words[0]) != 0) ||
-           ((words[1] & filter.words[1]) != 0);
+        ((words[1] & filter.words[1]) != 0);
   }
 
   /**
@@ -194,6 +194,14 @@ public:
     return result;
   }
 
+  /**
+   * @brief Accesses a 64-bit integer word of the mask.
+   * @param index Word index (0 or 1).
+   */
+  [[nodiscard]] constexpr uint64_t word(size_t index) const noexcept {
+    return words[index];
+  }
+
   // --- Comparison Operators --------------------------------------------------
 
   constexpr auto operator<=>(const ComponentMask &other) const noexcept =
@@ -221,4 +229,28 @@ static_assert(
     "ComponentMask must have a trivial destructor"
 );
 
+// --- Hash Support for ComponentMask ------------------------------------------
+
+/**
+ * @struct ComponentMaskHash
+ * @brief High-speed hash functor for 128-bit ComponentMask.
+ */
+struct ComponentMaskHash {
+  [[nodiscard]] size_t operator()(const ComponentMask &mask) const noexcept {
+    // 64-bit golden ratio combination
+    const size_t h1 = std::hash<uint64_t>{}(mask.word(0));
+    const size_t h2 = std::hash<uint64_t>{}(mask.word(1));
+    return h1 ^ (h2 + 0x9e3779b97f4a7c15ULL + (h1 << 6) + (h1 >> 2));
+  }
+};
+
 } // namespace arche
+
+// Standard Hash Specialization for std::unordered_map / std::unordered_set
+template <> struct std::hash<arche::ComponentMask> {
+  [[nodiscard]] size_t operator()(
+      const arche::ComponentMask &mask
+  ) const noexcept {
+    return arche::ComponentMaskHash{}(mask);
+  }
+};

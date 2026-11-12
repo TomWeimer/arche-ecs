@@ -21,33 +21,42 @@ target_include_directories(arche PUBLIC
 # Alias so consumers can link arche::arche
 add_library(arche::arche ALIAS arche)
 
-# --- Test Target --------------------------------------------------------------
-add_executable(arche_tests
-    tests/entity_tests.cpp
-)
-
-target_link_libraries(arche_tests PRIVATE
-    arche::arche
-)
-
-# Rule to run tests via CTest and via direct target
+# --- Test Targets -------------------------------------------------------------
 enable_testing()
-add_test(NAME arche_tests COMMAND arche_tests)
 
+# Module 001 Tests: Entity & Generational SlotMap
+add_executable(arche_tests tests/entity_tests.cpp)
+target_link_libraries(arche_tests PRIVATE arche::arche)
+add_test(NAME entity_tests COMMAND arche_tests)
+
+# Module 002 Tests: Type Registry & Component Mask
+add_executable(type_tests tests/type_tests.cpp)
+target_link_libraries(type_tests PRIVATE arche::arche)
+add_test(NAME type_tests COMMAND type_tests)
+
+# Module 003 Tests: Archetype & Transition Graph
+add_executable(archetype_tests tests/archetype_tests.cpp)
+target_link_libraries(archetype_tests PRIVATE arche::arche)
+add_test(NAME archetype_tests COMMAND archetype_tests)
+
+# Custom Target: run all unit tests
 add_custom_target(run_tests
     COMMAND arche_tests
-    DEPENDS arche_tests
+    COMMAND type_tests
+    COMMAND archetype_tests
+    DEPENDS arche_tests type_tests archetype_tests
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
-    COMMENT "Executing arche_tests..."
+    COMMENT "Executing all unit tests..."
 )
 
 # --- Clean Rules --------------------------------------------------------------
-# Note: 'clean' is built into CMake (cmake --build build --target clean)
 # 'fclean' removes object files as well as the compiled library and test binaries
 add_custom_target(fclean
     COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target clean
     COMMAND ${CMAKE_COMMAND} -E rm -f
         $<TARGET_FILE:arche>
         $<TARGET_FILE:arche_tests>
+        $<TARGET_FILE:type_tests>
+        $<TARGET_FILE:archetype_tests>
     COMMENT "Full clean: removing intermediate objects and binaries..."
 )
