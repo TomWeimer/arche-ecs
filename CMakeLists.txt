@@ -28,9 +28,9 @@ add_library(arche::arche ALIAS arche)
 enable_testing()
 
 # Module 001 Tests: Entity & Generational SlotMap
-add_executable(arche_tests tests/entity_tests.cpp)
-target_link_libraries(arche_tests PRIVATE arche::arche)
-add_test(NAME entity_tests COMMAND arche_tests)
+add_executable(entity_tests tests/entity_tests.cpp)
+target_link_libraries(entity_tests PRIVATE arche::arche)
+add_test(NAME entity_tests COMMAND entity_tests)
 
 # Module 002 Tests: Type Registry & Component Mask
 add_executable(type_tests tests/type_tests.cpp)
@@ -62,16 +62,27 @@ add_executable(gpu_reflection_tests tests/gpu_reflection_tests.cpp)
 target_link_libraries(gpu_reflection_tests PRIVATE arche::arche)
 add_test(NAME gpu_reflection_tests COMMAND gpu_reflection_tests)
 
+# Module 008: All-in-One Invariant Test Suite
+add_executable(arche_tests tests/arche_tests.cpp)
+target_link_libraries(arche_tests PRIVATE arche::arche)
+add_test(NAME arche_tests COMMAND arche_tests)
+
+# Module 008: Cycle-Accurate Hardware Performance Benchmarks
+add_executable(arche_benchmarks benchmarks/arche_benchmarks.cpp)
+target_link_libraries(arche_benchmarks PRIVATE arche::arche)
+add_test(NAME arche_benchmarks COMMAND arche_benchmarks)
+
 # Custom Target: run all unit tests
 add_custom_target(run_tests
-    COMMAND arche_tests
+    COMMAND entity_tests
     COMMAND type_tests
     COMMAND archetype_tests
     COMMAND chunk_storage_tests
     COMMAND structural_mutation_tests
     COMMAND query_tests
     COMMAND gpu_reflection_tests
-    DEPENDS arche_tests type_tests archetype_tests chunk_storage_tests structural_mutation_tests query_tests gpu_reflection_tests
+    COMMAND arche_tests
+    DEPENDS entity_tests type_tests archetype_tests chunk_storage_tests structural_mutation_tests query_tests gpu_reflection_tests arche_tests
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
     COMMENT "Executing all unit tests..."
 )
@@ -82,12 +93,14 @@ add_custom_target(fclean
     COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target clean
     COMMAND ${CMAKE_COMMAND} -E rm -f
         $<TARGET_FILE:arche>
-        $<TARGET_FILE:arche_tests>
+        $<TARGET_FILE:entity_tests>
         $<TARGET_FILE:type_tests>
         $<TARGET_FILE:archetype_tests>
         $<TARGET_FILE:chunk_storage_tests>
         $<TARGET_FILE:structural_mutation_tests>
         $<TARGET_FILE:query_tests>
         $<TARGET_FILE:gpu_reflection_tests>
+        $<TARGET_FILE:arche_tests>
+        $<TARGET_FILE:arche_benchmarks>
     COMMENT "Full clean: removing intermediate objects and binaries..."
 )
