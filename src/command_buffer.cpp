@@ -42,6 +42,18 @@ void CommandBuffer::playback(World &world) {
     read_value(cmd_type);
 
     switch (cmd_type) {
+    case CommandType::CreateEntity: {
+      CommandBuffer::SpawnFn spawn_fn{nullptr};
+      uint32_t size{0};
+      read_value(spawn_fn);
+      read_value(size);
+
+      const uint8_t *payload = (size > 0) ? &buffer_[offset] : nullptr;
+      offset += size;
+
+      world.apply_command_create_entity(spawn_fn, payload);
+      break;
+    }
     case CommandType::DestroyEntity: {
       Entity entity{};
       read_value(entity);
@@ -51,14 +63,19 @@ void CommandBuffer::playback(World &world) {
     case CommandType::AddComponent: {
       Entity entity{};
       TypeID tid{};
+      CommandBuffer::RegisterTypeFn reg_fn{nullptr};
       uint32_t size{};
       read_value(entity);
       read_value(tid);
+      read_value(reg_fn);
       read_value(size);
 
       const void *data = &buffer_[offset];
       offset += size;
 
+      if (reg_fn != nullptr) {
+        reg_fn(world);
+      }
       world.apply_command_add_component(entity, tid, data);
       break;
     }

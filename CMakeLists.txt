@@ -52,6 +52,11 @@ add_executable(structural_mutation_tests tests/structural_mutation_tests.cpp)
 target_link_libraries(structural_mutation_tests PRIVATE arche::arche)
 add_test(NAME structural_mutation_tests COMMAND structural_mutation_tests)
 
+# Module 006 Tests: Query System & SIMD Iteration
+add_executable(query_tests tests/query_tests.cpp)
+target_link_libraries(query_tests PRIVATE arche::arche)
+add_test(NAME query_tests COMMAND query_tests)
+
 # Custom Target: run all unit tests
 add_custom_target(run_tests
     COMMAND arche_tests
@@ -59,7 +64,8 @@ add_custom_target(run_tests
     COMMAND archetype_tests
     COMMAND chunk_storage_tests
     COMMAND structural_mutation_tests
-    DEPENDS arche_tests type_tests archetype_tests chunk_storage_tests structural_mutation_tests
+    COMMAND query_tests
+    DEPENDS arche_tests type_tests archetype_tests chunk_storage_tests structural_mutation_tests query_tests
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
     COMMENT "Executing all unit tests..."
 )
@@ -75,5 +81,6 @@ add_custom_target(fclean
         $<TARGET_FILE:archetype_tests>
         $<TARGET_FILE:chunk_storage_tests>
         $<TARGET_FILE:structural_mutation_tests>
+        $<TARGET_FILE:query_tests>
     COMMENT "Full clean: removing intermediate objects and binaries..."
 )

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "arche/entity.hpp"
+#include "arche/world.hpp"
 
 #include <cassert>
 #include <cstddef>
@@ -10,8 +11,6 @@
 #include <vector>
 
 namespace arche {
-
-class World;
 
 // =============================================================================
 // Command Type Identifiers
@@ -67,6 +66,15 @@ enum class CommandType : uint8_t {
  */
 class CommandBuffer {
 
+public:
+  // --- Type-Erased Function Pointer Types ------------------------------------
+
+  /// Callback signature for deferred entity construction.
+  using SpawnFn = void (*)(World &, const uint8_t *);
+
+  /// Callback signature for deferred component type registration.
+  using RegisterTypeFn = void (*)(World &);
+
 private:
   // --- Member Data -----------------------------------------------------------
 
@@ -100,6 +108,26 @@ public:
   // --- Command Recording -----------------------------------------------------
 
   /**
+   * @brief Queues the creation of a new entity with initial component values.
+   *
+   * @details
+   * The entity creation and component construction are deferred until playback.
+   * Components must be trivially copyable POD types.
+   *
+   * @tparam Comps Component types to attach to the new entity.
+   * @param components Values for each component.
+   */
+  template <typename... Comps> inline void create_entity(Comps... components) {
+    static_assert(
+        (std::is_trivially_copyable_v<std::decay_t<Comps>> && ...),
+        "Deferred create_entity requires trivially copyable POD components"
+    );
+    write_pod(CommandType::CreateEntity);
+    write_pod<SpawnFn>(&spawn_entity_helper<Comps...>);
+    write_entity_payload(std::move(components)...);
+  }
+
+  /**
    * @brief Queues the destruction of an entity.
    *
    * @param entity Handle of the entity to destroy during playback.
@@ -124,8 +152,8 @@ public:
     write_pod(CommandType::AddComponent);
     write_pod(entity);
     write_pod(type_id<T>());
-    write_pod(static_cast<uint32_t>(sizeof(T)));
-    write_bytes(&component, sizeof(T));
+    write_pod<RegisterTypeFn>(&register_type_helper<T>);
+    write_component_payload(component);
   }
 
   /**
@@ -164,6 +192,59 @@ public:
   }
 
 private:
+  // --- Type-Erased Deserialization & Registration Helpers --------------------
+
+  /**
+   * @brief Deserializes component values from the buffer and spawns the entity.
+   */
+  template <typename... Comps>
+  static void spawn_entity_helper(World &world, const uint8_t *payload) {
+    using TupleType = std::tuple<std::decay_t<Comps>...>;
+    TupleType tuple{};
+    if constexpr (sizeof...(Comps) > 0) {
+      std::memcpy(static_cast<void *>(&tuple), payload, sizeof(TupleType));
+    }
+    std::apply(
+        [&world](auto &&...items) {
+          world.create_entity(std::forward<decltype(items)>(items)...);
+        },
+        tuple
+    );
+  }
+
+  /**
+   * @brief Self-registers component type T in the World's TypeRegistry.
+   */
+  template <typename T>
+  static void register_type_helper(World &world) {
+    world.registry().template register_type<T>();
+  }
+
+  /**
+   * @brief Serializes entity component values as a tuple into the byte buffer.
+   */
+  template <typename... Comps>
+  inline void write_entity_payload(Comps &&...components) {
+    using TupleType = std::tuple<std::decay_t<Comps>...>;
+    if constexpr (sizeof...(Comps) > 0) {
+      const uint32_t size = static_cast<uint32_t>(sizeof(TupleType));
+      write_pod(size);
+      TupleType tuple{std::forward<Comps>(components)...};
+      write_bytes(&tuple, size);
+    } else {
+      write_pod(uint32_t{0});
+    }
+  }
+
+  /**
+   * @brief Serializes a single component value and its size into the byte buffer.
+   */
+  template <typename T>
+  inline void write_component_payload(const T &component) {
+    write_pod(static_cast<uint32_t>(sizeof(T)));
+    write_bytes(&component, sizeof(T));
+  }
+
   // --- Internal Byte Writing Helpers -----------------------------------------
 
   /**

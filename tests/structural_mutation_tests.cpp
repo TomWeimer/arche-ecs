@@ -1,10 +1,8 @@
 #include "arche/command_buffer.hpp"
 #include "arche/entity.hpp"
-#include "arche/type_registry.hpp"
 #include "arche/world.hpp"
 
 #include <cassert>
-#include <cstdint>
 #include <iostream>
 #include <vector>
 
@@ -12,7 +10,6 @@ namespace {
 using arche::CommandBuffer;
 using arche::Entity;
 using arche::TypeID;
-using arche::TypeRegistry;
 using arche::World;
 } // namespace
 

@@ -146,19 +146,6 @@ std::pair<Chunk *, uint32_t> World::allocate_slot(
 }
 
 /**
- * @brief Retrieves the active chunk list for an archetype.
- *
- * @param arch Pointer to the archetype.
- * @return Reference to the vector of chunk pointers.
- */
-std::vector<Chunk *> &World::get_archetype_chunks(Archetype *arch) {
-  if (arch->id() >= archetype_chunks_.size()) {
-    archetype_chunks_.resize(arch->id() + 1);
-  }
-  return archetype_chunks_[arch->id()];
-}
-
-/**
  * @brief Recycles an empty chunk back to the memory pool.
  *
  * @param arch Archetype owning the chunk.

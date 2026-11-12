@@ -10,3 +10,8 @@
 #include "arche/slot_map.hpp"
 #include "arche/type_id.hpp"
 #include "arche/type_registry.hpp"
+#include "arche/world.hpp"
+#include "arche/command_buffer.hpp"
+#include "arche/query_filter.hpp"
+#include "arche/query_iterator.hpp"
+#include "arche/query.hpp"

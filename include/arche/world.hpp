@@ -3,7 +3,6 @@
 #include "arche/archetype_graph.hpp"
 #include "arche/chunk.hpp"
 #include "arche/chunk_pool.hpp"
-#include "arche/command_buffer.hpp"
 #include "arche/entity.hpp"
 #include "arche/slot_map.hpp"
 #include "arche/type_registry.hpp"
@@ -17,6 +16,9 @@
 #include <vector>
 
 namespace arche {
+
+class CommandBuffer;
+template <typename... Components> class Query;
 
 // =============================================================================
 // World: Central ECS Coordinator
@@ -376,6 +378,27 @@ public:
     return chunk_pool_;
   }
 
+  // --- Query Factory ---------------------------------------------------------
+
+  /**
+   * @brief Creates a type-safe Query view over entities in this world.
+   *
+   * @details
+   * Supports optional With<...> and Without<...> filter tags:
+   * ```cpp
+   * auto q1 = world.query<Position, Velocity>();
+   * auto q2 = world.query<Position, Velocity>(arche::Without<DeadTag>{});
+   * auto q3 = world.query<Entity, Position>();
+   * ```
+   *
+   * @tparam Components Component types to traverse (and optionally Entity).
+   * @tparam FilterArgs Optional With<...> or Without<...> filter arguments.
+   * @param filters Filter tag instances.
+   * @return Query<Components...> view.
+   */
+  template <typename... Components, typename... FilterArgs>
+  [[nodiscard]] Query<Components...> query(FilterArgs &&...filters);
+
 private:
   // --- Inlined Template / Lookup Helpers -------------------------------------
 
@@ -395,12 +418,12 @@ private:
   /**
    * @brief Constructs a component value in-place inside a specific chunk row.
    */
-  template <typename T>
+  template <typename T, typename U>
   void construct_component_in_row(
       Archetype *arch,
       Chunk *chunk,
       uint32_t row,
-      T &&value
+      U &&value
   ) {
     const TypeID tid = type_id<std::decay_t<T>>();
     const int16_t col = arch->column_index(tid);
@@ -408,7 +431,7 @@ private:
 
     const auto &layout = arch->column_layout(static_cast<size_t>(col));
     void *slot = chunk->component_element(layout, row);
-    new (slot) T(std::forward<T>(value));
+    new (slot) T(std::forward<U>(value));
   }
 
   // --- Chunk Storage & Physical Allocation -----------------------------------
@@ -416,8 +439,18 @@ private:
   /// Finds or allocates an open slot in a chunk for the given archetype.
   std::pair<Chunk *, uint32_t> allocate_slot(Archetype *arch, Entity entity);
 
-  /// Retrieves the active chunk list for an archetype.
-  std::vector<Chunk *> &get_archetype_chunks(Archetype *arch);
+  /**
+   * @brief Retrieves the active chunk list for an archetype.
+   *
+   * @param arch Pointer to the archetype.
+   * @return Reference to the vector of chunk pointers.
+   */
+  inline std::vector<Chunk *> &get_archetype_chunks(Archetype *arch) {
+    if (arch->id() >= archetype_chunks_.size()) {
+      archetype_chunks_.resize(arch->id() + 1);
+    }
+    return archetype_chunks_[arch->id()];
+  }
 
   /// Recycles an empty chunk back to the memory pool.
   void recycle_chunk(Archetype *arch, Chunk *chunk);
@@ -438,6 +471,23 @@ private:
   // --- Deferred Command Playback ---------------------------------------------
 
   friend class CommandBuffer;
+  template <typename... Components> friend class Query;
+
+  /**
+   * @brief Applies a deferred entity creation command during playback.
+   *
+   * @param spawn_fn Type-erased function pointer that unpacks components and
+   * spawns the entity.
+   * @param payload Pointer to serialized component tuple bytes in the command
+   * buffer.
+   */
+  inline void apply_command_create_entity(
+      void (*spawn_fn)(World &, const uint8_t *),
+      const uint8_t *payload
+  ) {
+    assert(spawn_fn != nullptr);
+    spawn_fn(*this, payload);
+  }
 
   /// Applies a deferred component addition command during playback.
   void apply_command_add_component(Entity entity, TypeID tid, const void *data);
