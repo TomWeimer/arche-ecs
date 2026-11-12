@@ -1,7 +1,7 @@
 #include "arche/archetype.hpp"
 #include "arche/archetype_graph.hpp"
 #include "arche/component_mask.hpp"
-#include "arche/entity.hpp"
+
 #include "arche/type_registry.hpp"
 
 #include <cassert>
@@ -13,7 +13,7 @@
 namespace {
 using arche::Archetype;
 using arche::ArchetypeGraph;
-using arche::ComponentMask;
+
 using arche::TypeID;
 using arche::TypeRegistry;
 } // namespace
