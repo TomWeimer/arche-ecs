@@ -112,7 +112,11 @@ void test_chunk_allocation_and_alignment() {
   Archetype arch(1, mask, std::move(types), registry, chunk_size);
   assert(arch.chunk_capacity() > 0);
 
-  Chunk *chunk = Chunk::allocate(&arch, arch.chunk_capacity(), chunk_size);
+  ChunkPool pool(chunk_size, 1);
+  void *buffer = pool.acquire_buffer();
+  Chunk *chunk = Chunk::create(
+      buffer, &arch, arch.chunk_capacity(), chunk_size
+  );
   assert(chunk != nullptr);
 
   // Verify chunk buffer base address is aligned to cache line boundary
@@ -135,7 +139,7 @@ void test_chunk_allocation_and_alignment() {
   );
   assert(vel_addr % vel_layout->alignment == 0);
 
-  Chunk::destroy(chunk);
+  pool.release_buffer(buffer);
   std::cout << "PASSED\n";
 }
 
@@ -172,7 +176,11 @@ void test_swap_and_pop_compaction() {
 
   std::vector<TypeID> types = {pos_t, hp_t};
   Archetype arch(1, mask, std::move(types), registry, chunk_size);
-  Chunk *chunk = Chunk::allocate(&arch, arch.chunk_capacity(), chunk_size);
+  ChunkPool pool(chunk_size, 1);
+  void *buffer = pool.acquire_buffer();
+  Chunk *chunk = Chunk::create(
+      buffer, &arch, arch.chunk_capacity(), chunk_size
+  );
 
   const auto *pos_layout = arch.column_layout_for(pos_t);
   const auto *hp_layout = arch.column_layout_for(hp_t);
@@ -215,7 +223,7 @@ void test_swap_and_pop_compaction() {
   const auto &rec = slot_map.get_record(moved_entity);
   assert(rec.row == 1); // Row was updated from 3 to 1!
 
-  Chunk::destroy(chunk);
+  pool.release_buffer(buffer);
   std::cout << "PASSED\n";
 }
 

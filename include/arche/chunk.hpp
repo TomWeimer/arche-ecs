@@ -1,7 +1,7 @@
 #pragma once
 
 #include "arche/entity.hpp"
-#include "arche/hardware.hpp"
+#include "arche/type_registry.hpp"
 
 #include <cassert>
 #include <cstddef>
@@ -19,7 +19,36 @@ class SlotMap;
 }
 using SlotMap = Internal::SlotMap;
 
-struct ComponentColumnLayout;
+// =============================================================================
+// Component Column Layout Descriptor
+// =============================================================================
+
+/**
+ * @struct ComponentColumnLayout
+ * @brief Precomputed memory layout geometry for a single component column in a
+ * chunk.
+ *
+ * @details
+ * In an archetype ECS:
+ * - A chunk stores entities in a Structure-of-Arrays (SoA) layout.
+ * - Each component type has its own contiguous array ("column") within the
+ * chunk buffer.
+ * - ComponentColumnLayout stores the precalculated byte offset from the start
+ * of the chunk, component size, hardware alignment, and type metadata, allowing
+ * systems to locate component column arrays with zero runtime calculation.
+ */
+struct ComponentColumnLayout {
+  /// Unique TypeID of this component.
+  TypeID type_id{INVALID_TYPE_ID};
+  /// Byte size of a single component instance.
+  uint32_t size{0};
+  /// Required memory alignment in bytes.
+  uint32_t alignment{0};
+  /// Byte offset from the start of the chunk buffer.
+  uint32_t chunk_byte_offset{0};
+  /// Pointer to type lifecycle reflection metadata.
+  const ComponentDescriptor *descriptor{nullptr};
+};
 
 // =============================================================================
 // Cache-Aligned Physical Chunk Header
@@ -127,7 +156,7 @@ private:
   // --- Constructors & Move Semantics  ----------------------------------------
 private:
   /**
-   * @brief Private constructor called via placement-new from `allocate()`.
+   * @brief Private constructor called via placement-new from `create()`.
    */
   inline Chunk(
       Archetype *archetype,
@@ -154,39 +183,23 @@ public:
   // --- Factories -------------------------------------------------------------
 
   /**
-   * @brief Allocates a memory block and sets up the chunk header at the start.
+   * @brief Initializes a chunk header inside an existing memory buffer.
    *
+   * @param buffer Raw pointer to aligned memory (typically from ChunkPool).
    * @param archetype Archetype that defines the component columns for this
    * chunk.
    * @param capacity Maximum number of entities this chunk can hold.
-   * @param chunk_size Size of the memory block in bytes (defaults to 64 KB).
-   * @return Pointer to the new Chunk (which is the start of the memory block).
+   * @param chunk_size Size of the memory block in bytes (optional).
+   * @return Pointer to the initialized Chunk (same address as buffer).
    */
-  [[nodiscard]] inline static Chunk *allocate(
+  [[nodiscard]] inline static Chunk *create(
+      void *buffer,
       Archetype *archetype,
       uint32_t capacity,
-      uint32_t chunk_size
-  ) {
-    const size_t alignment = std::max(
-        Hardware::cache_line_size(), static_cast<size_t>(64)
-    );
-    void *raw_mem = Hardware::allocate_aligned(chunk_size, alignment);
-    assert(raw_mem != nullptr && "Virtual memory allocation for Chunk failed!");
-
-    return new (raw_mem) Chunk(archetype, capacity, chunk_size);
-  }
-
-  /**
-   * @brief Destructs and frees the aligned chunk buffer back to the host OS.
-   *
-   * @param chunk Pointer to the Chunk to destroy and deallocate.
-   */
-  inline static void destroy(Chunk *chunk) noexcept {
-    if (!chunk) {
-      return;
-    }
-    chunk->~Chunk();
-    Hardware::free_aligned(chunk);
+      uint32_t chunk_size = 0
+  ) noexcept {
+    assert(buffer != nullptr && "Cannot initialize Chunk in null buffer!");
+    return new (buffer) Chunk(archetype, capacity, chunk_size);
   }
 
   // --- Header State & Capacity Queries ---------------------------------------
@@ -303,6 +316,36 @@ public:
       uint32_t chunk_byte_offset
   ) const noexcept {
     return reinterpret_cast<const uint8_t *>(this) + chunk_byte_offset;
+  }
+
+  /**
+   * @brief Resolves raw pointer to a component element at a specific row.
+   *
+   * @param layout Column layout containing byte offset and element size.
+   * @param row Target entity row index.
+   * @return Mutable byte pointer to the element.
+   */
+  [[nodiscard]] inline void *component_element(
+      const ComponentColumnLayout &layout,
+      uint32_t row
+  ) noexcept {
+    return reinterpret_cast<uint8_t *>(this) + layout.chunk_byte_offset +
+        (row * layout.size);
+  }
+
+  /**
+   * @brief Resolves read-only pointer to a component element at a specific row.
+   *
+   * @param layout Column layout containing byte offset and element size.
+   * @param row Target entity row index.
+   * @return Read-only byte pointer to the element.
+   */
+  [[nodiscard]] inline const void *component_element(
+      const ComponentColumnLayout &layout,
+      uint32_t row
+  ) const noexcept {
+    return reinterpret_cast<const uint8_t *>(this) + layout.chunk_byte_offset +
+        (row * layout.size);
   }
 
   // --- Entity Insertion & Compaction -----------------------------------------

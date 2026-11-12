@@ -1,5 +1,6 @@
 #pragma once
 
+#include "arche/chunk.hpp"
 #include "arche/component_mask.hpp"
 #include "arche/entity.hpp"
 #include "arche/type_registry.hpp"
@@ -10,7 +11,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <span>
-
 #include <vector>
 
 namespace arche {
@@ -19,40 +19,8 @@ namespace arche {
 // Forward Declarations
 // =============================================================================
 
-struct Chunk;
 class Archetype;
 class ArchetypeGraph;
-
-// =============================================================================
-// Component Column Layout Descriptor
-// =============================================================================
-
-/**
- * @struct ComponentColumnLayout
- * @brief Precomputed memory layout geometry for a single component column in a
- * chunk.
- *
- * @details
- * In an archetype ECS:
- * - A chunk stores entities in a Structure-of-Arrays (SoA) layout.
- * - Each component type has its own contiguous array ("column") within the
- * chunk buffer.
- * - ComponentColumnLayout stores the precalculated byte offset from the start
- * of the chunk, component size, hardware alignment, and type metadata, allowing
- * systems to locate component column arrays with zero runtime calculation.
- */
-struct ComponentColumnLayout {
-  /// Unique TypeID of this component.
-  TypeID type_id{INVALID_TYPE_ID};
-  /// Byte size of a single component instance.
-  uint32_t size{0};
-  /// Required memory alignment in bytes.
-  uint32_t alignment{0};
-  /// Byte offset from the start of the chunk buffer.
-  uint32_t chunk_byte_offset{0};
-  /// Pointer to type lifecycle reflection metadata.
-  const ComponentDescriptor *descriptor{nullptr};
-};
 
 // =============================================================================
 // Archetype DAG Node

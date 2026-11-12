@@ -1,5 +1,6 @@
 #pragma once
 
+#include "arche/component_mask.hpp"
 #include "arche/type_id.hpp"
 
 #include <cstddef>
@@ -42,6 +43,35 @@ struct ComponentDescriptor {
   void (*destructor)(void *target){nullptr};
   void (*move_construct)(void *dest, void *src){nullptr};
   void (*move_assign)(void *dest, void *src){nullptr};
+
+  /**
+   * @brief Destructs a component instance if it is not trivially destructible.
+   *
+   * @param ptr Pointer to the component instance in memory.
+   */
+  inline void destruct(void *ptr) const noexcept {
+    if (!is_trivially_destructible && destructor) {
+      destructor(ptr);
+    }
+  }
+
+  /**
+   * @brief Relocates a component value from src to dst.
+   *
+   * @details
+   * Uses fast std::memcpy for trivially copyable types; otherwise calls
+   * move_assign.
+   *
+   * @param dst Destination memory address.
+   * @param src Source memory address.
+   */
+  inline void relocate(void *dst, void *src) const noexcept {
+    if (!is_trivially_copyable && move_assign) {
+      move_assign(dst, src);
+    } else {
+      std::memcpy(dst, src, size);
+    }
+  }
 
   /**
    * @brief Factory method creating a type descriptor from a concrete component
@@ -179,11 +209,22 @@ private:
 public:
   // --- Constructors & Destructors --------------------------------------------
 
-  TypeRegistry() = default;
+  TypeRegistry() {
+    // Reserve 8KB to avoid resizing the vector
+    descriptors.reserve(ComponentMask::MAX_COMPONENTS);
+  }
   ~TypeRegistry() = default;
 
-  TypeRegistry(const TypeRegistry &) = default;
-  TypeRegistry &operator=(const TypeRegistry &) = default;
+  TypeRegistry(const TypeRegistry &other) : descriptors(other.descriptors) {
+    descriptors.reserve(ComponentMask::MAX_COMPONENTS);
+  }
+  TypeRegistry &operator=(const TypeRegistry &other) {
+    if (this != &other) {
+      descriptors = other.descriptors;
+      descriptors.reserve(ComponentMask::MAX_COMPONENTS);
+    }
+    return *this;
+  }
   TypeRegistry(TypeRegistry &&) noexcept = default;
   TypeRegistry &operator=(TypeRegistry &&) noexcept = default;
 

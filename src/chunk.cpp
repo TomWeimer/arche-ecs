@@ -14,46 +14,11 @@ namespace arche {
 namespace {
 
 /**
- * @brief Returns a pointer to an entity's component at a specific row.
- *
- * @param chunk Pointer to the chunk buffer.
- * @param layout Column layout containing byte offset and element size.
- * @param row Target entity row index.
- * @return Byte pointer to the element.
- */
-[[nodiscard]] inline uint8_t *component_element_ptr(
-    Chunk *chunk,
-    const ComponentColumnLayout &layout,
-    uint32_t row
-) noexcept {
-  auto *col_base = static_cast<uint8_t *>(
-      chunk->component_slice(layout.chunk_byte_offset)
-  );
-  return col_base + (row * layout.size);
-}
-
-/**
- * @brief Calls the component destructor if the type is not trivially
- * destructible.
- *
- * @param desc Type descriptor containing the destructor function pointer.
- * @param ptr Pointer to the component instance in the chunk.
- */
-inline void destruct_component_if_needed(
-    const ComponentDescriptor *desc,
-    void *ptr
-) noexcept {
-  if (!desc->is_trivially_destructible && desc->destructor) {
-    desc->destructor(ptr);
-  }
-}
-
-/**
  * @brief Relocates a single component value from src to dst.
  *
  * @details
- * - Fast path: uses `std::memcpy` for trivially copyable types.
- * - Non-trivial: invokes `move_assign` into dst, then destructs src.
+ * Uses `relocate` from the component descriptor (memcpy for trivial types,
+ * move_assign for non-trivial types), then destructs the source if needed.
  *
  * @param layout Column layout and type descriptor.
  * @param dst Destination memory address in the chunk.
@@ -61,18 +26,11 @@ inline void destruct_component_if_needed(
  */
 inline void relocate_component(
     const ComponentColumnLayout &layout,
-    uint8_t *dst,
-    uint8_t *src
+    void *dst,
+    void *src
 ) noexcept {
-  const auto *desc = layout.descriptor;
-  if (desc->is_trivially_copyable) {
-    std::memcpy(dst, src, layout.size);
-  } else {
-    if (desc->move_assign) {
-      desc->move_assign(dst, src);
-    }
-    destruct_component_if_needed(desc, src);
-  }
+  layout.descriptor->relocate(dst, src);
+  layout.descriptor->destruct(src);
 }
 
 /**
@@ -91,8 +49,8 @@ inline void destruct_row_components(
     std::span<const ComponentColumnLayout> layouts
 ) noexcept {
   for (const auto &layout : layouts) {
-    void *ptr = component_element_ptr(chunk, layout, row);
-    destruct_component_if_needed(layout.descriptor, ptr);
+    void *ptr = chunk->component_element(layout, row);
+    layout.descriptor->destruct(ptr);
   }
 }
 
@@ -114,8 +72,8 @@ inline void relocate_row_components(
     std::span<const ComponentColumnLayout> layouts
 ) noexcept {
   for (const auto &layout : layouts) {
-    uint8_t *dst = component_element_ptr(chunk, layout, dst_row);
-    uint8_t *src = component_element_ptr(chunk, layout, src_row);
+    void *dst = chunk->component_element(layout, dst_row);
+    void *src = chunk->component_element(layout, src_row);
     relocate_component(layout, dst, src);
   }
 }
