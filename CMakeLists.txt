@@ -57,6 +57,11 @@ add_executable(query_tests tests/query_tests.cpp)
 target_link_libraries(query_tests PRIVATE arche::arche)
 add_test(NAME query_tests COMMAND query_tests)
 
+# Module 007 Tests: GPU std430 Reflection & Buffer Views
+add_executable(gpu_reflection_tests tests/gpu_reflection_tests.cpp)
+target_link_libraries(gpu_reflection_tests PRIVATE arche::arche)
+add_test(NAME gpu_reflection_tests COMMAND gpu_reflection_tests)
+
 # Custom Target: run all unit tests
 add_custom_target(run_tests
     COMMAND arche_tests
@@ -65,7 +70,8 @@ add_custom_target(run_tests
     COMMAND chunk_storage_tests
     COMMAND structural_mutation_tests
     COMMAND query_tests
-    DEPENDS arche_tests type_tests archetype_tests chunk_storage_tests structural_mutation_tests query_tests
+    COMMAND gpu_reflection_tests
+    DEPENDS arche_tests type_tests archetype_tests chunk_storage_tests structural_mutation_tests query_tests gpu_reflection_tests
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
     COMMENT "Executing all unit tests..."
 )
@@ -82,5 +88,6 @@ add_custom_target(fclean
         $<TARGET_FILE:chunk_storage_tests>
         $<TARGET_FILE:structural_mutation_tests>
         $<TARGET_FILE:query_tests>
+        $<TARGET_FILE:gpu_reflection_tests>
     COMMENT "Full clean: removing intermediate objects and binaries..."
 )

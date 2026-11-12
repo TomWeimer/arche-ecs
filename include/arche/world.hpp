@@ -4,6 +4,7 @@
 #include "arche/chunk.hpp"
 #include "arche/chunk_pool.hpp"
 #include "arche/entity.hpp"
+#include "arche/gpu_reflection.hpp"
 #include "arche/slot_map.hpp"
 #include "arche/type_registry.hpp"
 
@@ -330,6 +331,115 @@ public:
     // 4. Migrate the entity to the new archetype, dropping the removed
     // component
     migrate_entity(entity, record, src_arch, dst_arch, type, nullptr);
+  }
+
+  // --- GPU Streaming ---------------------------------------------------------
+
+  /**
+   * @brief Generates a list of non-owning ComponentSpan views for all chunks
+   * containing component T.
+   *
+   * @details
+   * Traverses all active archetypes and chunks possessing component `T`,
+   * extracting direct contiguous C-pointers without intermediate allocations or
+   * data copies. Enables zero-copy GPU memory binding (Approach B) and linear
+   * VRAM uploads (Approach A).
+   *
+   * @tparam T Component type complying with GPU std430 alignment rules.
+   * @return Vector of non-owning ComponentSpan<T> views across all active
+   * chunks.
+   */
+  template <GpuStd430Compatible T>
+  [[nodiscard]] std::vector<ComponentSpan<T>> view_component_chunks() {
+    std::vector<ComponentSpan<T>> views;
+    const TypeID tid = type_id<T>();
+
+    // 1. Iterate through every instantiated archetype in the world's graph
+    for (const auto &arch_ptr : graph_.archetypes()) {
+      Archetype *arch = arch_ptr.get();
+
+      // Skip archetypes that do not possess component T
+      if (!arch->has_component(tid)) {
+        continue;
+      }
+
+      // 2. Fetch column layout metadata to obtain the precomputed chunk byte
+      // offset
+      const int16_t col = arch->column_index(tid);
+      assert(col >= 0);
+      const auto &layout = arch->column_layout(static_cast<size_t>(col));
+
+      // 3. Iterate through all active 64 KB memory chunks allocated to this
+      // archetype
+      const auto &chunks = get_archetype_chunks(arch);
+      for (Chunk *chunk : chunks) {
+        // Skip empty chunks (e.g. after entities have been destroyed)
+        if (chunk->is_empty()) {
+          continue;
+        }
+
+        // 4. Resolve raw contiguous column pointer using precomputed byte
+        // offset
+        const T *col_ptr = reinterpret_cast<const T *>(
+            chunk->component_slice(layout.chunk_byte_offset)
+        );
+
+        // 5. Emplace a non-owning span wrapping the contiguous pointer and
+        // active entity count
+        views.emplace_back(col_ptr, chunk->count());
+      }
+    }
+    return views;
+  }
+
+  /**
+   * @brief Fast batch streamer: copies all instances of component T directly
+   * into a destination buffer.
+   *
+   * @details
+   * Performs sequential memcpy transfers from chunk columns into mapped
+   * Vulkan/Metal VRAM buffers (Approach A), saturating host memory bandwidth
+   * with zero intermediate allocations.
+   *
+   * @tparam T Component type complying with GPU std430 alignment rules.
+   * @param destination_buffer Pointer to mapped GPU VRAM or host memory buffer.
+   * @return Total bytes written to destination.
+   */
+  template <GpuStd430Compatible T>
+  size_t stream_component_to(void *destination_buffer) {
+    assert(
+        destination_buffer != nullptr && "Destination buffer cannot be null!"
+    );
+    uint8_t *dst = static_cast<uint8_t *>(destination_buffer);
+    size_t total_bytes = 0;
+
+    // 1. Fetch non-owning views for each chunk containing component T
+    auto views = view_component_chunks<T>();
+
+    // 2. Stream contiguous component slices back-to-back into destination
+    // memory
+    for (const auto &span : views) {
+      const size_t bytes = span.size_bytes();
+      std::memcpy(dst + total_bytes, span.data(), bytes);
+      total_bytes += bytes;
+    }
+
+    return total_bytes;
+  }
+
+  /// @brief Returns the total active count of entities possessing component T.
+  template <typename T>
+  [[nodiscard]] uint32_t count_components() const noexcept {
+    const TypeID tid = type_id<T>();
+    uint32_t total = 0;
+
+    for (const auto &arch_ptr : graph_.archetypes()) {
+      Archetype *arch = arch_ptr.get();
+      if (arch->has_component(tid)) {
+        total += arch->entity_count();
+      }
+    }
+    return total;
   }
 
   // --- Subsystem Accessors ---------------------------------------------------
