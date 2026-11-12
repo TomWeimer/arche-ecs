@@ -1,17 +1,14 @@
 #include "arche/archetype_graph.hpp"
 #include "arche/chunk.hpp"
-#include "arche/chunk_pool.hpp"
 #include "arche/command_buffer.hpp"
 #include "arche/entity.hpp"
 #include "arche/gpu_reflection.hpp"
 #include "arche/hardware.hpp"
-#include "arche/query.hpp"
 #include "arche/slot_map.hpp"
 #include "arche/type_registry.hpp"
 #include "arche/world.hpp"
 
 #include <cassert>
-#include <chrono>
 #include <cstdint>
 #include <iostream>
 #include <vector>
@@ -79,7 +76,8 @@ struct GoodVec4 {
 
 /**
  * @struct BadVec3
- * @brief Intentionally unpadded 12-byte 3D vector violating std430 array stride rules.
+ * @brief Intentionally unpadded 12-byte 3D vector violating std430 array stride
+ * rules.
  */
 struct BadVec3 {
   float x{0.0f};
@@ -92,17 +90,21 @@ struct BadVec3 {
 // =============================================================================
 
 /**
- * @brief Validates strict O(1) generational handle recycling and stale handle detection.
+ * @brief Validates strict O(1) generational handle recycling and stale handle
+ * detection.
  *
  * --- Why This Test Is Necessary (Documentation Rationale) ---
- * High-density simulations continuously create and destroy short-lived entities (projectiles,
- * particles). Without generational indexing, a stale Entity handle pointing to a recycled slot
- * would silently read or corrupt the memory of the new occupant (the "ABA problem").
+ * High-density simulations continuously create and destroy short-lived entities
+ * (projectiles, particles). Without generational indexing, a stale Entity
+ * handle pointing to a recycled slot would silently read or corrupt the memory
+ * of the new occupant (the "ABA problem").
  *
  * This test guarantees:
  * 1. Newly allocated entity handles are marked active in $O(1)$ time.
- * 2. Destroyed entities immediately fail validity checks via generation comparison.
- * 3. Recycling slot 0 increments its generation counter (skipping generation 0 / null handle).
+ * 2. Destroyed entities immediately fail validity checks via generation
+ * comparison.
+ * 3. Recycling slot 0 increments its generation counter (skipping generation 0
+ * / null handle).
  * 4. Stale handles pointing to previous generations remain strictly invalid.
  */
 void test_generational_slot_map() {
@@ -137,20 +139,21 @@ void test_generational_slot_map() {
 // =============================================================================
 
 /**
- * @brief Validates commutativity and deterministic canonical convergence in the archetype DAG.
+ * @brief Validates commutativity and deterministic canonical convergence in the
+ * archetype DAG.
  *
  * --- Why This Test Is Necessary (Documentation Rationale) ---
- * In an Archetype ECS, the order in which components are added must not alter the resulting
- * archetype identity:
- *   Path 1: Root -> +Pos -> +Vel
- *   Path 2: Root -> +Vel -> +Pos
- * Both paths MUST converge to the exact same canonical `Archetype*` pointer. If they branched
- * into separate archetypes, system queries would fragment, causing redundant chunk allocations
- * and degraded cache utilization.
+ * In an Archetype ECS, the order in which components are added must not alter
+ * the resulting archetype identity: Path 1: Root -> +Pos -> +Vel Path 2: Root
+ * -> +Vel -> +Pos Both paths MUST converge to the exact same canonical
+ * `Archetype*` pointer. If they branched into separate archetypes, system
+ * queries would fragment, causing redundant chunk allocations and degraded
+ * cache utilization.
  *
  * This test guarantees:
  * 1. Transition edges are created and cached in constant time.
- * 2. Independent addition sequences produce the identical target archetype pointer.
+ * 2. Independent addition sequences produce the identical target archetype
+ * pointer.
  * 3. Component membership and count reflect the exact canonical component set.
  */
 void test_archetype_dag_convergence() {
@@ -187,19 +190,23 @@ void test_archetype_dag_convergence() {
 // =============================================================================
 
 /**
- * @brief Validates hardware topology probing and aligned chunk memory allocation.
+ * @brief Validates hardware topology probing and aligned chunk memory
+ * allocation.
  *
  * --- Why This Test Is Necessary (Documentation Rationale) ---
  * Archetype SoA chunk storage requires strict hardware alignment:
- * 1. Chunk byte boundaries must align to OS page sizes (4 KB / 16 KB) to prevent TLB thrashing.
- * 2. Component columns within chunks must align to CPU cache line sizes (64B on x86, 128B on Apple Silicon)
- *    to guarantee hardware prefetch efficiency and prevent false sharing.
+ * 1. Chunk byte boundaries must align to OS page sizes (4 KB / 16 KB) to
+ * prevent TLB thrashing.
+ * 2. Component columns within chunks must align to CPU cache line sizes (64B on
+ * x86, 128B on Apple Silicon) to guarantee hardware prefetch efficiency and
+ * prevent false sharing.
  *
  * This test guarantees:
  * 1. Cache line size is detected accurately (64 bytes or 128 bytes).
  * 2. Page size is valid and >= 4096 bytes.
  * 3. Chunk size is an exact multiple of the detected page size.
- * 4. `Hardware::allocate_aligned` and `Hardware::free_aligned` honor cache line boundaries.
+ * 4. `Hardware::allocate_aligned` and `Hardware::free_aligned` honor cache line
+ * boundaries.
  */
 void test_hardware_adaptive_chunking() {
   std::cout << "[Test 3/6] Hardware Adaptive Chunk Alignment... ";
@@ -228,17 +235,20 @@ void test_hardware_adaptive_chunking() {
 // =============================================================================
 
 /**
- * @brief Validates dense array compaction and reverse SlotMap synchronization on deletion.
+ * @brief Validates dense array compaction and reverse SlotMap synchronization
+ * on deletion.
  *
  * --- Why This Test Is Necessary (Documentation Rationale) ---
- * To keep iteration cache-dense and contiguous, destroying an entity from a chunk uses
- * "Swap-and-Pop": the last entity in the chunk is moved into the destroyed entity's row.
- * During this move, the SlotMap record of the swapped entity MUST be updated in O(1) time
- * to reflect its new row position, ensuring handles never point to corrupted memory.
+ * To keep iteration cache-dense and contiguous, destroying an entity from a
+ * chunk uses "Swap-and-Pop": the last entity in the chunk is moved into the
+ * destroyed entity's row. During this move, the SlotMap record of the swapped
+ * entity MUST be updated in O(1) time to reflect its new row position, ensuring
+ * handles never point to corrupted memory.
  *
  * This test guarantees:
  * 1. Destroying an interior entity preserves all other entities.
- * 2. The swapped entity's components remain valid and accurate at their new location.
+ * 2. The swapped entity's components remain valid and accurate at their new
+ * location.
  * 3. The SlotMap routing table remains in 100% synchronization.
  */
 void test_swap_and_pop_compaction() {
@@ -273,15 +283,19 @@ void test_swap_and_pop_compaction() {
 // =============================================================================
 
 /**
- * @brief Validates thread-safe structural mutation recording and deferred playback.
+ * @brief Validates thread-safe structural mutation recording and deferred
+ * playback.
  *
  * --- Why This Test Is Necessary (Documentation Rationale) ---
- * Directly modifying archetypes (creating entities, destroying entities, adding/removing components)
- * while a system is actively iterating over chunks corrupts memory and invalidates active pointers.
- * `CommandBuffer` records mutations in an unformatted byte buffer and defers execution to a safe sync point.
+ * Directly modifying archetypes (creating entities, destroying entities,
+ * adding/removing components) while a system is actively iterating over chunks
+ * corrupts memory and invalidates active pointers. `CommandBuffer` records
+ * mutations in an unformatted byte buffer and defers execution to a safe sync
+ * point.
  *
  * This test guarantees:
- * 1. Mutations recorded to `CommandBuffer` do not affect the `World` prior to playback.
+ * 1. Mutations recorded to `CommandBuffer` do not affect the `World` prior to
+ * playback.
  * 2. Entity remains fully valid and queryable while commands are queued.
  * 3. `playback(world)` executes all recorded commands in exact FIFO order.
  */
@@ -317,13 +331,15 @@ void test_deferred_command_buffer() {
  * @brief Validates compile-time traits enforcing GPU std430 alignment rules.
  *
  * --- Why This Test Is Necessary (Documentation Rationale) ---
- * Under GPU `layout(std430)` specifications, 3D vectors (`vec3`) require 16-byte array strides.
- * A naive C++ struct of 12 bytes (`float[3]`) causes off-by-4-byte memory misalignment in shaders.
- * `GpuStd430Compatible` statically validates types at compile time before memory is streamed to VRAM.
+ * Under GPU `layout(std430)` specifications, 3D vectors (`vec3`) require
+ * 16-byte array strides. A naive C++ struct of 12 bytes (`float[3]`) causes
+ * off-by-4-byte memory misalignment in shaders. `GpuStd430Compatible`
+ * statically validates types at compile time before memory is streamed to VRAM.
  *
  * This test guarantees:
  * 1. Compliant 16-byte structs (`GoodVec4`) pass `GpuStd430Compatible`.
- * 2. Unpadded 12-byte structs (`BadVec3`) fail `Std430Traits<T>::is_safe_std430`.
+ * 2. Unpadded 12-byte structs (`BadVec3`) fail
+ * `Std430Traits<T>::is_safe_std430`.
  */
 void test_gpu_reflection_traits() {
   std::cout << "[Test 6/6] GPU std430 Reflection Traits... ";
