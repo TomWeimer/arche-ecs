@@ -19,7 +19,7 @@ namespace arche {
 // Forward Declarations
 // =============================================================================
 
-class Chunk;
+struct Chunk;
 class Archetype;
 class ArchetypeGraph;
 

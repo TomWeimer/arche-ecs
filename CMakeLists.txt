@@ -12,6 +12,7 @@ add_compile_options(-Wall -Wextra -Wpedantic)
 # --- Library Target -----------------------------------------------------------
 add_library(arche STATIC
     src/arche.cpp
+    src/chunk.cpp
 )
 
 target_include_directories(arche PUBLIC
@@ -39,12 +40,18 @@ add_executable(archetype_tests tests/archetype_tests.cpp)
 target_link_libraries(archetype_tests PRIVATE arche::arche)
 add_test(NAME archetype_tests COMMAND archetype_tests)
 
+# Module 004 Tests: Hardware & Chunk Storage
+add_executable(chunk_storage_tests tests/chunk_storage_tests.cpp)
+target_link_libraries(chunk_storage_tests PRIVATE arche::arche)
+add_test(NAME chunk_storage_tests COMMAND chunk_storage_tests)
+
 # Custom Target: run all unit tests
 add_custom_target(run_tests
     COMMAND arche_tests
     COMMAND type_tests
     COMMAND archetype_tests
-    DEPENDS arche_tests type_tests archetype_tests
+    COMMAND chunk_storage_tests
+    DEPENDS arche_tests type_tests archetype_tests chunk_storage_tests
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
     COMMENT "Executing all unit tests..."
 )
@@ -58,5 +65,6 @@ add_custom_target(fclean
         $<TARGET_FILE:arche_tests>
         $<TARGET_FILE:type_tests>
         $<TARGET_FILE:archetype_tests>
+        $<TARGET_FILE:chunk_storage_tests>
     COMMENT "Full clean: removing intermediate objects and binaries..."
 )

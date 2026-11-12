@@ -6,7 +6,15 @@
 #include <stdexcept>
 #include <vector>
 
+namespace arche {
+class Archetype;
+struct Chunk;
+} // namespace arche
+
 namespace arche::Internal {
+
+using arche::Archetype;
+using arche::Chunk;
 
 // =============================================================================
 // Entity Record
@@ -335,3 +343,8 @@ public:
 };
 
 } // namespace arche::Internal
+
+namespace arche {
+using Internal::EntityRecord;
+using Internal::SlotMap;
+} // namespace arche

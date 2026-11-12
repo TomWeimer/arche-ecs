@@ -8,10 +8,8 @@ namespace arche {
 
 // --- Forward Declarations ----------------------------------------------------
 
-namespace Internal {
+class Archetype;
 struct Chunk;
-struct Archetype;
-} // namespace Internal
 
 // --- Entity Handle -----------------------------------------------------------
 
@@ -87,7 +85,7 @@ public:
   ) noexcept {
     Entity e;
     e.value = (static_cast<uint32_t>(generation) << INDEX_BITS) |
-              (index & INDEX_MASK);
+        (index & INDEX_MASK);
     return e;
   }
 
