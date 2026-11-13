@@ -98,13 +98,13 @@ public:
 private:
   /// Pre-caches contiguous column pointers (and entity slice) for the current
   /// chunk.
-  inline void load_chunk(Chunk *chunk, const auto &match) {
+  inline void load_chunk(Chunk *chunk, Archetype *arch) {
     // 1. Cache the number of live entities in this chunk to determine loop
     // bounds
     current_chunk_count_ = chunk->count();
 
     // 2. Resolve contiguous column pointers using Query helper
-    pointers_ = query_->get_column_pointers(chunk, match);
+    pointers_ = query_->get_column_pointers(chunk, arch);
   }
 
   /// Advances match_idx_ and chunk_idx_ until finding a non-empty chunk or
@@ -114,9 +114,11 @@ private:
     row_ = 0;
 
     // 2. Two-level traversal: Outer loop iterates through matching archetypes
-    while (match_idx_ < query_->matching_archetypes_.size()) {
-      const auto &match = query_->matching_archetypes_[match_idx_];
-      auto chunks = query_->get_chunks_for(match.archetype);
+    const auto matching = query_->matching_archetypes();
+
+    while (match_idx_ < matching.size()) {
+      Archetype *arch = matching[match_idx_];
+      auto chunks = query_->get_chunks_for(arch);
 
       // Inner loop iterates through memory chunks assigned to this archetype
       while (chunk_idx_ < chunks.size()) {
@@ -124,7 +126,7 @@ private:
         if (!chunk->is_empty()) {
           // Found a non-empty chunk with active entities; load its column
           // pointers and stop
-          load_chunk(chunk, match);
+          load_chunk(chunk, arch);
           return;
         }
         // Skip empty chunk (e.g. after entities have been destroyed)

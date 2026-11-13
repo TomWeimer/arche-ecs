@@ -2,6 +2,7 @@
 
 #include "arche/archetype.hpp"
 #include "arche/component_mask.hpp"
+#include "arche/query_cache.hpp"
 #include "arche/type_registry.hpp"
 
 #include <algorithm>
@@ -85,6 +86,9 @@ private:
   /// Fast lookup map: signature mask -> archetype.
   std::unordered_map<ComponentMask, Archetype *, ComponentMaskHash>
       mask_to_archetype_;
+
+  /// Pointers to all active query caches registered for reactive updates.
+  std::vector<QueryCache *> registered_caches_{};
 
 public:
   // --- Constructors & Destructors --------------------------------------------
@@ -263,6 +267,18 @@ public:
     return create_archetype(mask, std::move(sorted_types));
   }
 
+  // --- Setter ----------------------------------------------------------------
+
+  /**
+   * @brief Registers a QueryCache for reactive updates when new archetypes are
+   * created.
+   * @param cache Non-null pointer to QueryCache.
+   */
+  inline void register_query_cache(QueryCache *cache) noexcept {
+    assert(cache != nullptr);
+    registered_caches_.push_back(cache);
+  }
+
 private:
   // --- Internal Transition & Canonicalization Helpers ------------------------
 
@@ -407,6 +423,14 @@ private:
 
     mask_to_archetype_[mask] = ptr;
     archetypes_.push_back(std::move(arch));
+
+    // Reactively update all registered query caches with zero hooks using
+    // matches() helper
+    for (QueryCache *cache : registered_caches_) {
+      if (ptr->matches(cache->include_mask, cache->exclude_mask)) {
+        cache->matching_archetypes.push_back(ptr);
+      }
+    }
 
     return ptr;
   }

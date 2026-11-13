@@ -8,7 +8,6 @@
 #include "arche/type_registry.hpp"
 #include "arche/world.hpp"
 
-#include <array>
 #include <cassert>
 #include <cstdint>
 #include <span>
@@ -74,7 +73,8 @@ public:
   explicit inline Query(World &world, Filters... filters) : world_(world) {
     build_masks();
     (apply_filter(filters), ...);
-    find_matching_archetypes();
+    // Acquire deduplicated query cache from World in O(1)
+    cache_ = world_.get_or_create_query_cache(include_mask_, exclude_mask_);
   }
 
   // --- Iteration & Callback Visitors -----------------------------------------
@@ -92,11 +92,11 @@ public:
    * pointers.
    */
   template <typename Func> inline void for_each_chunk(Func &&func) {
-    for_each_active_chunk([&](Chunk *chunk, const auto &match) {
+    for_each_active_chunk([&](Chunk *chunk, Archetype *arch) {
       func(
           chunk->count(),
           get_column_ptr<Components>(
-              chunk, match.offsets[type_index<Components>()]
+              chunk, resolve_column_offset<Components>(arch)
           )...
       );
     });
@@ -117,7 +117,7 @@ public:
    * @param func User lambda executed once per chunk.
    */
   template <typename Func> inline void for_each_chunk_padded(Func &&func) {
-    for_each_active_chunk([&](Chunk *chunk, const auto &match) {
+    for_each_active_chunk([&](Chunk *chunk, Archetype *arch) {
       const uint32_t active = chunk->count();
       // Round up to nearest vector width using arche::math::round_up_simd
       // (defined in math_utils.hpp)
@@ -126,7 +126,7 @@ public:
           active,
           padded,
           get_column_ptr<Components>(
-              chunk, match.offsets[type_index<Components>()]
+              chunk, resolve_column_offset<Components>(arch)
           )...
       );
     });
@@ -194,12 +194,6 @@ public:
 
 private:
   // --- Internal Data Structures ----------------------------------------------
-
-  /// Cached metadata for an archetype that satisfies query filter criteria.
-  struct ArchetypeMatch {
-    Archetype *archetype{nullptr};
-    std::array<uint32_t, sizeof...(Components)> offsets{};
-  };
 
   /// Rule for runtime component mutation change-detection filters.
   struct MutationFilterRule {
@@ -365,13 +359,10 @@ private:
    * @brief Resolves a tuple of contiguous column pointers for all queried types
    * in a chunk.
    */
-  inline auto get_column_pointers(
-      Chunk *chunk,
-      const ArchetypeMatch &match
-  ) const {
+  inline auto get_column_pointers(Chunk *chunk, Archetype *arch) const {
     return std::make_tuple(
         get_column_ptr<Components>(
-            chunk, match.offsets[type_index<Components>()]
+            chunk, resolve_column_offset<Components>(arch)
         )...
     );
   }
@@ -389,11 +380,11 @@ private:
    * 2. The first cache line of each queried component column slice.
    *
    * @param next_chunk Pointer to the upcoming chunk to prefetch.
-   * @param match Cached archetype column offsets for queried component types.
+   * @param arch Pointer to the archetype whose layout table is being inspected.
    */
   static inline void prefetch_next_chunk(
       const Chunk *next_chunk,
-      const ArchetypeMatch &match
+      Archetype *arch
   ) noexcept {
 #if defined(__GNUC__) || defined(__clang__)
     // 1. Prefetch ChunkHeader (128 bytes = 2 cache lines of 64 bytes)
@@ -405,27 +396,29 @@ private:
     // 2. Prefetch first cache line of each queried component column
     ((__builtin_prefetch(
          reinterpret_cast<const uint8_t *>(next_chunk) +
-             match.offsets[type_index<Components>()],
+             resolve_column_offset<Components>(arch),
          0, // 0 = read
          3  // 3 = high temporal locality (L1/L2)
      )),
      ...);
 #else
     (void)next_chunk;
-    (void)match;
+    (void)arch;
 #endif
   }
 
   /**
-   * @brief Evaluates runtime change-detection filters (Added, Mutated<T>) against a chunk.
+   * @brief Evaluates runtime change-detection filters (Added, Mutated<T>)
+   * against a chunk.
    *
    * @param chunk Pointer to the chunk to inspect.
-   * @param match Cached archetype column metadata.
-   * @return true if the chunk satisfies all change filters; false if it can be skipped.
+   * @param arch Pointer to the archetype being inspected.
+   * @return true if the chunk satisfies all change filters; false if it can be
+   * skipped.
    */
   [[nodiscard]] inline bool chunk_matches_filters(
       const Chunk *chunk,
-      const ArchetypeMatch &match
+      Archetype *arch
   ) const noexcept {
     // 1. Evaluate Added structural change filter in O(1)
     if (filter_added_ && chunk->structure_version() <= added_since_tick_) {
@@ -434,9 +427,10 @@ private:
 
     // 2. Evaluate Mutated<T> component change filters in O(1)
     for (const auto &rule : mutation_filters_) {
-      const int16_t col = match.archetype->column_index(rule.type_id);
+      const int16_t col = arch->column_index(rule.type_id);
       if (col >= 0 &&
-          chunk->column_version(static_cast<uint16_t>(col)) <= rule.since_tick) {
+          chunk->column_version(static_cast<uint16_t>(col)) <=
+              rule.since_tick) {
         return false;
       }
     }
@@ -450,22 +444,23 @@ private:
    */
   template <typename Visitor>
   inline void for_each_active_chunk(Visitor &&visitor) {
-    for (const auto &match : matching_archetypes_) {
-      const auto &chunks = get_chunks_for(match.archetype);
+    assert(cache_ != nullptr);
+    for (Archetype *arch : cache_->matching_archetypes) {
+      const auto &chunks = get_chunks_for(arch);
       const size_t num_chunks = chunks.size();
 
       for (size_t i = 0; i < num_chunks; ++i) {
         Chunk *chunk = chunks[i];
-        if (chunk->is_empty() || !chunk_matches_filters(chunk, match)) {
+        if (chunk->is_empty() || !chunk_matches_filters(chunk, arch)) {
           continue;
         }
 
         // Lookahead prefetching: warm L1/L2 cache lines for the upcoming chunk
         if (i + 1 < num_chunks) {
-          prefetch_next_chunk(chunks[i + 1], match);
+          prefetch_next_chunk(chunks[i + 1], arch);
         }
 
-        visitor(chunk, match);
+        visitor(chunk, arch);
       }
     }
   }
@@ -492,44 +487,26 @@ private:
     register_and_set_mask<Components...>(include_mask_);
   }
 
-  inline void find_matching_archetypes() {
-    matching_archetypes_.clear();
-
-    for (const auto &arch_ptr : world_.graph().archetypes()) {
-      Archetype *arch = arch_ptr.get();
-      const ComponentMask &arch_mask = arch->mask();
-
-      // 1. Verify inclusion mask: (arch_mask & include) == include
-      if (!arch_mask.contains_all(include_mask_)) {
-        continue;
-      }
-
-      // 2. Verify exclusion mask: (arch_mask & exclude) == 0
-      if (!exclude_mask_.empty() && arch_mask.contains_any(exclude_mask_)) {
-        continue;
-      }
-
-      // 3. Precompute column byte offsets within chunks
-      ArchetypeMatch match;
-      match.archetype = arch;
-      ((match.offsets[type_index<Components>()] = resolve_column_offset<
-            Components>(arch)),
-       ...);
-
-      matching_archetypes_.push_back(match);
-    }
-  }
-
   [[nodiscard]] inline std::span<Chunk *const> get_chunks_for(Archetype *arch) {
     auto &chunk_map = world_.get_archetype_chunks(arch);
     return std::span<Chunk *const>(chunk_map.data(), chunk_map.size());
   }
 
+  [[nodiscard]] inline std::span<Archetype *const>
+  matching_archetypes() const noexcept {
+    if (!cache_) {
+      return {};
+    }
+    return std::span<Archetype *const>(
+        cache_->matching_archetypes.data(), cache_->matching_archetypes.size()
+    );
+  }
+
 private:
   World &world_;
+  const QueryCache *cache_{nullptr};
   ComponentMask include_mask_{};
   ComponentMask exclude_mask_{};
-  std::vector<ArchetypeMatch> matching_archetypes_{};
 
   std::vector<MutationFilterRule> mutation_filters_{};
   uint32_t added_since_tick_{0};
@@ -548,7 +525,7 @@ namespace arche {
 
 template <typename... Components>
 inline typename Query<Components...>::Iterator Query<Components...>::begin() {
-  if (matching_archetypes_.empty()) {
+  if (!cache_ || cache_->matching_archetypes.empty()) {
     return end();
   }
   return Iterator(this, 0, 0, 0);
@@ -556,7 +533,8 @@ inline typename Query<Components...>::Iterator Query<Components...>::begin() {
 
 template <typename... Components>
 inline typename Query<Components...>::Iterator Query<Components...>::end() {
-  return Iterator(this, matching_archetypes_.size(), 0, 0);
+  const size_t size = cache_ ? cache_->matching_archetypes.size() : 0;
+  return Iterator(this, size, 0, 0);
 }
 
 template <typename... Components, typename... FilterArgs>

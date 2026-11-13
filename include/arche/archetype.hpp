@@ -145,6 +145,23 @@ public:
   Archetype(Archetype &&) = delete;
   Archetype &operator=(Archetype &&) = delete;
 
+  // --- Query Bitmask Matching Helper -----------------------------------------
+
+  /**
+   * @brief Evaluates whether this archetype satisfies query inclusion/exclusion
+   * criteria.
+   * @param include Mask of components that must all be present.
+   * @param exclude Mask of components that must not be present.
+   * @return True if archetype matches the query filter.
+   */
+  [[nodiscard]] inline bool matches(
+      const ComponentMask &include,
+      const ComponentMask &exclude
+  ) const noexcept {
+    return mask_.contains_all(include) &&
+        (exclude.empty() || !mask_.contains_any(exclude));
+  }
+
   // --- Identity & Signature Queries ------------------------------------------
 
   /**

@@ -5,6 +5,7 @@
 #include "arche/chunk_pool.hpp"
 #include "arche/entity.hpp"
 #include "arche/gpu_reflection.hpp"
+#include "arche/query_cache.hpp"
 #include "arche/slot_map.hpp"
 #include "arche/type_registry.hpp"
 
@@ -95,6 +96,13 @@ private:
   /// Storage chunks grouped by archetype index: archetype_chunks_[archetype_id]
   /// = list of active chunks.
   std::vector<std::vector<Chunk *>> archetype_chunks_;
+
+  /// Central pool of deduplicated query caches.
+  std::unordered_map<
+      QueryCacheKey,
+      std::unique_ptr<QueryCache>,
+      QueryCacheKeyHash>
+      query_caches_{};
 
 public:
   // --- Constructors & Destructors --------------------------------------------
@@ -621,6 +629,50 @@ public:
       }
     }
     return total;
+  }
+
+  // --- Query Cache Management ------------------------------------------------
+
+  /**
+   * @brief Retrieves or creates a deduplicated QueryCache for the given
+   * component masks.
+   *
+   * @param include Component inclusion mask.
+   * @param exclude Component exclusion mask.
+   * @return Pointer to shared QueryCache.
+   */
+  inline QueryCache *get_or_create_query_cache(
+      const ComponentMask &include,
+      const ComponentMask &exclude
+  ) {
+    QueryCacheKey key{include, exclude};
+    auto it = query_caches_.find(key);
+    if (it != query_caches_.end()) {
+      return it->second.get();
+    }
+
+    // 1. Construct new QueryCache
+    auto cache = std::make_unique<QueryCache>();
+    cache->include_mask = include;
+    cache->exclude_mask = exclude;
+
+    // 2. Initial scan over currently existing archetypes in graph
+    for (const auto &arch_ptr : graph_.archetypes()) {
+      const ComponentMask &mask = arch_ptr->mask();
+      if (mask.contains_all(include)) {
+        if (exclude.empty() || !mask.contains_any(exclude)) {
+          cache->matching_archetypes.push_back(arch_ptr.get());
+        }
+      }
+    }
+
+    QueryCache *raw_cache = cache.get();
+    query_caches_.emplace(key, std::move(cache));
+
+    // 3. Register cache with graph for reactive updates on future archetypes
+    graph_.register_query_cache(raw_cache);
+
+    return raw_cache;
   }
 
   // --- Subsystem Accessors ---------------------------------------------------
