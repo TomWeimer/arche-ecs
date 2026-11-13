@@ -87,7 +87,8 @@ void World::clear() {
  * @return true if the entity was found and destroyed; false if already dead.
  */
 bool World::destroy_entity(Entity entity) {
-  // 1. Retrieve the entity's storage record (validating liveness in a single lookup)
+  // 1. Retrieve the entity's storage record (validating liveness in a single
+  // lookup)
   const EntityRecord *record = slot_map_.find_record(entity);
   if (!record) {
     return false;
@@ -132,7 +133,8 @@ std::pair<Chunk *, uint32_t> World::allocate_slot(
     Archetype *arch,
     Entity entity
 ) {
-  // 1. Acquire an active chunk with available capacity (allocating from pool if needed)
+  // 1. Acquire an active chunk with available capacity (allocating from pool if
+  // needed)
   Chunk *active = acquire_chunk_for(arch);
 
   // 2. Append the entity handle to the active chunk and return its location
@@ -280,7 +282,8 @@ void World::apply_command_add_component(
     TypeID tid,
     const void *data
 ) {
-  // 1. Retrieve record (skipping if entity was destroyed prior to command playback)
+  // 1. Retrieve record (skipping if entity was destroyed prior to command
+  // playback)
   const EntityRecord *rec = slot_map_.find_record(entity);
   if (!rec || !rec->archetype || rec->archetype->has_component(tid)) {
     return;
@@ -298,7 +301,8 @@ void World::apply_command_add_component(
  * @param tid TypeID of the component being removed.
  */
 void World::apply_command_remove_component(Entity entity, TypeID tid) {
-  // 1. Retrieve record (skipping if entity was destroyed prior to command playback)
+  // 1. Retrieve record (skipping if entity was destroyed prior to command
+  // playback)
   const EntityRecord *rec = slot_map_.find_record(entity);
   if (!rec || !rec->archetype || !rec->archetype->has_component(tid)) {
     return;
@@ -367,6 +371,310 @@ void World::destroy_entities(std::span<const Entity> entities) {
 
   // 3. Invalidate and reclaim entity handles in SlotMap in bulk
   slot_map_.free_batch(entities);
+}
+
+// =============================================================================
+// In-Place Cycle-Chasing Permutation Helpers
+// =============================================================================
+
+namespace {
+
+/**
+ * @brief Resolves a pointer to the Entity handle at a global archetype index.
+ *
+ * @param arch Pointer to the target Archetype.
+ * @param chunks Vector of chunks owned by the archetype.
+ * @param global_idx Flat global index within the archetype [0, entity_count).
+ * @return Pointer to the Entity handle inside its chunk memory slice.
+ */
+inline Entity *resolve_entity_ptr(
+    const Archetype *arch,
+    const std::vector<Chunk *> &chunks,
+    uint32_t global_idx
+) noexcept {
+  const Archetype::ChunkCoord coord = arch->decompose_index(global_idx);
+  return &chunks[coord.chunk_index]->entity_slice()[coord.local_row];
+}
+
+/**
+ * @brief Resolves a raw byte pointer to a component element at a global
+ * archetype index.
+ *
+ * @param arch Pointer to the target Archetype.
+ * @param chunks Vector of chunks owned by the archetype.
+ * @param layout Column layout descriptor defining component element offset and
+ * size.
+ * @param global_idx Flat global index within the archetype [0, entity_count).
+ * @return Raw pointer to the component element within its chunk column.
+ */
+inline void *resolve_component_ptr(
+    const Archetype *arch,
+    const std::vector<Chunk *> &chunks,
+    const ComponentColumnLayout &layout,
+    uint32_t global_idx
+) noexcept {
+  const Archetype::ChunkCoord coord = arch->decompose_index(global_idx);
+  return chunks[coord.chunk_index]->component_element(layout, coord.local_row);
+}
+
+/**
+ * @brief Updates the SlotMap routing record for an entity at its new global
+ * archetype index.
+ *
+ * @param arch Pointer to the target Archetype.
+ * @param chunks Vector of chunks owned by the archetype.
+ * @param slot_map Global SlotMap to update.
+ * @param entity Entity handle being re-anchored.
+ * @param global_idx Flat global index within the archetype where the entity now
+ * resides.
+ */
+inline void sync_entity_slot(
+    const Archetype *arch,
+    const std::vector<Chunk *> &chunks,
+    SlotMap &slot_map,
+    Entity entity,
+    uint32_t global_idx
+) noexcept {
+  const Archetype::ChunkCoord coord = arch->decompose_index(global_idx);
+  slot_map.update_record(entity, chunks[coord.chunk_index], coord.local_row);
+}
+
+/**
+ * @brief Permutes a single component column across all chunks in-place using
+ * cycle chasing.
+ *
+ * @details
+ * Walks through disjoint permutation cycles in O(N) time. Uses a small scratch
+ * buffer `temp` sized to the component's element size to store the cycle head,
+ * avoiding full-column allocations.
+ *
+ * ### Cycle-Chasing Example Walkthrough:
+ * Suppose we have 4 elements `[A, B, C, D]` at indices `[0, 1, 2, 3]`.
+ * We want to permute them using `target_indices = [3, 0, 1, 2]`, meaning:
+ * - Index 0 receives element from index 3 ('D')
+ * - Index 1 receives element from index 0 ('A')
+ * - Index 2 receives element from index 1 ('B')
+ * - Index 3 receives element from index 2 ('C')
+ *
+ * Expected result: `[D, A, B, C]`
+ *
+ * **Step-by-step cycle execution:**
+ * 1. `start = 0`: Save `Slot[0]` ('A') into `temp = 'A'`. (Slot 0 is now a
+ * hole).
+ * 2. `next = target_indices[0] = 3`: Move `Slot[3]` ('D') -> `Slot[0]`. (Array:
+ * `[D, B, C, D]`)
+ * 3. `next = target_indices[3] = 2`: Move `Slot[2]` ('C') -> `Slot[3]`. (Array:
+ * `[D, B, C, C]`)
+ * 4. `next = target_indices[2] = 1`: Move `Slot[1]` ('B') -> `Slot[2]`. (Array:
+ * `[D, B, B, C]`)
+ * 5. `next = target_indices[1] = 0`: Since `next == start (0)`, close cycle by
+ * placing `temp` ('A') -> `Slot[1]`.
+ * 6. Final Array: `[D, A, B, C]`.
+ *
+ * All 4 elements are relocated in-place in O(N) operations using only 1 element
+ * of temporary storage.
+ *
+ * @param arch Pointer to the target Archetype.
+ * @param chunks Vector of chunks belonging to the archetype.
+ * @param layout Column layout describing component element stride and offset.
+ * @param target_indices Span defining the permutation: target_indices[i] =
+ * source index for destination i.
+ * @param visited Bitset tracking visited indices across permutation cycles.
+ * @param temp Scratch byte buffer for holding a single component element during
+ * cycle chasing.
+ */
+void permute_single_column(
+    const Archetype *arch,
+    const std::vector<Chunk *> &chunks,
+    const ComponentColumnLayout &layout,
+    std::span<const uint32_t> target_indices,
+    std::vector<bool> &visited,
+    std::vector<uint8_t> &temp
+) {
+  const size_t total = target_indices.size();
+  const uint32_t size = layout.size;
+  temp.resize(size);
+  std::fill(visited.begin(), visited.end(), false);
+
+  for (uint32_t start = 0; start < total; ++start) {
+    // Skip elements already placed in previous cycles or elements that do not
+    // move
+    if (visited[start] || target_indices[start] == start) {
+      continue;
+    }
+
+    // Save cycle head element into scratch buffer
+    uint32_t cur = start;
+    void *cur_ptr = resolve_component_ptr(arch, chunks, layout, cur);
+    std::memcpy(temp.data(), cur_ptr, size);
+
+    // Chase the cycle until returning to start
+    while (true) {
+      visited[cur] = true;
+      uint32_t next = target_indices[cur];
+      if (next == start) {
+        // Complete the cycle by moving temp into the final position
+        std::memcpy(cur_ptr, temp.data(), size);
+        break;
+      }
+      void *next_ptr = resolve_component_ptr(arch, chunks, layout, next);
+      std::memcpy(cur_ptr, next_ptr, size);
+      cur = next;
+      cur_ptr = resolve_component_ptr(arch, chunks, layout, cur);
+    }
+  }
+}
+
+/**
+ * @brief Permutes all component columns of an archetype using in-place cycle
+ * chasing.
+ *
+ * @param arch Pointer to the target Archetype.
+ * @param chunks Vector of chunks belonging to the archetype.
+ * @param layouts Span of component column layouts.
+ * @param target_indices Span defining the permutation mapping.
+ * @param visited Bitset used to track cycle traversal.
+ */
+void permute_all_component_columns(
+    const Archetype *arch,
+    const std::vector<Chunk *> &chunks,
+    std::span<const ComponentColumnLayout> layouts,
+    std::span<const uint32_t> target_indices,
+    std::vector<bool> &visited
+) {
+  std::vector<uint8_t> temp_buffer;
+  for (const auto &layout : layouts) {
+    permute_single_column(
+        arch, chunks, layout, target_indices, visited, temp_buffer
+    );
+  }
+}
+
+/**
+ * @brief Permutes Entity handles across chunk slices and re-anchors SlotMap
+ * records in-place.
+ *
+ * @details
+ * Uses cycle chasing to permute 64-bit Entity handles. At each step of the
+ * cycle, updates the SlotMap record for the moved entity, guaranteeing zero
+ * dangling handles.
+ *
+ * @param arch Pointer to the target Archetype.
+ * @param chunks Vector of chunks belonging to the archetype.
+ * @param target_indices Span defining the permutation mapping.
+ * @param slot_map World's SlotMap to synchronize with new chunk/row
+ * coordinates.
+ * @param visited Bitset tracking visited indices across permutation cycles.
+ */
+void permute_entities_and_sync_slots(
+    const Archetype *arch,
+    const std::vector<Chunk *> &chunks,
+    std::span<const uint32_t> target_indices,
+    SlotMap &slot_map,
+    std::vector<bool> &visited
+) {
+  const size_t total = target_indices.size();
+  std::fill(visited.begin(), visited.end(), false);
+  Entity temp_entity;
+
+  for (uint32_t start = 0; start < total; ++start) {
+    if (visited[start] || target_indices[start] == start) {
+      // Re-anchor SlotMap record for stationary entities if not updated
+      Entity e = *resolve_entity_ptr(arch, chunks, start);
+      sync_entity_slot(arch, chunks, slot_map, e, start);
+      continue;
+    }
+
+    uint32_t cur = start;
+    Entity *cur_ptr = resolve_entity_ptr(arch, chunks, cur);
+    temp_entity = *cur_ptr;
+
+    // Chase cycle for Entity handles
+    while (true) {
+      visited[cur] = true;
+      uint32_t next = target_indices[cur];
+      if (next == start) {
+        *cur_ptr = temp_entity;
+        sync_entity_slot(arch, chunks, slot_map, temp_entity, cur);
+        break;
+      }
+
+      Entity *next_ptr = resolve_entity_ptr(arch, chunks, next);
+      Entity moved = *next_ptr;
+      *cur_ptr = moved;
+      sync_entity_slot(arch, chunks, slot_map, moved, cur);
+
+      cur = next;
+      cur_ptr = resolve_entity_ptr(arch, chunks, cur);
+    }
+  }
+}
+
+} // namespace
+
+// =============================================================================
+// World: In-Place Cycle-Chasing Permutation Entry Point
+// =============================================================================
+
+/**
+ * @brief Permutes all component columns and entity handles in an archetype
+ * in-place.
+ *
+ * @details
+ * ### Algorithm Overview:
+ * 1. **Validation & Early-Out:** Verifies target_indices length matches entity
+ * count; exits immediately if entity count is <= 1.
+ * 2. **Component Cycle Chasing:** For each column layout, chases permutation
+ * cycles using element-sized temporary buffers without allocating full columns.
+ * 3. **Entity Routing Table Synchronization:** Re-arranges 64-bit Entity
+ * handles in parallel with SlotMap records so external handle lookups remain
+ * 100% stable.
+ * 4. **Structural Dirty Marking:** Advances world tick and updates each
+ * affected chunk's structure version so change-detection queries reflect the
+ * permutation.
+ *
+ * @param arch Target archetype whose chunks will be permuted.
+ * @param target_indices Permutation mapping of size equal to
+ * arch->entity_count().
+ */
+void World::apply_permutation(
+    Archetype *arch,
+    std::span<const uint32_t> target_indices
+) {
+  // 1. Validation & Early Out
+  assert(arch != nullptr);
+  const size_t total = arch->entity_count();
+  assert(
+      target_indices.size() == total &&
+      "Permutation size must match entity count"
+  );
+
+  if (total <= 1) {
+    return;
+  }
+
+  // 2. Fetch chunk and column descriptors
+  const auto &chunks = get_archetype_chunks(arch);
+  const auto layouts = arch->column_layouts();
+
+  // Visited bitset to track cycle-chasing progress across cycles (125 KB for 1M
+  // entities)
+  std::vector<bool> visited(total, false);
+
+  // 3. Permute all component columns in-place using cycle chasing
+  permute_all_component_columns(arch, chunks, layouts, target_indices, visited);
+
+  // 4. Permute Entity handles and synchronize SlotMap routing table
+  permute_entities_and_sync_slots(
+      arch, chunks, target_indices, slot_map_, visited
+  );
+
+  // 5. Update structure version and mark columns dirty for change-detection
+  // filters
+  advance_tick();
+  for (Chunk *chunk : chunks) {
+    chunk->advance_structure_version(current_tick_);
+  }
 }
 
 } // namespace arche

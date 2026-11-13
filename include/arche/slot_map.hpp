@@ -484,6 +484,19 @@ public:
   }
 
   /**
+   * @brief Fast-path update of physical chunk and row during intra-archetype
+   * permutation.
+   *
+   * @param e Generational Entity handle being relocated.
+   * @param chunk Pointer to the new physical 64 KB chunk.
+   * @param row New row index within the target chunk.
+   */
+  inline void update_record(Entity e, Chunk *chunk, uint32_t row) noexcept {
+    slots[e.index()].record.chunk = chunk;
+    slots[e.index()].record.row = row;
+  }
+
+  /**
    * @brief Fast-path update of an entity's row index during chunk Swap-and-Pop.
    *
    * @details

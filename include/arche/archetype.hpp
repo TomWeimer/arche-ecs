@@ -323,6 +323,33 @@ public:
     edges_remove_[type] = target;
   }
 
+  // =============================================================================
+  // Multi-Chunk Coordinate Decomposition Helper
+  // =============================================================================
+
+  /**
+   * @struct ChunkCoord
+   * @brief Decomposed physical chunk index and in-chunk row index.
+   */
+  struct ChunkCoord {
+    uint32_t chunk_index{0};
+    uint32_t local_row{0};
+  };
+
+  // Inside class Archetype, public section:
+
+  /**
+   * @brief Decomposes a global archetype entity index into chunk index and
+   * local row.
+   * @param global_index Flat index in range [0, entity_count).
+   * @return Decomposed ChunkCoord.
+   */
+  [[nodiscard]] inline ChunkCoord decompose_index(
+      uint32_t global_index
+  ) const noexcept {
+    return {global_index / chunk_capacity_, global_index % chunk_capacity_};
+  }
+
   // --- Entity Accounting -----------------------------------------------------
 
   /**

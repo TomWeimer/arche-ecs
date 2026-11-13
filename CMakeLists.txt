@@ -97,6 +97,11 @@ add_executable(query_caching_tests tests/query_caching_tests.cpp)
 target_link_libraries(query_caching_tests PRIVATE arche::arche)
 add_test(NAME query_caching_tests COMMAND query_caching_tests)
 
+# Module 014 Tests: In-Place Archetype Permutation & Cache Locality
+add_executable(archetype_permutation_tests tests/archetype_permutation_tests.cpp)
+target_link_libraries(archetype_permutation_tests PRIVATE arche::arche)
+add_test(NAME archetype_permutation_tests COMMAND archetype_permutation_tests)
+
 # Custom Target: run all unit tests
 add_custom_target(run_tests
     COMMAND entity_tests
@@ -112,7 +117,8 @@ add_custom_target(run_tests
     COMMAND simd_and_hardware_tests
     COMMAND dirty_ticks_tests
     COMMAND query_caching_tests
-    DEPENDS entity_tests type_tests archetype_tests chunk_storage_tests structural_mutation_tests query_tests gpu_reflection_tests arche_tests handles_and_snapshots_tests batch_lifecycle_tests simd_and_hardware_tests dirty_ticks_tests query_caching_tests
+    COMMAND archetype_permutation_tests
+    DEPENDS entity_tests type_tests archetype_tests chunk_storage_tests structural_mutation_tests query_tests gpu_reflection_tests arche_tests handles_and_snapshots_tests batch_lifecycle_tests simd_and_hardware_tests dirty_ticks_tests query_caching_tests archetype_permutation_tests
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
     COMMENT "Executing all unit tests..."
 )
@@ -137,5 +143,6 @@ add_custom_target(fclean
         $<TARGET_FILE:simd_and_hardware_tests>
         $<TARGET_FILE:dirty_ticks_tests>
         $<TARGET_FILE:query_caching_tests>
+        $<TARGET_FILE:archetype_permutation_tests>
     COMMENT "Full clean: removing intermediate objects and binaries..."
 )

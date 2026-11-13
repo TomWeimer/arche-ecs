@@ -143,6 +143,39 @@ public:
    */
   inline void restore_snapshot(const void *snapshot_buffer, size_t bytes);
 
+  // --- In-Place Archetype Permutation & Cache Locality -----------------------
+
+  /**
+   * @brief Permutes all component columns and entity handles in an archetype
+   * in-place.
+   *
+   * @details
+   * Applies cycle-chasing permutation across all chunks in the archetype in
+   * O(N) time. Updates all corresponding SlotMap records so all existing Entity
+   * handles remain valid.
+   *
+   * @param arch Pointer to the target Archetype to permute.
+   * @param target_indices Span of size N where target_indices[i] indicates the
+   * source index whose entity data should be placed at destination index i.
+   */
+  void apply_permutation(
+      Archetype *arch,
+      std::span<const uint32_t> target_indices
+  );
+
+  /**
+   * @brief Sorts all entities in an archetype in-place based on a component
+   * comparator.
+   *
+   * @tparam Component Component type to sort by.
+   * @tparam Compare Strict weak ordering comparator accepting (const
+   * Component&, const Component&).
+   * @param arch Pointer to target Archetype.
+   * @param comp Comparator callable.
+   */
+  template <typename Component, typename Compare>
+  void sort_archetype(Archetype *arch, Compare &&comp);
+
   // --- Entity Inspection -----------------------------------------------------
 
   /**
@@ -168,6 +201,13 @@ public:
    */
   [[nodiscard]] bool is_valid(Entity entity) const noexcept {
     return is_alive(entity);
+  }
+
+  /**
+   * @brief Retrieves the storage record for a live entity.
+   */
+  [[nodiscard]] const EntityRecord &get_record(Entity entity) const {
+    return get_alive_record(entity);
   }
 
   /**
@@ -1078,6 +1118,51 @@ void World::create_entities_soa(
         (mark_chunk_dirty<std::decay_t<Comps>>(chunk), ...);
       }
   );
+}
+
+// =============================================================================
+// In-Place Comparator Sorting Template Implementation
+// =============================================================================
+
+template <typename Component, typename Compare>
+void World::sort_archetype(Archetype *arch, Compare &&comp) {
+  assert(arch != nullptr);
+  const size_t total = arch->entity_count();
+  if (total <= 1) {
+    return;
+  }
+
+  const auto &chunks = get_archetype_chunks(arch);
+  const ComponentColumnLayout *layout =
+      arch->column_layout_for(type_id<Component>());
+  assert(
+      layout != nullptr && "Archetype does not contain component to sort by"
+  );
+
+  // 1. Build initial index list [0, 1, ..., N - 1]
+  std::vector<uint32_t> sorted_indices(total);
+  for (size_t i = 0; i < total; ++i) {
+    sorted_indices[i] = static_cast<uint32_t>(i);
+  }
+
+  // 2. Sort indices based on component values
+  auto get_comp = [&](uint32_t g) -> const Component & {
+    // Decompose multi-chunk index
+    const Archetype::ChunkCoord coord = arch->decompose_index(g);
+    Chunk *c = chunks[coord.chunk_index];
+    return *static_cast<const Component *>(
+        c->component_element(*layout, coord.local_row)
+    );
+  };
+
+  std::sort(
+      sorted_indices.begin(),
+      sorted_indices.end(),
+      [&](uint32_t a, uint32_t b) { return comp(get_comp(a), get_comp(b)); }
+  );
+
+  // 3. Apply the sorted permutation in-place
+  apply_permutation(arch, sorted_indices);
 }
 
 // =============================================================================
