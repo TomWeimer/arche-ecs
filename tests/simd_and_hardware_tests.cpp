@@ -1,8 +1,5 @@
-#include "arche/chunk.hpp"
-#include "arche/chunk_pool.hpp"
-#include "arche/entity.hpp"
-#include "arche/query.hpp"
-#include "arche/world.hpp"
+#include "arche/arche.hpp"
+#include "arche/detail/chunk_pool.hpp"
 
 #include <cassert>
 #include <cstdint>

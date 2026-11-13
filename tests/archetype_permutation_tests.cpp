@@ -1,6 +1,4 @@
-#include "arche/entity.hpp"
-#include "arche/query.hpp"
-#include "arche/world.hpp"
+#include "arche/arche.hpp"
 
 #include <algorithm>
 #include <cassert>

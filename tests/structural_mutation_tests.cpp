@@ -1,6 +1,4 @@
-#include "arche/command_buffer.hpp"
-#include "arche/entity.hpp"
-#include "arche/world.hpp"
+#include "arche/arche.hpp"
 
 #include <cassert>
 #include <iostream>

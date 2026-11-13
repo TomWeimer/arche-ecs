@@ -1,12 +1,6 @@
-#include "arche/archetype_graph.hpp"
-#include "arche/chunk.hpp"
-#include "arche/command_buffer.hpp"
-#include "arche/entity.hpp"
-#include "arche/gpu_reflection.hpp"
-#include "arche/hardware.hpp"
-#include "arche/slot_map.hpp"
-#include "arche/type_registry.hpp"
-#include "arche/world.hpp"
+#include "arche/arche.hpp"
+#include "arche/detail/archetype_graph.hpp"
+#include "arche/detail/slot_map.hpp"
 
 #include <cassert>
 #include <cstdint>

@@ -1,10 +1,6 @@
-#include "arche/archetype.hpp"
-#include "arche/chunk.hpp"
-#include "arche/chunk_pool.hpp"
-#include "arche/entity.hpp"
-#include "arche/hardware.hpp"
-#include "arche/slot_map.hpp"
-#include "arche/type_registry.hpp"
+#include "arche/arche.hpp"
+#include "arche/detail/chunk_pool.hpp"
+#include "arche/detail/slot_map.hpp"
 
 #include <cassert>
 #include <cstdint>

@@ -1,12 +1,12 @@
 #pragma once
 
-#include "arche/archetype_graph.hpp"
 #include "arche/chunk.hpp"
-#include "arche/chunk_pool.hpp"
+#include "arche/detail/archetype_graph.hpp"
+#include "arche/detail/chunk_pool.hpp"
+#include "arche/detail/query_cache.hpp"
+#include "arche/detail/slot_map.hpp"
 #include "arche/entity.hpp"
 #include "arche/gpu_reflection.hpp"
-#include "arche/query_cache.hpp"
-#include "arche/slot_map.hpp"
 #include "arche/thread_pool.hpp"
 #include "arche/type_registry.hpp"
 

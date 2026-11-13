@@ -2,8 +2,8 @@
 
 #include "arche/chunk.hpp"
 #include "arche/component_mask.hpp"
+#include "arche/detail/math_utils.hpp"
 #include "arche/entity.hpp"
-#include "arche/math_utils.hpp"
 #include "arche/type_registry.hpp"
 
 #include <algorithm>

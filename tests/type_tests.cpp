@@ -1,6 +1,4 @@
-#include "arche/component_mask.hpp"
-#include "arche/type_id.hpp"
-#include "arche/type_registry.hpp"
+#include "arche/arche.hpp"
 
 #include <cassert>
 #include <iostream>

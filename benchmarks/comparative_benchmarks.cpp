@@ -1,6 +1,4 @@
 #include "arche/arche.hpp"
-#include "arche/parallel_command_buffer.hpp"
-#include "arche/thread_pool.hpp"
 
 #if __has_include(<nanobench.h>) && __has_include(<entt/entt.hpp>) && __has_include(<flecs.h>)
 #include <entt/entt.hpp>

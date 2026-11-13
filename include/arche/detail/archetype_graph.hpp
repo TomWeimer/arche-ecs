@@ -2,7 +2,7 @@
 
 #include "arche/archetype.hpp"
 #include "arche/component_mask.hpp"
-#include "arche/query_cache.hpp"
+#include "arche/detail/query_cache.hpp"
 #include "arche/type_registry.hpp"
 
 #include <algorithm>

@@ -1,5 +1,5 @@
 #include "arche/chunk.hpp"
-#include "arche/slot_map.hpp"
+#include "arche/detail/slot_map.hpp"
 
 #include <cassert>
 #include <cstring>

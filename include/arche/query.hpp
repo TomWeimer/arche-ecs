@@ -615,7 +615,7 @@ private:
 // Query Iterator and World Factory Definitions
 // =============================================================================
 
-#include "arche/query_iterator.hpp"
+#include "arche/detail/query_iterator.hpp"
 
 namespace arche {
 

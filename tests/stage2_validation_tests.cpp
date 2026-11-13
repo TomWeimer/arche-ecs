@@ -1,12 +1,4 @@
-#include "arche/archetype.hpp"
-#include "arche/chunk.hpp"
-#include "arche/entity.hpp"
-#include "arche/parallel_command_buffer.hpp"
-#include "arche/query.hpp"
-#include "arche/query_filter.hpp"
-#include "arche/slot_map.hpp"
-#include "arche/thread_pool.hpp"
-#include "arche/world.hpp"
+#include "arche/arche.hpp"
 #include "test_components.hpp"
 
 #include <cassert>

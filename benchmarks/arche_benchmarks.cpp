@@ -1,8 +1,4 @@
-#include "arche/entity.hpp"
-#include "arche/hardware.hpp"
-#include "arche/query.hpp"
-#include "arche/thread_pool.hpp"
-#include "arche/world.hpp"
+#include "arche/arche.hpp"
 
 #include <cassert>
 #include <chrono>

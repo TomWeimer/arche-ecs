@@ -1,6 +1,4 @@
-#include "arche/query.hpp"
-#include "arche/query_filter.hpp"
-#include "arche/world.hpp"
+#include "arche/arche.hpp"
 
 #include <cassert>
 #include <iostream>

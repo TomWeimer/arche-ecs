@@ -1,5 +1,4 @@
-#include "arche/gpu_reflection.hpp"
-#include "arche/world.hpp"
+#include "arche/arche.hpp"
 
 #include <cassert>
 #include <chrono>
