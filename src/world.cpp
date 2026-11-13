@@ -579,9 +579,6 @@ void permute_entities_and_sync_slots(
 
   for (uint32_t start = 0; start < total; ++start) {
     if (visited[start] || target_indices[start] == start) {
-      // Re-anchor SlotMap record for stationary entities if not updated
-      Entity e = *resolve_entity_ptr(arch, chunks, start);
-      sync_entity_slot(arch, chunks, slot_map, e, start);
       continue;
     }
 

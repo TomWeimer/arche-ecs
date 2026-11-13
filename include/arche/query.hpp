@@ -93,14 +93,36 @@ public:
    * pointers.
    */
   template <typename Func> inline void for_each_chunk(Func &&func) {
-    for_each_active_chunk([&](Chunk *chunk, Archetype *arch) {
-      func(
-          chunk->count(),
-          get_column_ptr<Components>(
-              chunk, resolve_column_offset<Components>(arch)
-          )...
-      );
-    });
+    assert(cache_ != nullptr);
+    for (Archetype *arch : cache_->matching_archetypes) {
+      const auto &chunks = get_chunks_for(arch);
+      const size_t num_chunks = chunks.size();
+      if (num_chunks == 0) {
+        continue;
+      }
+
+      const auto offsets =
+          std::make_tuple(resolve_column_offset<Components>(arch)...);
+
+      for (size_t i = 0; i < num_chunks; ++i) {
+        Chunk *chunk = chunks[i];
+        if (chunk->is_empty() || !chunk_matches_filters(chunk, arch)) {
+          continue;
+        }
+
+        // Lookahead prefetching with pre-resolved byte offsets
+        if (i + 1 < num_chunks) {
+          prefetch_next_chunk_with_offsets(chunks[i + 1], offsets);
+        }
+
+        [&]<size_t... Is>(std::index_sequence<Is...>) {
+          func(
+              chunk->count(),
+              get_column_ptr<Components>(chunk, std::get<Is>(offsets))...
+          );
+        }(std::index_sequence_for<Components...>{});
+      }
+    }
   }
 
   /**
@@ -118,19 +140,39 @@ public:
    * @param func User lambda executed once per chunk.
    */
   template <typename Func> inline void for_each_chunk_padded(Func &&func) {
-    for_each_active_chunk([&](Chunk *chunk, Archetype *arch) {
-      const uint32_t active = chunk->count();
-      // Round up to nearest vector width using arche::math::round_up_simd
-      // (defined in math_utils.hpp)
-      const uint32_t padded = arche::math::round_up_simd<16>(active);
-      func(
-          active,
-          padded,
-          get_column_ptr<Components>(
-              chunk, resolve_column_offset<Components>(arch)
-          )...
-      );
-    });
+    assert(cache_ != nullptr);
+    for (Archetype *arch : cache_->matching_archetypes) {
+      const auto &chunks = get_chunks_for(arch);
+      const size_t num_chunks = chunks.size();
+      if (num_chunks == 0) {
+        continue;
+      }
+
+      const auto offsets =
+          std::make_tuple(resolve_column_offset<Components>(arch)...);
+
+      for (size_t i = 0; i < num_chunks; ++i) {
+        Chunk *chunk = chunks[i];
+        if (chunk->is_empty() || !chunk_matches_filters(chunk, arch)) {
+          continue;
+        }
+
+        if (i + 1 < num_chunks) {
+          prefetch_next_chunk_with_offsets(chunks[i + 1], offsets);
+        }
+
+        const uint32_t active = chunk->count();
+        const uint32_t padded = arche::math::round_up_simd<16>(active);
+
+        [&]<size_t... Is>(std::index_sequence<Is...>) {
+          func(
+              active,
+              padded,
+              get_column_ptr<Components>(chunk, std::get<Is>(offsets))...
+          );
+        }(std::index_sequence_for<Components...>{});
+      }
+    }
   }
 
   /**
@@ -426,6 +468,38 @@ private:
 #else
     (void)next_chunk;
     (void)arch;
+#endif
+  }
+
+  /**
+   * @brief Issues lookahead cache prefetch hints using pre-calculated column
+   * byte offsets.
+   */
+  template <typename Tuple>
+  static inline void prefetch_next_chunk_with_offsets(
+      const Chunk *next_chunk,
+      const Tuple &offsets
+  ) noexcept {
+#if defined(__GNUC__) || defined(__clang__)
+    // 1. Prefetch ChunkHeader (128 bytes = 2 cache lines of 64 bytes)
+    __builtin_prefetch(next_chunk, 0, 3);
+    __builtin_prefetch(
+        reinterpret_cast<const uint8_t *>(next_chunk) + 64, 0, 3
+    );
+
+    // 2. Prefetch first cache line using precalculated offsets
+    [&]<size_t... Is>(std::index_sequence<Is...>) {
+      ((__builtin_prefetch(
+           reinterpret_cast<const uint8_t *>(next_chunk) +
+               std::get<Is>(offsets),
+           0, // 0 = read
+           3  // 3 = high temporal locality (L1/L2)
+       )),
+       ...);
+    }(std::index_sequence_for<Components...>{});
+#else
+    (void)next_chunk;
+    (void)offsets;
 #endif
   }
 

@@ -1246,29 +1246,40 @@ void World::sort_archetype(Archetype *arch, Compare &&comp) {
       layout != nullptr && "Archetype does not contain component to sort by"
   );
 
-  // 1. Build initial index list [0, 1, ..., N - 1]
-  std::vector<uint32_t> sorted_indices(total);
-  for (size_t i = 0; i < total; ++i) {
-    sorted_indices[i] = static_cast<uint32_t>(i);
-  }
-
-  // 2. Sort indices based on component values
-  auto get_comp = [&](uint32_t g) -> const Component & {
-    // Decompose multi-chunk index
-    const Archetype::ChunkCoord coord = arch->decompose_index(g);
-    Chunk *c = chunks[coord.chunk_index];
-    return *static_cast<const Component *>(
-        c->component_element(*layout, coord.local_row)
-    );
+  // 1. Gather component keys and their original global indices contiguously.
+  // This avoids 20+ million expensive integer divisions and modulos during std::sort.
+  struct KeyIndex {
+    Component key;
+    uint32_t index;
   };
 
+  std::vector<KeyIndex> keys(total);
+  uint32_t global_idx = 0;
+  for (Chunk *chunk : chunks) {
+    const uint32_t count = chunk->count();
+    const Component *comp_ptr = static_cast<const Component *>(
+        chunk->component_element(*layout, 0)
+    );
+    for (uint32_t r = 0; r < count; ++r) {
+      keys[global_idx] = KeyIndex{comp_ptr[r], global_idx};
+      ++global_idx;
+    }
+  }
+
+  // 2. Sort the contiguous key-index array in CPU cache with zero chunk indirection
   std::sort(
-      sorted_indices.begin(),
-      sorted_indices.end(),
-      [&](uint32_t a, uint32_t b) { return comp(get_comp(a), get_comp(b)); }
+      keys.begin(),
+      keys.end(),
+      [&](const KeyIndex &a, const KeyIndex &b) { return comp(a.key, b.key); }
   );
 
-  // 3. Apply the sorted permutation in-place
+  // 3. Extract the permutation target indices
+  std::vector<uint32_t> sorted_indices(total);
+  for (size_t i = 0; i < total; ++i) {
+    sorted_indices[i] = keys[i].index;
+  }
+
+  // 4. Apply the sorted permutation in-place via cycle chasing
   apply_permutation(arch, sorted_indices);
 }
 

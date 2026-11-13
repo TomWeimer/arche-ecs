@@ -112,6 +112,11 @@ add_executable(multithreaded_query_tests tests/multithreaded_query_tests.cpp)
 target_link_libraries(multithreaded_query_tests PRIVATE arche::arche)
 add_test(NAME multithreaded_query_tests COMMAND multithreaded_query_tests)
 
+# Module 017 Tests: 1M+ Scale Validation & Profiling Harness
+add_executable(stage2_validation_tests tests/stage2_validation_tests.cpp)
+target_link_libraries(stage2_validation_tests PRIVATE arche::arche)
+add_test(NAME stage2_validation_tests COMMAND stage2_validation_tests)
+
 # Custom Target: run all unit tests
 add_custom_target(run_tests
     COMMAND entity_tests
@@ -130,7 +135,8 @@ add_custom_target(run_tests
     COMMAND archetype_permutation_tests
     COMMAND double_buffered_tests
     COMMAND multithreaded_query_tests
-    DEPENDS entity_tests type_tests archetype_tests chunk_storage_tests structural_mutation_tests query_tests gpu_reflection_tests arche_tests handles_and_snapshots_tests batch_lifecycle_tests simd_and_hardware_tests dirty_ticks_tests query_caching_tests archetype_permutation_tests double_buffered_tests multithreaded_query_tests
+    COMMAND stage2_validation_tests
+    DEPENDS entity_tests type_tests archetype_tests chunk_storage_tests structural_mutation_tests query_tests gpu_reflection_tests arche_tests handles_and_snapshots_tests batch_lifecycle_tests simd_and_hardware_tests dirty_ticks_tests query_caching_tests archetype_permutation_tests double_buffered_tests multithreaded_query_tests stage2_validation_tests
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
     COMMENT "Executing all unit tests..."
 )
@@ -158,5 +164,49 @@ add_custom_target(fclean
         $<TARGET_FILE:archetype_permutation_tests>
         $<TARGET_FILE:double_buffered_tests>
         $<TARGET_FILE:multithreaded_query_tests>
+        $<TARGET_FILE:stage2_validation_tests>
     COMMENT "Full clean: removing intermediate objects and binaries..."
 )
+
+# ==============================================================================
+# Optional External Comparison Benchmarks (OFF by default)
+# ==============================================================================
+option(ARCHE_BUILD_COMPARISON_BENCHMARKS "Build comparative ECS benchmarks against other libraries" OFF)
+
+if(ARCHE_BUILD_COMPARISON_BENCHMARKS)
+    message(STATUS "Configuring external comparative benchmarks...")
+    include(FetchContent)
+
+    # 1. Fetch lightweight nanobench
+    FetchContent_Declare(
+        nanobench
+        GIT_REPOSITORY https://github.com/martinus/nanobench.git
+        GIT_TAG        v4.3.11
+    )
+    FetchContent_MakeAvailable(nanobench)
+
+    # 2. Fetch EnTT for side-by-side comparison
+    FetchContent_Declare(
+        entt
+        GIT_REPOSITORY https://github.com/skypjack/entt.git
+        GIT_TAG        v3.13.2
+    )
+    FetchContent_MakeAvailable(entt)
+
+    # 3. Fetch Flecs for side-by-side comparison
+    set(FLECS_STATIC ON CACHE BOOL "" FORCE)
+    set(FLECS_SHARED OFF CACHE BOOL "" FORCE)
+    set(FLECS_TESTS OFF CACHE BOOL "" FORCE)
+    set(FLECS_EXAMPLES OFF CACHE BOOL "" FORCE)
+    FetchContent_Declare(
+        flecs
+        GIT_REPOSITORY https://github.com/SanderMertens/flecs.git
+        GIT_TAG        v4.0.4
+    )
+    FetchContent_MakeAvailable(flecs)
+
+    add_executable(comparative_ecs_benchmarks benchmarks/comparative_benchmarks.cpp)
+    target_compile_options(comparative_ecs_benchmarks PRIVATE -Wno-deprecated-literal-operator)
+    target_link_libraries(comparative_ecs_benchmarks PRIVATE arche::arche nanobench EnTT::EnTT flecs_static)
+endif()
+
