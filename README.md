@@ -1,21 +1,20 @@
 # Arche ECS
 
-A standalone, ultra-high-performance C++20 Archetype Entity Component System (ECS) library engineered for extreme-density simulations (**50,000 to 2,000,000+ entities @ 120+ Hz**).
+<p align="center">
+  <img src="docs/images/arche_ecs_banner.jpg" alt="Arche ECS Banner" width="600">
+</p>
 
-```
-   _____              __             ___________ _________ _________
-  /  _  \_______ ____ |  |__   ____   \_   _____//   _____//   _____/
- /  /_\  \_  __ \____ \|  |  \_/ __ \   |    __)_ \_____  \ \_____  \ 
-/    |    \  | \/  |_> >   Y  \  ___/   |        \/        \/        \
-\____|__  /__|  |   __/|___|  /\___  > /_______  /_______  /_______  /
-        \/      |__|        \/     \/          \/        \/        \/ 
-```
+<p align="center">
+  A standalone, ultra-high-performance C++20 Archetype Entity Component System (ECS) library engineered for extreme-density simulations (<b>50,000 to 2,000,000+ entities @ 120+ Hz</b>).
+</p>
 
-[![C++20](https://img.shields.io/badge/C%2B%2B-20-blue.svg)](https://en.cppreference.com/w/cpp/20)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Build Status](https://img.shields.io/badge/Tests-19%2F19%20Passing-brightgreen.svg)]()
-[![Zero Dependencies](https://img.shields.io/badge/Dependencies-Zero-orange.svg)]()
-[![Scale](https://img.shields.io/badge/Scale-2%2C000%2C000%2B%20Entities-blueviolet.svg)]()
+<p align="center">
+  <a href="https://en.cppreference.com/w/cpp/20"><img src="https://img.shields.io/badge/C%2B%2B-20-blue.svg" alt="C++20"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License: MIT"></a>
+  <img src="https://img.shields.io/badge/Tests-19%2F19%20Passing-brightgreen.svg" alt="Build Status">
+  <img src="https://img.shields.io/badge/Dependencies-Zero-orange.svg" alt="Zero Dependencies">
+  <img src="https://img.shields.io/badge/Scale-2%2C000%2C000%2B%20Entities-blueviolet.svg" alt="Scale">
+</p>
 
 ---
 
