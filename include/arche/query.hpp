@@ -71,9 +71,9 @@ public:
    * @param world Central World coordinator to query against.
    */
   template <typename... Filters>
-  explicit inline Query(World &world, Filters... /*filters*/) : world_(world) {
+  explicit inline Query(World &world, Filters... filters) : world_(world) {
     build_masks();
-    (apply_filter(Filters{}), ...);
+    (apply_filter(filters), ...);
     find_matching_archetypes();
   }
 
@@ -201,6 +201,12 @@ private:
     std::array<uint32_t, sizeof...(Components)> offsets{};
   };
 
+  /// Rule for runtime component mutation change-detection filters.
+  struct MutationFilterRule {
+    TypeID type_id{INVALID_TYPE_ID};
+    uint32_t since_tick{0};
+  };
+
   template <typename Target, typename First, typename... Rest>
   static constexpr size_t index_in_pack() {
     if constexpr (std::is_same_v<std::decay_t<Target>, std::decay_t<First>>) {
@@ -245,6 +251,23 @@ private:
    */
   template <typename... Ts> inline void apply_filter(Without<Ts...>) {
     register_and_set_mask<Ts...>(exclude_mask_);
+  }
+
+  /**
+   * @brief Tag-dispatch handler for Mutated<T> change-detection filters.
+   */
+  template <typename T> inline void apply_filter(Mutated<T> f) {
+    world_.registry().template register_type<std::decay_t<T>>();
+    include_mask_.set(type_id<std::decay_t<T>>());
+    mutation_filters_.push_back({type_id<std::decay_t<T>>(), f.since_tick});
+  }
+
+  /**
+   * @brief Tag-dispatch handler for Added structural change-detection filters.
+   */
+  inline void apply_filter(Added f) {
+    filter_added_ = true;
+    added_since_tick_ = f.since_tick;
   }
 
   /**
@@ -394,6 +417,34 @@ private:
   }
 
   /**
+   * @brief Evaluates runtime change-detection filters (Added, Mutated<T>) against a chunk.
+   *
+   * @param chunk Pointer to the chunk to inspect.
+   * @param match Cached archetype column metadata.
+   * @return true if the chunk satisfies all change filters; false if it can be skipped.
+   */
+  [[nodiscard]] inline bool chunk_matches_filters(
+      const Chunk *chunk,
+      const ArchetypeMatch &match
+  ) const noexcept {
+    // 1. Evaluate Added structural change filter in O(1)
+    if (filter_added_ && chunk->structure_version() <= added_since_tick_) {
+      return false;
+    }
+
+    // 2. Evaluate Mutated<T> component change filters in O(1)
+    for (const auto &rule : mutation_filters_) {
+      const int16_t col = match.archetype->column_index(rule.type_id);
+      if (col >= 0 &&
+          chunk->column_version(static_cast<uint16_t>(col)) <= rule.since_tick) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  /**
    * @brief Traverses all non-empty memory chunks across all matching
    * archetypes.
    */
@@ -405,7 +456,7 @@ private:
 
       for (size_t i = 0; i < num_chunks; ++i) {
         Chunk *chunk = chunks[i];
-        if (chunk->is_empty()) {
+        if (chunk->is_empty() || !chunk_matches_filters(chunk, match)) {
           continue;
         }
 
@@ -479,6 +530,10 @@ private:
   ComponentMask include_mask_{};
   ComponentMask exclude_mask_{};
   std::vector<ArchetypeMatch> matching_archetypes_{};
+
+  std::vector<MutationFilterRule> mutation_filters_{};
+  uint32_t added_since_tick_{0};
+  bool filter_added_{false};
 };
 
 } // namespace arche

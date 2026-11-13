@@ -51,9 +51,9 @@ static_assert(sizeof(MacroAABB) <= 64, "MacroAABB must fit within 64 bytes");
  * @brief Validates 128-byte ChunkHeader alignment and user metadata storage.
  */
 void test_chunk_user_metadata() {
-  std::cout << "[Test 1/4] ChunkHeader 128-Byte Layout & User Metadata... ";
+  std::cout << "[Test 1/4] ChunkHeader 256-Byte Layout & User Metadata... ";
 
-  assert(sizeof(ChunkHeader) == 128);
+  assert(sizeof(ChunkHeader) == 256);
   assert(alignof(ChunkHeader) == 64);
 
   World world;

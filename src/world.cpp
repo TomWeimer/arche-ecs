@@ -103,13 +103,16 @@ bool World::destroy_entity(Entity entity) {
   chunk->swap_and_pop(record.row, slot_map_, arch->column_layouts());
   arch->decrement_entity_count();
 
-  // 4. Return chunk to the pool if it became completely empty and isn't the
+  // 4. Mark the chunk as modified
+  chunk->advance_structure_version(current_tick_);
+
+  // 5. Return chunk to the pool if it became completely empty and isn't the
   // sole chunk
   if (chunk->is_empty() && get_archetype_chunks(arch).size() > 1) {
     recycle_chunk(arch, chunk);
   }
 
-  // 5. Invalidate and reclaim the entity handle in the slot map
+  // 6. Invalidate and reclaim the entity handle in the slot map
   slot_map_.free(entity);
   return true;
 }
@@ -373,6 +376,9 @@ void World::destroy_entities(std::span<const Entity> entities) {
         info.rows, slot_map_, info.arch->column_layouts()
     );
     info.arch->decrement_entity_count(info.rows.size());
+
+    // 2.5 Mark the chunk as modified
+    chunk->advance_structure_version(current_tick_);
 
     if (chunk->is_empty() && get_archetype_chunks(info.arch).size() > 1) {
       recycle_chunk(info.arch, chunk);

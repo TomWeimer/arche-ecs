@@ -87,6 +87,11 @@ add_executable(simd_and_hardware_tests tests/simd_and_hardware_tests.cpp)
 target_link_libraries(simd_and_hardware_tests PRIVATE arche::arche)
 add_test(NAME simd_and_hardware_tests COMMAND simd_and_hardware_tests)
 
+# Module 012 Tests: Chunk Dirty Ticking & Change Detection
+add_executable(dirty_ticks_tests tests/dirty_ticks_tests.cpp)
+target_link_libraries(dirty_ticks_tests PRIVATE arche::arche)
+add_test(NAME dirty_ticks_tests COMMAND dirty_ticks_tests)
+
 # Custom Target: run all unit tests
 add_custom_target(run_tests
     COMMAND entity_tests
@@ -100,7 +105,8 @@ add_custom_target(run_tests
     COMMAND handles_and_snapshots_tests
     COMMAND batch_lifecycle_tests
     COMMAND simd_and_hardware_tests
-    DEPENDS entity_tests type_tests archetype_tests chunk_storage_tests structural_mutation_tests query_tests gpu_reflection_tests arche_tests handles_and_snapshots_tests batch_lifecycle_tests simd_and_hardware_tests
+    COMMAND dirty_ticks_tests
+    DEPENDS entity_tests type_tests archetype_tests chunk_storage_tests structural_mutation_tests query_tests gpu_reflection_tests arche_tests handles_and_snapshots_tests batch_lifecycle_tests simd_and_hardware_tests dirty_ticks_tests
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
     COMMENT "Executing all unit tests..."
 )
@@ -123,5 +129,6 @@ add_custom_target(fclean
         $<TARGET_FILE:handles_and_snapshots_tests>
         $<TARGET_FILE:batch_lifecycle_tests>
         $<TARGET_FILE:simd_and_hardware_tests>
+        $<TARGET_FILE:dirty_ticks_tests>
     COMMENT "Full clean: removing intermediate objects and binaries..."
 )

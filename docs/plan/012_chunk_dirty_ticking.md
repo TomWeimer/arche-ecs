@@ -8,11 +8,11 @@ This document specifies the exact behavioral deltas, code modifications, and new
 
 ### 1.1 Chunk-Level Monotonic Version Ticking
 * **Before (Module 011):**  
-  Queries traversed all active chunks every frame. In a 1,000,000 entity simulation where 80–90% of entities are dormant or sleeping (e.g. resting particles, inactive debris, static obstacles), every single chunk was loaded into L1/L2 cache and evaluated row-by-row.
+  Queries traversed all active chunks every frame. For downstream systems (such as GPU VRAM streaming, spatial hash / BVH refitting, network replication, and reactive gameplay/UI logic), every single chunk had to be evaluated or uploaded even if its data had not changed since the last update.
 * **Now (Module 012):**  
   `World` maintains a monotonic simulation tick (`advance_tick()`). Every 64 KB `Chunk` header records a `structure_version` and an array of 32 `column_versions`. Whenever a component column is mutated or entities are added/relocated, the chunk is stamped with the current tick.
 * **Why we need to change this part:**  
-  Checking `chunk->column_version(col) > last_system_tick` at the chunk boundary takes 1 CPU cycle. If false, queries bypass the entire 1,600-entity chunk ($64\text{ KB}$ page) with zero row iterations, zero memory reads, and zero cache pollution. Skipping 500 dormant chunks (800,000 entities) completes in $< 2\ \mu\text{s}$.
+  Checking `chunk->column_version(col) > last_system_tick` at the chunk boundary takes 1 CPU cycle. If false, downstream systems bypass the entire 1,600-entity chunk ($64\text{ KB}$ page) with zero row iterations, zero memory reads, and zero cache pollution. For static, sleeping, or regionally clustered chunks, skipping 500 clean chunks (800,000 entities) completes in $< 2\ \mu\text{s}$, eliminating over 90% of GPU streaming bandwidth and BVH refitting overhead. (Note: For dense simulations where every entity moves continuously every frame, like active boids, all chunks naturally stay dirty; the primary beneficiaries are downstream reactive consumers).
 
 ### 1.2 Change Detection Query Filters (`Mutated<T>`, `Added`)
 * **Before (Module 011):**  
@@ -22,7 +22,7 @@ This document specifies the exact behavioral deltas, code modifications, and new
   - `Mutated<T>{since_tick}`: Iterates only chunks where component `T` was modified after `since_tick`.
   - `Added{since_tick}`: Iterates only chunks where entities were added or relocated after `since_tick`.
 * **Why we need to change this part:**  
-  Allows physics, spatial grids, AI planners, and renderer updates to execute reactively—running only on dirty memory slices without needing per-entity boolean dirty flags.
+  Allows downstream consumers (GPU buffer uploaders, spatial partitions, network delta sync, and event-driven gameplay systems) to execute reactively—running only on dirty memory slices without needing per-entity boolean dirty flags or polling clean memory.
 
 ### 1.3 Deduplication & Helper Architecture: Monotonic Counters & Fast Lookups
 * **`advance_nonzero(uint32_t val)`:**  

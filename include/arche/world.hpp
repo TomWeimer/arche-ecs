@@ -69,6 +69,9 @@ class World {
 private:
   // --- Member Data -----------------------------------------------------------
 
+  /// Global monotonic simulation tick counter (starts at 1; 0 is reserved).
+  uint32_t current_tick_{1};
+
   /// Memory size in bytes for each chunk buffer (defaults to 64 KB, aligned to
   /// hardware cache line).
   uint32_t chunk_size_{65536};
@@ -208,6 +211,10 @@ public:
     // 4. Track entity count and record physical chunk location in SlotMap
     arch->increment_entity_count();
     slot_map_.update_location(entity, arch, chunk, row);
+
+    // 5. Mark the chunk as dirty
+    chunk->advance_structure_version(current_tick_);
+    (mark_chunk_dirty<std::decay_t<Comps>>(chunk), ...);
 
     return entity;
   }
@@ -461,6 +468,59 @@ public:
     // 4. Migrate the entity to the new archetype, dropping the removed
     // component
     migrate_entity(entity, record, src_arch, dst_arch, type, nullptr);
+  }
+
+  // --- Simulation Ticking & Change Detection ---------------------------------
+
+  /**
+   * @brief Returns the current monotonic simulation tick.
+   */
+  [[nodiscard]] inline uint32_t current_tick() const noexcept {
+    return current_tick_;
+  }
+
+  /**
+   * @brief Advances the world simulation tick by 1 (skipping 0 on wrap-around).
+   * @details Uses `advance_nonzero` (defined in `include/arche/entity.hpp`) to
+   * skip sentinel 0 on 32-bit wrap-around.
+   *
+   * @return The newly incremented simulation tick.
+   */
+  inline uint32_t advance_tick() noexcept {
+    current_tick_ = advance_nonzero(current_tick_);
+    return current_tick_;
+  }
+
+  /**
+   * @brief Marks a specific component column as dirty in the target chunk.
+   *
+   * @tparam T Component type that was modified.
+   * @param chunk Chunk containing the component column.
+   */
+  template <typename T> inline void mark_chunk_dirty(Chunk *chunk) noexcept {
+    assert(chunk != nullptr);
+    Archetype *arch = chunk->archetype();
+    const int16_t col = arch->column_index(type_id<T>());
+    if (col >= 0) {
+      chunk->mark_column_dirty(static_cast<uint16_t>(col), current_tick_);
+    }
+  }
+
+  /**
+   * @brief Marks a component column dirty for the chunk holding an entity.
+   * @details Uses `slot_map_.find_record` (defined in
+   * `include/arche/slot_map.hpp`) to combine liveness validation and record
+   * retrieval into a single branch.
+   *
+   * @tparam T Component type that was modified.
+   * @param entity Entity whose component was modified.
+   */
+  template <typename T>
+  inline void mark_component_dirty(Entity entity) noexcept {
+    const EntityRecord *rec = slot_map_.find_record(entity);
+    if (rec && rec->chunk) {
+      mark_chunk_dirty<T>(rec->chunk);
+    }
   }
 
   // --- GPU Streaming ---------------------------------------------------------
@@ -931,6 +991,10 @@ std::vector<Entity> World::create_entities(
              arch, chunk, start_row, to_add, components
          ),
          ...);
+
+        // 3.5 Mark the chunks as dirty
+        chunk->advance_structure_version(current_tick_);
+        (mark_chunk_dirty<std::decay_t<Comps>>(chunk), ...);
       }
   );
 
@@ -965,6 +1029,10 @@ void World::create_entities_soa(
              arch, chunk, start_row, column_data, placed, to_add
          ),
          ...);
+
+        // 3.5 Mark the chunks as dirty
+        chunk->advance_structure_version(current_tick_);
+        (mark_chunk_dirty<std::decay_t<Comps>>(chunk), ...);
       }
   );
 }

@@ -78,6 +78,9 @@ struct alignas(64) ChunkHeader {
   /// Dense index of this chunk within the archetype list.
   uint32_t chunk_index{0};
 
+  /// Incremented on entity spawn/destroy/relocation
+  uint32_t structure_version{1};
+
   /// Intrusive link pointer for ChunkPool recycling.
   ChunkHeader *next{nullptr};
 
@@ -89,15 +92,21 @@ struct alignas(64) ChunkHeader {
 
   /// 64-byte user metadata slot (e.g. for Macro AABBs or Spatial Hashes)
   alignas(16) uint8_t user_metadata[64]{0};
+
+  static constexpr size_t MAX_COMPONENTS_PER_CHUNK = 32;
+
+  /// Monotonic mutation tick for each component column
+  uint32_t column_versions[MAX_COMPONENTS_PER_CHUNK]{0};
 };
 
 static_assert(
     std::is_standard_layout_v<ChunkHeader>,
     "ChunkHeader must be standard layout for predictable memory offsets"
 );
+
 static_assert(
-    sizeof(ChunkHeader) == 128,
-    "ChunkHeader must be padded to exactly 128 bytes (two cache lines)"
+    sizeof(ChunkHeader) == 256,
+    "ChunkHeader must be padded to exactly 256 bytes (four cache lines)"
 );
 
 // =============================================================================
@@ -386,6 +395,46 @@ public:
     );
     return *reinterpret_cast<const T *>(header_.user_metadata);
   }
+
+  // --- Version Ticking & Change Detection ------------------------------------
+
+  /**
+   * @brief Returns the last simulation tick when component column `col` was
+   * modified.
+   * @param col 0-based column index (< MAX_COMPONENTS_PER_CHUNK).
+   */
+  [[nodiscard]] inline uint32_t column_version(uint16_t col) const noexcept {
+    assert(col < ChunkHeader::MAX_COMPONENTS_PER_CHUNK);
+    return header_.column_versions[col];
+  }
+
+  /**
+   * @brief Stamps component column `col` with the specified simulation tick.
+   * @param col 0-based column index.
+   * @param tick Current simulation tick.
+   */
+  inline void mark_column_dirty(uint16_t col, uint32_t tick) noexcept {
+    assert(col < ChunkHeader::MAX_COMPONENTS_PER_CHUNK);
+    header_.column_versions[col] = tick;
+  }
+
+  /**
+   * @brief Returns the last simulation tick when chunk entity membership or
+   * rows were modified.
+   */
+  [[nodiscard]] inline uint32_t structure_version() const noexcept {
+    return header_.structure_version;
+  }
+
+  /**
+   * @brief Stamps the chunk structural version with the current simulation
+   * tick.
+   */
+  inline void advance_structure_version(uint32_t tick) noexcept {
+    header_.structure_version = tick;
+  }
+
+  // --- Components Memory Slice -----------------------------------------------
 
   /**
    * @brief Resolves raw pointer to a component column slice by precomputed byte
