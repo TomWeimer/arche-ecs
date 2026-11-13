@@ -7,6 +7,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <span>
 #include <type_traits>
 #include <vector>
 
@@ -31,7 +32,10 @@ enum class CommandType : uint8_t {
   AddComponent,
 
   /// Strips an existing component from an entity.
-  RemoveComponent
+  RemoveComponent,
+
+  /// Destroys a batch of entities in a single pass.
+  DestroyEntities
 };
 
 // =============================================================================
@@ -138,6 +142,21 @@ public:
   }
 
   /**
+   * @brief Queues batched destruction of multiple entities for zero-redundancy
+   * playback.
+   *
+   * @param entities Span of Entity handles to destroy during playback.
+   */
+  inline void destroy_entities(std::span<const Entity> entities) {
+    if (entities.empty()) {
+      return;
+    }
+    write_pod(CommandType::DestroyEntities);
+    write_pod(static_cast<uint32_t>(entities.size()));
+    write_bytes(entities.data(), entities.size() * sizeof(Entity));
+  }
+
+  /**
    * @brief Queues adding a component to an entity.
    *
    * @tparam T Component type (must be trivially copyable plain data).
@@ -215,8 +234,7 @@ private:
   /**
    * @brief Self-registers component type T in the World's TypeRegistry.
    */
-  template <typename T>
-  static void register_type_helper(World &world) {
+  template <typename T> static void register_type_helper(World &world) {
     world.registry().template register_type<T>();
   }
 
@@ -237,7 +255,8 @@ private:
   }
 
   /**
-   * @brief Serializes a single component value and its size into the byte buffer.
+   * @brief Serializes a single component value and its size into the byte
+   * buffer.
    */
   template <typename T>
   inline void write_component_payload(const T &component) {

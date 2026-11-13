@@ -1,5 +1,4 @@
 #include "arche/chunk.hpp"
-#include "arche/archetype.hpp"
 #include "arche/slot_map.hpp"
 
 #include <cassert>
@@ -108,6 +107,121 @@ inline void relocate_entity_handle(
   slot_map.update_row(moved_entity, dst_row);
 }
 
+/**
+ * @brief Relocates both component data and entity handle from source row to
+ * destination row, keeping the SlotMap synchronized.
+ *
+ * @param chunk Pointer to the chunk being compacted.
+ * @param dst_row Vacated destination row receiving the relocated entity.
+ * @param src_row Source row index where the relocated entity previously
+ * resided.
+ * @param slot_map Central SlotMap to synchronize with the new row index.
+ * @param layouts Span of component column layouts.
+ */
+inline void relocate_entity(
+    Chunk *chunk,
+    uint32_t dst_row,
+    uint32_t src_row,
+    SlotMap &slot_map,
+    std::span<const ComponentColumnLayout> layouts
+) noexcept {
+  relocate_row_components(chunk, dst_row, src_row, layouts);
+  relocate_entity_handle(chunk, dst_row, src_row, slot_map);
+}
+
+/**
+ * @brief Destructs non-trivial component instances across a batch of row
+ * indices.
+ *
+ * @param chunk Pointer to the chunk containing the components.
+ * @param rows Span of dense row indices marked for destruction.
+ * @param layouts Span of component column layouts defining strides and
+ * descriptors.
+ */
+inline void destruct_rows(
+    Chunk *chunk,
+    std::span<const uint32_t> rows,
+    std::span<const ComponentColumnLayout> layouts
+) noexcept {
+  for (uint32_t row : rows) {
+    destruct_row_components(chunk, row, layouts);
+  }
+}
+
+/**
+ * @brief Checks if a specific row index is included in the deletion batch.
+ *
+ * @param row Row index to search for.
+ * @param rows_to_delete Span of row indices marked for deletion.
+ * @return true if the row is marked for deletion, false otherwise.
+ */
+[[nodiscard]] inline bool is_row_deleted(
+    uint32_t row,
+    std::span<const uint32_t> rows_to_delete
+) noexcept {
+  for (uint32_t deleted_row : rows_to_delete) {
+    if (deleted_row == row) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * @brief Decrements the tail cursor until it points to a valid surviving entity
+ * that is not marked for deletion.
+ *
+ * @param tail_cursor Reference to the tail row index moving downward.
+ * @param final_count Threshold boundary; surviving tail entities must reside at
+ * or above this row.
+ * @param rows_to_delete Span of row indices marked for deletion.
+ */
+inline void advance_to_surviving_tail(
+    uint32_t &tail_cursor,
+    uint32_t final_count,
+    std::span<const uint32_t> rows_to_delete
+) noexcept {
+  while (tail_cursor >= final_count &&
+         is_row_deleted(tail_cursor, rows_to_delete)) {
+    --tail_cursor;
+  }
+}
+
+/**
+ * @brief Relocates surviving entities from the tail region into vacated holes.
+ *
+ * @param chunk Pointer to the chunk being compacted.
+ * @param rows_to_delete Span of row indices marked for deletion.
+ * @param final_count Final entity count after compaction (partition boundary).
+ * @param slot_map Central SlotMap to synchronize.
+ * @param layouts Span of component column layouts.
+ */
+inline void relocate_tail_entities(
+    Chunk *chunk,
+    std::span<const uint32_t> rows_to_delete,
+    uint32_t final_count,
+    SlotMap &slot_map,
+    std::span<const ComponentColumnLayout> layouts
+) noexcept {
+  uint32_t tail_cursor = chunk->count() - 1;
+
+  for (uint32_t target_row : rows_to_delete) {
+    // Only vacated rows in the surviving active range (< final_count) need to
+    // be filled
+    if (target_row >= final_count) {
+      continue;
+    }
+
+    advance_to_surviving_tail(tail_cursor, final_count, rows_to_delete);
+    assert(
+        tail_cursor >= final_count && "Tail cursor underflow during compaction"
+    );
+
+    relocate_entity(chunk, target_row, tail_cursor, slot_map, layouts);
+    --tail_cursor;
+  }
+}
+
 } // namespace
 
 // =============================================================================
@@ -168,11 +282,61 @@ void Chunk::swap_and_pop(
   }
 
   // General Case: Relocate last entity components and handle into vacated row
-  relocate_row_components(this, row, last_row, layouts); // The data
-  relocate_entity_handle(this, row, last_row, slot_map); // The entity id
+  relocate_entity(this, row, last_row, slot_map, layouts);
 
   // Decrement active entity count
   --header_.count;
+}
+
+// =============================================================================
+// Batched Swap-and-Pop Compaction Routine
+// =============================================================================
+
+/**
+ * @brief Compacts multiple vacated rows in a single pass without redundant
+ * moves.
+ *
+ * @details
+ * ### Batched Compaction Algorithm:
+ * When deleting multiple entities at once:
+ * 1. **Batch Destruction:** Destructs components for all rows in
+ * `rows_to_delete`.
+ * 2. **Tail Relocation:** Fills holes left in the surviving range (`<
+ * final_count`) by relocating valid, surviving entities from the tail region
+ * (`>= final_count`).
+ * 3. **Batch Count Update:** Decrements the chunk active entity count in a
+ * single operation.
+ *
+ * @param rows_to_delete Span of row indices marked for deletion.
+ * @param slot_map Central generational SlotMap to update for relocated entity
+ * handles.
+ * @param layouts Component column layouts defining offsets and descriptors.
+ */
+void Chunk::batch_swap_and_pop(
+    std::span<const uint32_t> rows_to_delete,
+    SlotMap &slot_map,
+    std::span<const ComponentColumnLayout> layouts
+) {
+  if (rows_to_delete.empty()) {
+    return;
+  }
+
+  const uint32_t delete_count = static_cast<uint32_t>(rows_to_delete.size());
+  assert(
+      delete_count <= header_.count &&
+      "Cannot delete more entities than chunk contains"
+  );
+
+  const uint32_t final_count = header_.count - delete_count;
+
+  // 1. Destruct components for all rows marked for deletion
+  destruct_rows(this, rows_to_delete, layouts);
+
+  // 2. Relocate surviving tail entities into vacated rows < final_count
+  relocate_tail_entities(this, rows_to_delete, final_count, slot_map, layouts);
+
+  // 3. Update chunk entity count to compacted total
+  header_.count = final_count;
 }
 
 } // namespace arche

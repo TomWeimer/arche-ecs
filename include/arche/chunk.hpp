@@ -212,7 +212,9 @@ public:
   /**
    * @brief Const reference to the chunk header.
    */
-  [[nodiscard]] inline const ChunkHeader &header() const noexcept { return header_; }
+  [[nodiscard]] inline const ChunkHeader &header() const noexcept {
+    return header_;
+  }
 
   /**
    * @brief Returns the owning archetype governing this chunk's layout.
@@ -361,7 +363,8 @@ public:
   // --- Slice Getters -------------------------------------------------------
 
   /**
-   * @brief Retrieves the entity handle stored at a specific row within this chunk.
+   * @brief Retrieves the entity handle stored at a specific row within this
+   * chunk.
    *
    * @param row Dense row index in range [0, count).
    * @return Generational Entity handle stored at row.
@@ -387,6 +390,24 @@ public:
   }
 
   /**
+   * @brief Appends a contiguous block of entity handles into this chunk.
+   *
+   * @param entities Span of Entity handles to store.
+   * @return Starting row index where the block was written.
+   */
+  inline uint32_t append_entities(std::span<const Entity> entities) noexcept {
+    assert(header_.count + entities.size() <= header_.capacity);
+    const uint32_t start_row = header_.count;
+    std::memcpy(
+        entity_slice() + start_row,
+        entities.data(),
+        entities.size() * sizeof(Entity)
+    );
+    header_.count += static_cast<uint32_t>(entities.size());
+    return start_row;
+  }
+
+  /**
    * @brief Removes an entity from the chunk using the Swap-and-Pop technique.
    *
    * @details
@@ -402,6 +423,21 @@ public:
   void swap_and_pop(
       uint32_t row,
       SlotMap &slot_map,
+      std::span<const ComponentColumnLayout> layouts
+  );
+
+  /**
+   * @brief Compacts multiple vacated rows in a single pass without redundant
+   * moves.
+   *
+   * @param rows_to_delete Span of dense row indices to delete (must be sorted
+   * descending).
+   * @param slot_map Central SlotMap to update for relocated entity handles.
+   * @param layouts Precomputed component column layouts.
+   */
+  void batch_swap_and_pop(
+      std::span<const uint32_t> rows_to_delete,
+      Internal::SlotMap &slot_map,
       std::span<const ComponentColumnLayout> layouts
   );
 };

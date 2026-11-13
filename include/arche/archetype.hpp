@@ -304,18 +304,19 @@ public:
   /**
    * @brief Increments the total entity count in this archetype.
    */
-  void increment_entity_count() noexcept { ++total_entities_; }
+  void increment_entity_count(size_t n = 1) noexcept { total_entities_ += n; }
 
   /**
    * @brief Decrements the total entity count in this archetype.
    */
-  void decrement_entity_count() noexcept {
+  void decrement_entity_count(size_t n = 1) noexcept {
     assert(total_entities_ > 0);
-    --total_entities_;
+    total_entities_ -= n;
   }
 
   /**
-   * @brief Sets the total entity count in this archetype directly (used by snapshot restore).
+   * @brief Sets the total entity count in this archetype directly (used by
+   * snapshot restore).
    * @param count Restored total entity count.
    */
   void set_entity_count(size_t count) noexcept {

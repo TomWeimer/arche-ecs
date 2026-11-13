@@ -88,6 +88,15 @@ void CommandBuffer::playback(World &world) {
       world.apply_command_remove_component(entity, tid);
       break;
     }
+    case CommandType::DestroyEntities: {
+      uint32_t count{0};
+      read_value(count);
+      const Entity *entities =
+          reinterpret_cast<const Entity *>(&buffer_[offset]);
+      offset += count * sizeof(Entity);
+      world.destroy_entities(std::span<const Entity>(entities, count));
+      break;
+    }
     default:
       assert(false && "Corrupted CommandBuffer byte stream encountered!");
       return;

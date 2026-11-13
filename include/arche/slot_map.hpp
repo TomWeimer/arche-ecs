@@ -4,6 +4,7 @@
 
 #include <cassert>
 #include <cstdint>
+#include <span>
 #include <stdexcept>
 #include <vector>
 
@@ -265,6 +266,72 @@ public:
   void free(Entity e) noexcept {
     push_free_slot(e.index());
     --active_count;
+  }
+
+  // --- Bulk Allocation & Deallocation ----------------------------------------
+
+  /**
+   * @brief Allocates N entity handles in a single contiguous batch operation.
+   *
+   * @details
+   * 1. Pops all available slots from the intrusive free list first.
+   * 2. If additional slots are required, resizes the underlying slots array
+   * once and initializes new slots with generation 1.
+   *
+   * @param count Number of entity handles to allocate.
+   * @param out_handles Output array of at least `count` Entity handles.
+   * @throws std::runtime_error If maximum slot capacity is exceeded.
+   */
+  void allocate_batch(size_t count, Entity *out_handles) {
+    assert(out_handles != nullptr && "Output handles pointer cannot be null");
+    if (count == 0) {
+      return;
+    }
+
+    size_t allocated = 0;
+
+    // 1. Drain available slots from the intrusive free list
+    while (free_list_head != INDEX_NONE_32 && allocated < count) {
+      const uint32_t idx = pop_free_slot();
+      slots[idx].record = EntityRecord{};
+      out_handles[allocated++] = Entity::from_parts(idx, slots[idx].generation);
+    }
+
+    // 2. Bulk-expand the dense slots vector for the remaining count
+    if (allocated < count) {
+      const size_t remaining = count - allocated;
+      const size_t current_size = slots.size();
+      if (current_size + remaining > MAX_ENTITIES) {
+        throw std::runtime_error(
+            "arche::SlotMap: capacity limit reached (4.29B entities)"
+        );
+      }
+
+      slots.resize(current_size + remaining);
+      for (size_t i = 0; i < remaining; ++i) {
+        const uint32_t idx = static_cast<uint32_t>(current_size + i);
+        slots[idx].generation = 1;
+        slots[idx].padding = 0;
+        slots[idx].record = EntityRecord{};
+        out_handles[allocated++] = Entity::from_parts(idx, 1);
+      }
+    }
+
+    active_count += count;
+  }
+
+  /**
+   * @brief Frees a batch of entity handles in a single cache-friendly pass.
+   *
+   * @param handles Span of Entity handles to invalidate and recycle.
+   */
+  void free_batch(std::span<const Entity> handles) noexcept {
+    for (Entity e : handles) {
+      if (is_alive(e)) {
+        push_free_slot(e.index());
+        --active_count;
+      }
+    }
   }
 
   // --- Liveness & Record Inspection ------------------------------------------

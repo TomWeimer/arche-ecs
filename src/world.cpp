@@ -4,6 +4,8 @@
 #include <algorithm>
 #include <cassert>
 #include <cstring>
+#include <functional>
+#include <unordered_map>
 
 namespace arche {
 
@@ -322,6 +324,63 @@ void World::apply_command_remove_component(Entity entity, TypeID tid) {
   // 3. Follow graph transition edge (-tid) and migrate entity
   Archetype *dst = graph_.traverse_remove(rec.archetype, tid);
   migrate_entity(entity, rec, rec.archetype, dst, tid, nullptr);
+}
+
+// =============================================================================
+// Batched Entity Destruction Implementation
+// =============================================================================
+
+/**
+ * @brief Destroys a batch of entities in a single cache-efficient pass.
+ *
+ * @details
+ * 1. Groups alive entities and their row indices by Chunk pointer.
+ * 2. Performs batched Swap-and-Pop compaction per chunk (sorted descending to
+ *    preserve index validity).
+ * 3. Reclaims and invalidates entity handles in the SlotMap in bulk.
+ *
+ * @param entities Span of Entity handles to destroy.
+ */
+void World::destroy_entities(std::span<const Entity> entities) {
+  if (entities.empty()) {
+    return;
+  }
+
+  // 1. Group alive entities and their row indices by Chunk pointer
+  struct ChunkDeletions {
+    Archetype *arch{nullptr};
+    std::vector<uint32_t> rows;
+  };
+  std::unordered_map<Chunk *, ChunkDeletions> chunk_map;
+
+  for (Entity e : entities) {
+    // Fast-path lookup combining liveness check and record retrieval (defined
+    // in slot_map.hpp)
+    const EntityRecord *rec = slot_map_.find_record(e);
+    if (!rec) {
+      continue;
+    }
+    auto &entry = chunk_map[rec->chunk];
+    entry.arch = rec->archetype;
+    entry.rows.push_back(rec->row);
+  }
+
+  // 2. Perform batched Swap-and-Pop compaction per chunk
+  for (auto &[chunk, info] : chunk_map) {
+    std::sort(info.rows.begin(), info.rows.end(), std::greater<uint32_t>());
+
+    chunk->batch_swap_and_pop(
+        info.rows, slot_map_, info.arch->column_layouts()
+    );
+    info.arch->decrement_entity_count(info.rows.size());
+
+    if (chunk->is_empty() && get_archetype_chunks(info.arch).size() > 1) {
+      recycle_chunk(info.arch, chunk);
+    }
+  }
+
+  // 3. Invalidate and reclaim entity handles in SlotMap in bulk
+  slot_map_.free_batch(entities);
 }
 
 } // namespace arche
