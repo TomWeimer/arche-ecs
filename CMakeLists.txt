@@ -72,6 +72,11 @@ add_executable(arche_benchmarks benchmarks/arche_benchmarks.cpp)
 target_link_libraries(arche_benchmarks PRIVATE arche::arche)
 add_test(NAME arche_benchmarks COMMAND arche_benchmarks)
 
+# Module 009 Tests: 64-Bit Generational Handles & Instant Snapshots
+add_executable(handles_and_snapshots_tests tests/handles_and_snapshots_tests.cpp)
+target_link_libraries(handles_and_snapshots_tests PRIVATE arche::arche)
+add_test(NAME handles_and_snapshots_tests COMMAND handles_and_snapshots_tests)
+
 # Custom Target: run all unit tests
 add_custom_target(run_tests
     COMMAND entity_tests

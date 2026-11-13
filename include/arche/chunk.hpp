@@ -205,6 +205,16 @@ public:
   // --- Header State & Capacity Queries ---------------------------------------
 
   /**
+   * @brief Mutable reference to the chunk header.
+   */
+  [[nodiscard]] inline ChunkHeader &header() noexcept { return header_; }
+
+  /**
+   * @brief Const reference to the chunk header.
+   */
+  [[nodiscard]] inline const ChunkHeader &header() const noexcept { return header_; }
+
+  /**
    * @brief Returns the owning archetype governing this chunk's layout.
    */
   [[nodiscard]] inline Archetype *archetype() const noexcept {
@@ -346,6 +356,19 @@ public:
   ) const noexcept {
     return reinterpret_cast<const uint8_t *>(this) + layout.chunk_byte_offset +
         (row * layout.size);
+  }
+
+  // --- Slice Getters -------------------------------------------------------
+
+  /**
+   * @brief Retrieves the entity handle stored at a specific row within this chunk.
+   *
+   * @param row Dense row index in range [0, count).
+   * @return Generational Entity handle stored at row.
+   */
+  [[nodiscard]] inline Entity entity(uint32_t row) const noexcept {
+    assert(row < header_.count);
+    return entity_slice()[row];
   }
 
   // --- Entity Insertion & Compaction -----------------------------------------

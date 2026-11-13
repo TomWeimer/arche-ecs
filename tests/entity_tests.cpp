@@ -43,13 +43,13 @@ void test_entity_bitfield() {
   assert(e.index() == 42);
   assert(e.id() == 42);
   assert(e.generation() == 7);
-  assert(e.raw() == ((7u << 24) | 42u));
+  assert(e.raw() == ((7ULL << 32) | 42ULL));
   assert(static_cast<bool>(e) == true);
 
   // Validate canonical null_entity invariants
-  assert(null_entity.raw() == 0);
-  assert(null_entity.index() == 0);
-  assert(null_entity.generation() == 0);
+  assert(null_entity.raw() == Entity::INDEX_NONE);
+  assert(null_entity.index() == Entity::INDEX_NONE_32);
+  assert(null_entity.generation() == Entity::INDEX_NONE_32);
   assert(static_cast<bool>(null_entity) == false);
 
   std::cout << "PASSED\n";
@@ -191,25 +191,21 @@ void test_million_entity_stress() {
  * and proves that `SlotMap::free()` skips 0 and wraps directly to generation 1.
  */
 void test_generation_wrap_around() {
-  std::cout << "[Test 4/4] Generation Wrap-Around Safety (255 -> 1)... ";
+  std::cout << "[Test 4/4] Generation Wrap-Around Safety (0xFFFFFFFF -> 1)... ";
+
+  assert(advance_nonzero(0xFFFFFFFFU) == 1U);
+  assert(advance_nonzero(0U) == 1U);
+  assert(advance_nonzero(1U) == 2U);
 
   Internal::SlotMap map;
   Entity e = map.allocate();
   assert(e.generation() == 1);
 
-  // Recycle slot 254 times to advance generation from 1 to 255
-  for (int i = 0; i < 254; ++i) {
-    map.free(e);
-    e = map.allocate();
-  }
-  assert(e.generation() == 255);
-
-  // Free generation 255: must wrap to 1, skipping 0
   map.free(e);
-  Entity wrapped = map.allocate();
-  assert(wrapped.generation() == 1);
-  assert(wrapped != null_entity);
-  assert(map.is_alive(wrapped));
+  Entity e2 = map.allocate();
+  assert(e2.generation() == 2);
+  assert(e2 != null_entity);
+  assert(map.is_alive(e2));
 
   std::cout << "PASSED\n";
 }

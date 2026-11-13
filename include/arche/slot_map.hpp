@@ -2,6 +2,7 @@
 
 #include "arche/entity.hpp"
 
+#include <cassert>
 #include <cstdint>
 #include <stdexcept>
 #include <vector>
@@ -106,7 +107,17 @@ struct EntityRecord {
  */
 class SlotMap {
 
-private:
+public:
+  // --- Constants -------------------------------------------------------------
+
+  /// Sentinel constant representing an invalid slot index or empty free list
+  /// (~0U).
+  static constexpr uint32_t INDEX_NONE_32 = 0xFFFFFFFFU;
+
+  /// Maximum theoretical entities supported by the 32-bit index bitfield
+  /// (~4.29B).
+  static constexpr uint64_t MAX_ENTITIES = 0xFFFFFFFFULL;
+
   // --- Slot Definition -------------------------------------------------------
 
   /**
@@ -119,7 +130,8 @@ private:
    */
   struct Slot {
     /// Incremented every time this slot is recycled (1..255).
-    uint8_t generation{1};
+    uint32_t generation{1};
+    uint32_t padding{0};
 
     union {
       /// Valid when ALIVE: Physical location of the entity's components.
@@ -127,18 +139,26 @@ private:
 
       /// Valid when DEAD: Array index of the next dead slot in the free-list
       /// chain.
-      uint32_t next_free{INDEX_NONE};
+      uint32_t next_free{INDEX_NONE_32};
     };
 
-    Slot() : generation(1), next_free(INDEX_NONE) {}
+    Slot() : generation(1), padding(0), next_free(INDEX_NONE_32) {}
     ~Slot() = default;
   };
 
+private:
+  static_assert(sizeof(Slot) == 32, "Slot must remain exactly 32 bytes");
+
   // --- Member Data -----------------------------------------------------------
 
-  std::vector<Slot> slots;             ///< Flat, dense slot array in memory.
-  uint32_t free_list_head{INDEX_NONE}; ///< Head index of intrusive free list.
-  size_t active_count{0};              ///< Number of currently living entities.
+  /// Flat, dense slot array in memory.
+  std::vector<Slot> slots;
+
+  /// Head index of intrusive free list.
+  uint32_t free_list_head{INDEX_NONE_32};
+
+  /// Number of currently living entities.
+  size_t active_count{0};
 
   // --- Internal Free-List & Allocation Helpers -------------------------------
 
@@ -161,7 +181,7 @@ private:
   [[nodiscard]] inline uint32_t append_new_slot() {
     if (slots.size() >= MAX_ENTITIES) {
       throw std::runtime_error(
-          "arche::SlotMap: capacity limit reached (16.7M entities)"
+          "arche::SlotMap: capacity limit reached (4.29B entities)"
       );
     }
     const uint32_t index = static_cast<uint32_t>(slots.size());
@@ -171,16 +191,17 @@ private:
   }
 
   /**
-   * @brief Advances generation with wrap-around protection (skipping 0 to
-   * preserve null_entity).
-   * @param gen Current generation.
-   * @return Advanced generation in range [1, 255].
+   * @brief Monotonically advances a slot's generation counter.
+   * @details Uses advance_nonzero to skip 0 on wrap-around, preserving 0 as
+   * a sentinel and preventing null_entity collision.
+   *
+   * @param gen Current generation value (1 .. 4,294,967,295).
+   * @return Next valid generation value (1 .. 4,294,967,295).
    */
-  [[nodiscard]] static constexpr uint8_t advance_generation(
-      uint8_t gen
+  [[nodiscard]] static constexpr uint32_t advance_generation(
+      uint32_t gen
   ) noexcept {
-    const uint8_t next = static_cast<uint8_t>(gen + 1);
-    return (next == 0) ? 1 : next;
+    return advance_nonzero(gen);
   }
 
   /**
@@ -195,11 +216,6 @@ private:
   }
 
 public:
-  // --- Constants -------------------------------------------------------------
-
-  static constexpr uint32_t INDEX_NONE = Entity::INDEX_NONE;
-  static constexpr uint32_t MAX_ENTITIES = Entity::INDEX_MASK;
-
   // --- Constructors & Destructors --------------------------------------------
 
   SlotMap() = default;
@@ -227,8 +243,9 @@ public:
    * is exceeded.
    */
   [[nodiscard]] Entity allocate() {
-    const uint32_t index = (free_list_head != INDEX_NONE) ? pop_free_slot()
-                                                          : append_new_slot();
+    const uint32_t index = (free_list_head != INDEX_NONE_32)
+        ? pop_free_slot()
+        : append_new_slot();
 
     slots[index].record = EntityRecord{};
     ++active_count;
@@ -261,10 +278,51 @@ public:
    */
   [[nodiscard]] bool is_alive(Entity e) const noexcept {
     const uint32_t index = e.index();
-    if (index >= slots.size() || e == null_entity) {
+    if (index >= slots.size() || e.is_null()) {
       return false;
     }
     return slots[index].generation == e.generation();
+  }
+
+  // --- Unified Entity Lookup & Validation Fast-Path --------------------------
+
+  /**
+   * @brief Combines liveness check and EntityRecord retrieval in a single
+   * branch.
+   * @details Replaces redundant dual-check calls `if (!slot_map_.is_alive(e))
+   * return; const EntityRecord &rec = slot_map_.get_record(e);` across World
+   * and CommandBuffer.
+   *
+   * @param e Generational Entity handle.
+   * @return Pointer to valid EntityRecord, or nullptr if entity is
+   * dead/invalid.
+   */
+  [[nodiscard]] inline const EntityRecord *find_record(
+      Entity e
+  ) const noexcept {
+    const uint32_t idx = e.index();
+    if (idx < slots.size() && slots[idx].generation == e.generation() &&
+        !e.is_null()) {
+      return &slots[idx].record;
+    }
+    return nullptr;
+  }
+
+  /**
+   * @brief Combines liveness check and mutable EntityRecord retrieval in a
+   * single branch.
+   *
+   * @param e Entity handle to look up.
+   * @return Pointer to valid mutable EntityRecord, or nullptr if entity is
+   * dead/invalid.
+   */
+  [[nodiscard]] inline EntityRecord *find_record(Entity e) noexcept {
+    const uint32_t idx = e.index();
+    if (idx < slots.size() && slots[idx].generation == e.generation() &&
+        !e.is_null()) {
+      return &slots[idx].record;
+    }
+    return nullptr;
   }
 
   /**
@@ -284,6 +342,59 @@ public:
    */
   [[nodiscard]] const EntityRecord &get_record(Entity e) const {
     return slots[e.index()].record;
+  }
+
+  // --- Snapshot Serialization Primitives -------------------------------------
+
+  /**
+   * @brief Returns the total byte size occupied by the dense slots array.
+   * @return Byte size equal to slots.size() * sizeof(Slot).
+   */
+  [[nodiscard]] inline size_t snapshot_byte_size() const noexcept {
+    return slots.size() * sizeof(Slot);
+  }
+
+  /**
+   * @brief Copies the raw slots buffer directly into a destination memory
+   * buffer.
+   * @param dest Target memory buffer. Must be pre-allocated to at least
+   * snapshot_byte_size().
+   */
+  inline void write_snapshot_data(void *dest) const noexcept {
+    assert(dest != nullptr && "Destination buffer cannot be null");
+    std::memcpy(dest, slots.data(), snapshot_byte_size());
+  }
+
+  /**
+   * @brief Restores the raw slots array and intrusive free-list head directly
+   * from memory.
+   *
+   * @param src Source memory buffer containing raw Slot data.
+   * @param slot_count Number of Slot structs to read.
+   * @param free_head Restored head index of the intrusive free list.
+   * @param count Restored active entity count.
+   */
+  inline void read_snapshot_data(
+      const void *src,
+      size_t slot_count,
+      uint32_t free_head,
+      size_t count
+  ) {
+    assert(src != nullptr && "Source snapshot data cannot be null");
+    slots.resize(slot_count);
+    std::memcpy(slots.data(), src, slot_count * sizeof(Slot));
+    free_list_head = free_head;
+    active_count = count;
+  }
+
+  /**
+   * @brief Exposes the current free-list head index for snapshot header
+   * serialization.
+   * @return Index of the first free slot, or INDEX_NONE_32 if free list is
+   * empty.
+   */
+  [[nodiscard]] inline uint32_t free_head_index() const noexcept {
+    return free_list_head;
   }
 
   // --- Physical Location Updates (Swap-and-Pop Protocol) ---------------------
@@ -337,7 +448,7 @@ public:
    */
   void clear() noexcept {
     slots.clear();
-    free_list_head = INDEX_NONE;
+    free_list_head = INDEX_NONE_32;
     active_count = 0;
   }
 };

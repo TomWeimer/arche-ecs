@@ -314,6 +314,14 @@ public:
     --total_entities_;
   }
 
+  /**
+   * @brief Sets the total entity count in this archetype directly (used by snapshot restore).
+   * @param count Restored total entity count.
+   */
+  void set_entity_count(size_t count) noexcept {
+    total_entities_ = static_cast<uint32_t>(count);
+  }
+
 private:
   // --- Memory Layout Helpers -------------------------------------------------
 

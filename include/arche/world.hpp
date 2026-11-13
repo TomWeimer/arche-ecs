@@ -22,6 +22,32 @@ class CommandBuffer;
 template <typename... Components> class Query;
 
 // =============================================================================
+// World State Snapshot Header
+// =============================================================================
+
+/**
+ * @struct SnapshotHeader
+ * @brief 64-byte cache-aligned header encapsulating world snapshot metadata.
+ */
+struct alignas(16) SnapshotHeader {
+  uint32_t magic{0x48435241};    ///< Magic bytes ('ARCH' in Little-Endian)
+  uint32_t version{1};           ///< Snapshot format version
+  uint64_t current_tick{0};      ///< World simulation tick at snapshot time
+  uint32_t slot_count{0};        ///< Total capacity of SlotMap slots array
+  uint32_t free_list_head{0};    ///< Head index of intrusive free list
+  uint32_t active_entities{0};   ///< Total living entities
+  uint32_t chunk_count{0};       ///< Total active 64 KB chunk pages
+  size_t total_payload_bytes{0}; ///< Total byte size including header
+  uint32_t archetype_count{0};   ///< Total archetypes at snapshot time
+  uint8_t reserved[20]{0}; ///< Reserved padding to align header to 64 bytes
+};
+
+static_assert(
+    sizeof(SnapshotHeader) == 64,
+    "SnapshotHeader must be exactly 64 bytes"
+);
+
+// =============================================================================
 // World: Central ECS Coordinator
 // =============================================================================
 
@@ -83,6 +109,27 @@ public:
 
   /// Destroys all entities and returns all chunk buffers to the pool.
   void clear();
+
+  // --- World Snapshots & Rollback --------------------------------------------
+
+  /**
+   * @brief Dumps the entire world memory state (SlotMap + all 64 KB chunks)
+   * into a contiguous buffer.
+   *
+   * @param destination_buffer Pointer to pre-allocated destination memory.
+   * @param max_bytes Capacity of destination buffer in bytes.
+   * @return Total bytes written to destination_buffer.
+   */
+  inline size_t create_snapshot(void *destination_buffer, size_t max_bytes);
+
+  /**
+   * @brief Restores the entire world state from a raw memory snapshot buffer in
+   * < 1 ms.
+   *
+   * @param snapshot_buffer Pointer to snapshot memory.
+   * @param bytes Size of snapshot buffer in bytes.
+   */
+  inline void restore_snapshot(const void *snapshot_buffer, size_t bytes);
 
   // --- Entity Inspection -----------------------------------------------------
 
@@ -605,5 +652,153 @@ private:
   /// Applies a deferred component removal command during playback.
   void apply_command_remove_component(Entity entity, TypeID tid);
 };
+
+// =============================================================================
+// Instant Snapshot & Rollback Implementation
+// =============================================================================
+
+inline size_t World::create_snapshot(
+    void *destination_buffer,
+    size_t max_bytes
+) {
+  assert(
+      destination_buffer != nullptr && "Snapshot destination cannot be null"
+  );
+
+  // 1. Calculate required memory size
+  const size_t slot_bytes = slot_map_.snapshot_byte_size();
+  size_t total_chunk_count = 0;
+  for (const auto &arch_ptr : graph_.archetypes()) {
+    total_chunk_count += get_archetype_chunks(arch_ptr.get()).size();
+  }
+
+  const uint32_t arch_count = static_cast<uint32_t>(graph_.archetypes().size());
+  const size_t arch_metadata_bytes = arch_count * sizeof(uint32_t);
+  const size_t chunk_bytes = total_chunk_count * Hardware::optimal_chunk_size();
+  const size_t required_bytes = sizeof(SnapshotHeader) + slot_bytes +
+      arch_metadata_bytes + chunk_bytes;
+
+  if (max_bytes < required_bytes) {
+    throw std::runtime_error("create_snapshot: buffer capacity too small");
+  }
+
+  uint8_t *cursor = static_cast<uint8_t *>(destination_buffer);
+
+  // 2. Populate and serialize 64-byte SnapshotHeader
+  SnapshotHeader header{
+      .magic = 0x48435241, // 'ARCH'
+      .version = 1,
+      .current_tick = 0,
+      .slot_count = static_cast<uint32_t>(slot_map_.capacity()),
+      .free_list_head = slot_map_.free_head_index(),
+      .active_entities = static_cast<uint32_t>(slot_map_.size()),
+      .chunk_count = static_cast<uint32_t>(total_chunk_count),
+      .total_payload_bytes = required_bytes,
+      .archetype_count = arch_count,
+  };
+  std::memcpy(cursor, &header, sizeof(SnapshotHeader));
+  cursor += sizeof(SnapshotHeader);
+
+  // 3. Serialize raw SlotMap array
+  slot_map_.write_snapshot_data(cursor);
+  cursor += slot_bytes;
+
+  // 4. Dump chunk count per archetype and contiguous 64 KB chunk pages back-to-back
+  for (const auto &arch_ptr : graph_.archetypes()) {
+    const auto &chunks = get_archetype_chunks(arch_ptr.get());
+    uint32_t c_count = static_cast<uint32_t>(chunks.size());
+    std::memcpy(cursor, &c_count, sizeof(uint32_t));
+    cursor += sizeof(uint32_t);
+
+    for (Chunk *chunk : chunks) {
+      std::memcpy(cursor, chunk, Hardware::optimal_chunk_size());
+      cursor += Hardware::optimal_chunk_size();
+    }
+  }
+
+  return required_bytes;
+}
+
+inline void World::restore_snapshot(const void *snapshot_buffer, size_t bytes) {
+  assert(snapshot_buffer != nullptr && "Snapshot source cannot be null");
+  if (bytes < sizeof(SnapshotHeader)) {
+    throw std::runtime_error("restore_snapshot: buffer smaller than header");
+  }
+
+  const uint8_t *cursor = static_cast<const uint8_t *>(snapshot_buffer);
+  SnapshotHeader header;
+  std::memcpy(&header, cursor, sizeof(SnapshotHeader));
+  cursor += sizeof(SnapshotHeader);
+
+  if (header.magic != 0x48435241 || header.version != 1) {
+    throw std::runtime_error(
+        "restore_snapshot: invalid snapshot header magic or version"
+    );
+  }
+
+  // 1. Restore SlotMap array
+  const size_t slot_bytes = header.slot_count * sizeof(Internal::SlotMap::Slot);
+  slot_map_.read_snapshot_data(
+      cursor, header.slot_count, header.free_list_head, header.active_entities
+  );
+  cursor += slot_bytes;
+
+  // 2. Restore active 64 KB chunk pages per archetype
+  const auto &archetypes = graph_.archetypes();
+  for (size_t arch_idx = 0; arch_idx < archetypes.size(); ++arch_idx) {
+    Archetype *arch = archetypes[arch_idx].get();
+    auto &chunks = get_archetype_chunks(arch);
+
+    if (arch_idx < header.archetype_count) {
+      uint32_t snapshot_chunk_count = 0;
+      std::memcpy(&snapshot_chunk_count, cursor, sizeof(uint32_t));
+      cursor += sizeof(uint32_t);
+
+      // Return surplus chunks to the pool
+      while (chunks.size() > snapshot_chunk_count) {
+        chunk_pool_.release_buffer(chunks.back());
+        chunks.pop_back();
+      }
+
+      // Acquire necessary chunks from the pool
+      while (chunks.size() < snapshot_chunk_count) {
+        void *raw = chunk_pool_.acquire_buffer();
+        auto *new_chunk = Chunk::create(
+            raw, arch, arch->chunk_capacity(), chunk_size_
+        );
+        new_chunk->set_chunk_index(static_cast<uint32_t>(chunks.size()));
+        chunks.push_back(new_chunk);
+      }
+
+      // Restore chunk memory and re-anchor entity records
+      size_t arch_entity_count = 0;
+      for (uint32_t c_idx = 0; c_idx < snapshot_chunk_count; ++c_idx) {
+        Chunk *chunk = chunks[c_idx];
+        std::memcpy(chunk, cursor, Hardware::optimal_chunk_size());
+        cursor += Hardware::optimal_chunk_size();
+
+        chunk->header().archetype = arch;
+        chunk->set_chunk_index(c_idx);
+
+        arch_entity_count += chunk->count();
+
+        // 3. Re-anchor reverse SlotMap records from chunk entity arrays
+        for (uint32_t r = 0; r < chunk->count(); ++r) {
+          Entity e = chunk->entity(r);
+          slot_map_.update_location(e, arch, chunk, r);
+        }
+      }
+
+      arch->set_entity_count(arch_entity_count);
+    } else {
+      // Archetypes created after the snapshot: return all chunks to pool
+      while (!chunks.empty()) {
+        chunk_pool_.release_buffer(chunks.back());
+        chunks.pop_back();
+      }
+      arch->set_entity_count(0);
+    }
+  }
+}
 
 } // namespace arche
