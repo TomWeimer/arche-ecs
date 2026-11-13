@@ -1,5 +1,7 @@
 #pragma once
 
+// IWYU pragma: begin_exports
+
 // Core Types & Identifiers
 #include "arche/component_mask.hpp"
 #include "arche/entity.hpp"
@@ -23,6 +25,8 @@
 
 // Central World Facade
 #include "arche/world.hpp"
+
+// IWYU pragma: end_exports
 
 namespace arche {
 
