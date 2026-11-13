@@ -14,7 +14,11 @@
   <img src="https://img.shields.io/badge/Tests-19%2F19%20Passing-brightgreen.svg" alt="Build Status">
   <img src="https://img.shields.io/badge/Dependencies-Zero-orange.svg" alt="Zero Dependencies">
   <img src="https://img.shields.io/badge/Scale-2%2C000%2C000%2B%20Entities-blueviolet.svg" alt="Scale">
+  <a href="LLMS.md"><img src="https://img.shields.io/badge/AI%20Context-LLMS.md-informational.svg" alt="LLMS.md"></a>
 </p>
+
+> 🤖 **Working with AI Coding Assistants (Antigravity, Cursor, Claude Code, Copilot)?**  
+> Feed [LLMS.md](LLMS.md) directly to your AI assistant for compact, canonical API rules, anti-hallucination constraints, and drop-in prompt templates.
 
 ---
 
