@@ -44,10 +44,21 @@ struct ComponentColumnLayout {
   uint32_t size{0};
   /// Required memory alignment in bytes.
   uint32_t alignment{0};
-  /// Byte offset from the start of the chunk buffer.
+  /// Byte offset from the start of the chunk buffer [READ].
   uint32_t chunk_byte_offset{0};
+  /// Byte offset from the start of the chunk buffer [WRITE].
+  uint32_t write_byte_offset{0};
+  /// Is the component double buffered.
+  bool is_double_buffered{false};
   /// Pointer to type lifecycle reflection metadata.
   const ComponentDescriptor *descriptor{nullptr};
+
+  /// Swaps read and write offsets in O(1) time
+  inline void flip() noexcept {
+    if (is_double_buffered) {
+      std::swap(chunk_byte_offset, write_byte_offset);
+    }
+  }
 };
 
 // =============================================================================
@@ -458,6 +469,31 @@ public:
       uint32_t chunk_byte_offset
   ) const noexcept {
     return reinterpret_cast<const uint8_t *>(this) + chunk_byte_offset;
+  }
+
+  /**
+   * @brief Resolves pointer to the active WRITE slice of a double-buffered
+   * column.
+   */
+  [[nodiscard]] inline void *component_write_slice(
+      const ComponentColumnLayout &layout
+  ) noexcept {
+    return reinterpret_cast<uint8_t *>(this) + layout.write_byte_offset;
+  }
+
+  /**
+   * @brief Typed accessor for the active WRITE slice of a double-buffered
+   * column.
+   * @details Defined in `include/arche/chunk.hpp`. Replaces raw
+   * reinterpret_cast calls for secondary write target slices.
+   */
+  template <typename T>
+  [[nodiscard]] inline T *typed_write_slice(
+      uint32_t write_byte_offset
+  ) noexcept {
+    return reinterpret_cast<T *>(
+        reinterpret_cast<uint8_t *>(this) + write_byte_offset
+    );
   }
 
   /**

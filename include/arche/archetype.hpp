@@ -261,6 +261,17 @@ public:
   }
 
   /**
+   * @brief Performs an O(1) pointer flip between read and write slices for
+   * component type t.
+   */
+  inline void flip_double_buffer(TypeID t) noexcept {
+    const int16_t idx = column_index(t);
+    if (idx >= 0 && columns_[idx].is_double_buffered) {
+      columns_[idx].flip();
+    }
+  }
+
+  /**
    * @brief Returns a read-only span of all component column layouts.
    */
   [[nodiscard]] std::span<const ComponentColumnLayout>
@@ -400,7 +411,9 @@ private:
     uint32_t total = static_cast<uint32_t>(sizeof(Entity));
     for (TypeID t : types_) {
       const auto &desc = registry.get_descriptor(t);
-      total += desc.size;
+      // Double the memory allocation footprint if component is double-buffered
+      total += desc.is_double_buffered ? static_cast<uint32_t>(desc.size * 2)
+                                       : desc.size;
     }
     return total;
   }
@@ -466,16 +479,27 @@ private:
       layout.size = desc.size;
       layout.alignment = desc.alignment;
       layout.chunk_byte_offset = current_offset;
+      layout.is_double_buffered = desc.is_double_buffered;
       layout.descriptor = &desc;
+
+      const uint32_t column_span = (chunk_capacity_ + SIMD_TAIL_PADDING) *
+          desc.size;
+      current_offset += column_span;
+
+      // Allocate secondary WRITE slice if double-buffered
+      if (desc.is_double_buffered) {
+        current_offset = _align_up(current_offset, desc.alignment);
+        layout.write_byte_offset = current_offset;
+        current_offset += column_span;
+      } else {
+        layout.write_byte_offset = layout.chunk_byte_offset;
+      }
 
       columns_.push_back(layout);
 
       // Maps this component's TypeID to its column index for instant O(1)
       // lookup without linear search during query iteration
       type_to_column_[t] = static_cast<int16_t>(i);
-
-      // Allocate column storage plus 16 elements of tail padding
-      current_offset += (chunk_capacity_ + SIMD_TAIL_PADDING) * desc.size;
     }
 
     // Guarantee that calculated SoA slices fit within the allocated chunk size

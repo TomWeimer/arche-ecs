@@ -289,11 +289,13 @@ private:
           // Skip Entity handles since they are stored in chunk headers, not
           // component columns
           if constexpr (!std::is_same_v<std::decay_t<Ts>, Entity>) {
+            using Raw =
+                typename is_write_target<std::decay_t<Ts>>::underlying_type;
             // Ensure the TypeRegistry knows about this component type
-            world_.registry().template register_type<std::decay_t<Ts>>();
+            world_.registry().template register_type<std::decay_t<Raw>>();
 
             // Mark the component's unique TypeID bit in the target filter mask
-            mask.set(type_id<std::decay_t<Ts>>());
+            mask.set(type_id<std::decay_t<Raw>>());
           }
         }(),
         ...);
@@ -328,9 +330,21 @@ private:
     if constexpr (std::is_same_v<std::decay_t<Comp>, Entity>) {
       // Entity IDs are stored in chunk->entity_slice(), not a component column
       return 0;
+    } else if constexpr (is_write_target_v<std::decay_t<Comp>>) {
+
+      using Raw = typename is_write_target<std::decay_t<Comp>>::underlying_type;
+      const auto *layout = arch->column_layout_for(type_id<Raw>());
+      assert(
+          layout != nullptr &&
+          "Queried component missing from matched archetype layout!"
+      );
+      assert(
+          layout->is_double_buffered &&
+          "Component requested as Write<T> must be double-buffered!"
+      );
+      return layout->write_byte_offset;
+
     } else {
-      // Look up pre-calculated memory column layout from the archetype
-      // definition
       const auto *layout = arch->column_layout_for(
           type_id<std::decay_t<Comp>>()
       );
@@ -347,11 +361,16 @@ private:
    * chunk.
    */
   template <typename Comp>
-  static inline Comp *get_column_ptr(Chunk *chunk, uint32_t offset) {
+  static inline auto get_column_ptr(Chunk *chunk, uint32_t offset) {
     if constexpr (std::is_same_v<std::decay_t<Comp>, Entity>) {
       return chunk->entity_slice();
+    } else if constexpr (is_write_target_v<std::decay_t<Comp>>) {
+      using Raw = typename is_write_target<std::decay_t<Comp>>::underlying_type;
+      return Write<Raw>{
+          reinterpret_cast<Raw *>(chunk->component_slice(offset))
+      };
     } else {
-      return chunk->typed_slice<Comp>(offset);
+      return reinterpret_cast<Comp *>(chunk->component_slice(offset));
     }
   }
 

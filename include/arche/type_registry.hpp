@@ -38,6 +38,7 @@ struct ComponentDescriptor {
   std::string_view name{"Unknown"};
   bool is_trivially_copyable{false};
   bool is_trivially_destructible{false};
+  bool is_double_buffered{false};
 
   void (*constructor)(void *target){nullptr};
   void (*destructor)(void *target){nullptr};
@@ -247,6 +248,17 @@ public:
       descriptors[id] = ComponentDescriptor::create<T>();
     }
     return descriptors[id];
+  }
+
+  /**
+   * @brief Registers component T as double-buffered with dual read/write chunk
+   * slices.
+   */
+  template <typename T> inline TypeID register_double_buffered() {
+    register_type<T>();
+    const TypeID id = type_id<T>();
+    descriptors[id].is_double_buffered = true;
+    return id;
   }
 
   // --- Descriptor Inspection -------------------------------------------------

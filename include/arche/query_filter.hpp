@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 
 namespace arche {
@@ -80,5 +81,40 @@ struct Added {
   uint32_t since_tick{0};
   constexpr explicit Added(uint32_t tick = 0) noexcept : since_tick(tick) {}
 };
+
+// =============================================================================
+// Double-Buffer Write Target Query Wrapper
+// =============================================================================
+
+/**
+ * @struct Write
+ * @brief Query parameter wrapper indicating that a double-buffered component
+ * should bind to the chunk's WRITE slice instead of the default READ slice.
+ *
+ * @tparam T Underlying component type.
+ */
+template <typename T> struct Write {
+  T *data{nullptr};
+
+  constexpr explicit Write(T *ptr = nullptr) noexcept : data(ptr) {}
+
+  constexpr T &operator[](size_t index) noexcept { return data[index]; }
+  constexpr const T &operator[](size_t index) const noexcept {
+    return data[index];
+  }
+  constexpr T *get() noexcept { return data; }
+  constexpr const T *get() const noexcept { return data; }
+};
+
+template <typename T> struct is_write_target : std::false_type {
+  using underlying_type = T;
+};
+
+template <typename T> struct is_write_target<Write<T>> : std::true_type {
+  using underlying_type = T;
+};
+
+template <typename T>
+inline constexpr bool is_write_target_v = is_write_target<T>::value;
 
 } // namespace arche

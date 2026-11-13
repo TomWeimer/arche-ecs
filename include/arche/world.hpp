@@ -176,6 +176,32 @@ public:
   template <typename Component, typename Compare>
   void sort_archetype(Archetype *arch, Compare &&comp);
 
+  // --- Double-Buffered Component Columns -------------------------------------
+
+  /**
+   * @brief Registers component T as double-buffered with dual read/write chunk
+   * slices.
+   */
+  template <typename T> inline void register_double_buffered_component() {
+    registry_.register_double_buffered<std::decay_t<T>>();
+  }
+
+  /**
+   * @brief Performs an O(1) pointer-flip swapping read and write slices for
+   * component T, advancing the simulation tick and stamping chunk dirty
+   * versions automatically.
+   */
+  template <typename T> inline void flip_double_buffer() noexcept {
+    const TypeID tid = type_id<std::decay_t<T>>();
+    advance_tick(); // Advances monotonic simulation tick
+    for (const auto &arch_ptr : graph_.archetypes()) {
+      arch_ptr->flip_double_buffer(tid);
+      for (Chunk *chunk : get_archetype_chunks(arch_ptr.get())) {
+        mark_chunk_dirty<T>(chunk); // Automatically synchronize dirty version!
+      }
+    }
+  }
+
   // --- Entity Inspection -----------------------------------------------------
 
   /**
@@ -1133,8 +1159,9 @@ void World::sort_archetype(Archetype *arch, Compare &&comp) {
   }
 
   const auto &chunks = get_archetype_chunks(arch);
-  const ComponentColumnLayout *layout =
-      arch->column_layout_for(type_id<Component>());
+  const ComponentColumnLayout *layout = arch->column_layout_for(
+      type_id<Component>()
+  );
   assert(
       layout != nullptr && "Archetype does not contain component to sort by"
   );
