@@ -35,9 +35,9 @@ public:
     return buffers_[thread_id];
   }
 
-  inline void playback(World &world) {
+  inline void commit(World &world) {
     for (auto &buf : buffers_) {
-      buf.playback(world);
+      buf.commit(world);
       buf.clear();
     }
   }
@@ -53,14 +53,16 @@ public:
 // World Parallel Query & Playback Implementations
 // =============================================================================
 
-inline void World::playback_parallel_commands(
-    ParallelCommandBuffer &cmd_buffers
-) {
-  cmd_buffers.playback(*this);
+inline void World::commit(ParallelCommandBuffer &cmd_buffers) {
+  cmd_buffers.commit(*this);
+}
+
+inline void World::commit(CommandBuffer &cmd_buffer) {
+  cmd_buffer.commit(*this);
 }
 
 template <typename... Components, typename Func>
-inline void World::parallel_query(
+inline void World::query_parallel(
     ThreadPool &pool,
     ParallelCommandBuffer &cmd_buffers,
     Func &&func

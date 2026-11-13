@@ -42,19 +42,19 @@ void test_world_ticking_and_stamping() {
   World world;
 
   assert(world.current_tick() == 1);
-  uint32_t t2 = world.advance_tick();
+  uint32_t t2 = world.tick();
   assert(t2 == 2);
   assert(world.current_tick() == 2);
 
   // Spawning an entity at tick 2 stamps chunk structure and columns with tick 2
-  Entity e = world.create_entity(Position{1.0f, 2.0f}, Velocity{3.0f, 4.0f});
+  Entity e = world.spawn(Position{1.0f, 2.0f}, Velocity{3.0f, 4.0f});
   assert(world.is_valid(e));
 
   // Advance tick to 5 and mark Position dirty
-  world.advance_tick(); // 3
-  world.advance_tick(); // 4
-  world.advance_tick(); // 5
-  world.mark_component_dirty<Position>(e);
+  world.tick(); // 3
+  world.tick(); // 4
+  world.tick(); // 5
+  world.mark_dirty<Position>(e);
 
   // Querying with Mutated<Position>{4} should match the chunk
   size_t matches = 0;
@@ -86,19 +86,19 @@ void test_skip_dormant_chunks() {
 
   // Create 50,000 entities across ~30-50 chunks at tick 1
   constexpr size_t COUNT = 50'000;
-  std::vector<Entity> entities = world.create_entities(
+  std::vector<Entity> entities = world.spawn_batch(
       COUNT, Position{0.0f, 0.0f}, Velocity{1.0f, 1.0f}
   );
 
   // Advance simulation to tick 100
   for (int i = 0; i < 99; ++i) {
-    world.advance_tick();
+    world.tick();
   }
   assert(world.current_tick() == 100);
 
   // Mutate ONLY the first entity at tick 100
-  world.get_component<Position>(entities[0]).x = 999.0f;
-  world.mark_component_dirty<Position>(entities[0]);
+  world.get<Position>(entities[0]).x = 999.0f;
+  world.mark_dirty<Position>(entities[0]);
 
   // Query entities where Position mutated since tick 50
   auto start = std::chrono::high_resolution_clock::now();
@@ -136,11 +136,11 @@ void test_added_filter() {
   World world;
 
   // Spawn initial entities at tick 1
-  world.create_entities(1000, Position{0.0f, 0.0f});
+  world.spawn_batch(1000, Position{0.0f, 0.0f});
 
   // Advance tick to 10
   for (int i = 0; i < 9; ++i) {
-    world.advance_tick();
+    world.tick();
   }
   assert(world.current_tick() == 10);
 
@@ -152,7 +152,7 @@ void test_added_filter() {
   assert(count == 0);
 
   // Spawn new entity at tick 10
-  world.create_entity(Position{50.0f, 50.0f});
+  world.spawn(Position{50.0f, 50.0f});
 
   // Now Added{5} matches the newly modified chunk
   count = 0;
@@ -178,7 +178,7 @@ void test_tick_wraparound_protection() {
 
   // Manually advance to wrap-around edge
   for (int i = 0; i < 5; ++i) {
-    world.advance_tick();
+    world.tick();
   }
   assert(world.current_tick() > 0);
 

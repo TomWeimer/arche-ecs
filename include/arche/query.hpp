@@ -196,7 +196,7 @@ public:
    * `Entity` is not explicitly declared in the Query template parameters:
    * ```cpp
    * query.for_each_entity([&](Entity e, Position &pos, Velocity &vel) {
-   *     if (pos.y < 0.0f) cmd.destroy_entity(e);
+   *     if (pos.y < 0.0f) cmd.despawn(e);
    * });
    * ```
    *

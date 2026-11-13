@@ -43,7 +43,7 @@ void test_query_cache_deduplication() {
   World world;
 
   // Create initial entities
-  world.create_entity(Position{1.0f, 2.0f}, Velocity{3.0f, 4.0f});
+  world.spawn(Position{1.0f, 2.0f}, Velocity{3.0f, 4.0f});
 
   // Construct two separate query instances with identical signatures
   auto q1 = world.query<Position, Velocity>();
@@ -82,7 +82,7 @@ void test_reactive_cache_update() {
   assert(count == 0);
 
   // 2. Spawn entity in Archetype A: [Position, Velocity]
-  world.create_entity(Position{10.0f, 20.0f}, Velocity{1.0f, 2.0f});
+  world.spawn(Position{10.0f, 20.0f}, Velocity{1.0f, 2.0f});
 
   // Existing query must immediately and reactively see the new entity!
   count = 0;
@@ -90,7 +90,7 @@ void test_reactive_cache_update() {
   assert(count == 1);
 
   // 3. Spawn entity in Archetype B: [Position, Velocity, Mass] (new graph node)
-  world.create_entity(
+  world.spawn(
       Position{30.0f, 40.0f}, Velocity{3.0f, 4.0f}, Mass{100.0f}
   );
 
@@ -115,8 +115,8 @@ void test_exclusion_caching() {
   World world;
 
   // Spawn alive and dead entities
-  world.create_entity(Position{1.0f, 1.0f}, Velocity{1.0f, 1.0f});
-  world.create_entity(Position{2.0f, 2.0f}, Velocity{2.0f, 2.0f}, DeadTag{});
+  world.spawn(Position{1.0f, 1.0f}, Velocity{1.0f, 1.0f});
+  world.spawn(Position{2.0f, 2.0f}, Velocity{2.0f, 2.0f}, DeadTag{});
 
   // Query excluding DeadTag
   auto q = world.query<Position, Velocity>(Without<DeadTag>{});
@@ -126,7 +126,7 @@ void test_exclusion_caching() {
   assert(count == 1);
 
   // Spawn another dead entity (Archetype with DeadTag already exists)
-  world.create_entity(Position{3.0f, 3.0f}, Velocity{3.0f, 3.0f}, DeadTag{});
+  world.spawn(Position{3.0f, 3.0f}, Velocity{3.0f, 3.0f}, DeadTag{});
   count = 0;
   q.for_each_chunk([&](uint32_t n, Position *, Velocity *) { count += n; });
   assert(count == 1);
@@ -146,7 +146,7 @@ void test_declarative_syntax() {
   World world;
 
   constexpr size_t COUNT = 10'000;
-  world.create_entities(COUNT, Position{0.0f, 0.0f}, Velocity{1.0f, 1.0f});
+  world.spawn_batch(COUNT, Position{0.0f, 0.0f}, Velocity{1.0f, 1.0f});
 
   // Standard Colony boid query
   auto query = world.query<Position, const Velocity>();

@@ -86,7 +86,7 @@ void World::clear() {
  * @param entity The entity handle to destroy.
  * @return true if the entity was found and destroyed; false if already dead.
  */
-bool World::destroy_entity(Entity entity) {
+bool World::despawn(Entity entity) {
   // 1. Retrieve the entity's storage record (validating liveness in a single
   // lookup)
   const EntityRecord *record = slot_map_.find_record(entity);
@@ -328,7 +328,7 @@ void World::apply_command_remove_component(Entity entity, TypeID tid) {
  *
  * @param entities Span of Entity handles to destroy.
  */
-void World::destroy_entities(std::span<const Entity> entities) {
+void World::despawn_batch(std::span<const Entity> entities) {
   if (entities.empty()) {
     return;
   }
@@ -634,7 +634,7 @@ void permute_entities_and_sync_slots(
  * @param target_indices Permutation mapping of size equal to
  * arch->entity_count().
  */
-void World::apply_permutation(
+void World::permute(
     Archetype *arch,
     std::span<const uint32_t> target_indices
 ) {
@@ -668,7 +668,7 @@ void World::apply_permutation(
 
   // 5. Update structure version and mark columns dirty for change-detection
   // filters
-  advance_tick();
+  tick();
   for (Chunk *chunk : chunks) {
     chunk->advance_structure_version(current_tick_);
   }

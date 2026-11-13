@@ -117,6 +117,15 @@ add_executable(stage2_validation_tests tests/stage2_validation_tests.cpp)
 target_link_libraries(stage2_validation_tests PRIVATE arche::arche)
 add_test(NAME stage2_validation_tests COMMAND stage2_validation_tests)
 
+# Module 018 Tests: Clean Public API & Facade
+add_executable(public_api_tests tests/public_api_tests.cpp)
+target_link_libraries(public_api_tests PRIVATE arche::arche)
+add_test(NAME public_api_tests COMMAND public_api_tests)
+
+# Module 018 Example: Colony 120 Hz Swarm Simulation Loop
+add_executable(colony_simulation_loop examples/colony_simulation_loop.cpp)
+target_link_libraries(colony_simulation_loop PRIVATE arche::arche)
+
 # Custom Target: run all unit tests
 add_custom_target(run_tests
     COMMAND entity_tests
@@ -136,7 +145,8 @@ add_custom_target(run_tests
     COMMAND double_buffered_tests
     COMMAND multithreaded_query_tests
     COMMAND stage2_validation_tests
-    DEPENDS entity_tests type_tests archetype_tests chunk_storage_tests structural_mutation_tests query_tests gpu_reflection_tests arche_tests handles_and_snapshots_tests batch_lifecycle_tests simd_and_hardware_tests dirty_ticks_tests query_caching_tests archetype_permutation_tests double_buffered_tests multithreaded_query_tests stage2_validation_tests
+    COMMAND public_api_tests
+    DEPENDS entity_tests type_tests archetype_tests chunk_storage_tests structural_mutation_tests query_tests gpu_reflection_tests arche_tests handles_and_snapshots_tests batch_lifecycle_tests simd_and_hardware_tests dirty_ticks_tests query_caching_tests archetype_permutation_tests double_buffered_tests multithreaded_query_tests stage2_validation_tests public_api_tests
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
     COMMENT "Executing all unit tests..."
 )
@@ -165,6 +175,8 @@ add_custom_target(fclean
         $<TARGET_FILE:double_buffered_tests>
         $<TARGET_FILE:multithreaded_query_tests>
         $<TARGET_FILE:stage2_validation_tests>
+        $<TARGET_FILE:public_api_tests>
+        $<TARGET_FILE:colony_simulation_loop>
     COMMENT "Full clean: removing intermediate objects and binaries..."
 )
 

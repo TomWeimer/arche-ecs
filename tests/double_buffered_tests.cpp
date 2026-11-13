@@ -36,8 +36,8 @@ void test_distinct_memory_slices() {
   std::cout << "[Test 1/5] Physical Slice Separation (Read != Write)... ";
   World world;
 
-  world.register_double_buffered_component<Position>();
-  world.create_entity(Position{10.0f, 20.0f}, Velocity{1.0f, 2.0f});
+  world.enable_double_buffer<Position>();
+  world.spawn(Position{10.0f, 20.0f}, Velocity{1.0f, 2.0f});
 
   const void *read_addr = nullptr;
   const void *write_addr = nullptr;
@@ -65,8 +65,8 @@ void test_pointer_flip_substep() {
   std::cout << "[Test 2/5] O(1) Pointer-Flip Physics Sub-Steps... ";
   World world;
 
-  world.register_double_buffered_component<Position>();
-  Entity e = world.create_entity(Position{0.0f, 0.0f}, Velocity{5.0f, 0.0f});
+  world.enable_double_buffer<Position>();
+  Entity e = world.spawn(Position{0.0f, 0.0f}, Velocity{5.0f, 0.0f});
 
   auto q = world.query<const Position, Write<Position>, const Velocity>();
   q.for_each_chunk([](uint32_t count,
@@ -79,10 +79,10 @@ void test_pointer_flip_substep() {
     }
   });
 
-  assert(world.get_component<Position>(e).x == 0.0f);
+  assert(world.get<Position>(e).x == 0.0f);
 
-  world.flip_double_buffer<Position>();
-  assert(world.get_component<Position>(e).x == 5.0f);
+  world.flip<Position>();
+  assert(world.get<Position>(e).x == 5.0f);
 
   q.for_each_chunk([](uint32_t count,
                       const Position *r,
@@ -93,8 +93,8 @@ void test_pointer_flip_substep() {
     }
   });
 
-  world.flip_double_buffer<Position>();
-  assert(world.get_component<Position>(e).x == 10.0f);
+  world.flip<Position>();
+  assert(world.get<Position>(e).x == 10.0f);
 
   std::cout << "PASSED\n";
 }
@@ -107,13 +107,13 @@ void test_automatic_dirty_ticking_on_flip() {
   std::cout << "[Test 3/5] Automatic Dirty Ticking on Pointer Flip... ";
   World world;
 
-  world.register_double_buffered_component<Position>();
-  world.create_entity(Position{0.0f, 0.0f}, Velocity{1.0f, 1.0f});
+  world.enable_double_buffer<Position>();
+  world.spawn(Position{0.0f, 0.0f}, Velocity{1.0f, 1.0f});
 
   const uint32_t initial_tick = world.current_tick();
 
   // Flip buffer: must advance world tick and stamp Position column
-  world.flip_double_buffer<Position>();
+  world.flip<Position>();
 
   assert(world.current_tick() > initial_tick);
 
@@ -134,11 +134,11 @@ void test_zero_order_bias() {
   std::cout << "[Test 4/5] Elimination of Order-Dependent Simulation Bias... ";
   World world;
 
-  world.register_double_buffered_component<Position>();
+  world.enable_double_buffer<Position>();
 
-  world.create_entity(Position{10.0f, 0.0f});
-  world.create_entity(Position{20.0f, 0.0f});
-  world.create_entity(Position{30.0f, 0.0f});
+  world.spawn(Position{10.0f, 0.0f});
+  world.spawn(Position{20.0f, 0.0f});
+  world.spawn(Position{30.0f, 0.0f});
 
   auto q = world.query<const Position, Write<Position>>();
 
@@ -154,7 +154,7 @@ void test_zero_order_bias() {
     }
   });
 
-  world.flip_double_buffer<Position>();
+  world.flip<Position>();
 
   world.query<const Position>().for_each_chunk([](uint32_t count,
                                                   const Position *r) {
@@ -174,14 +174,14 @@ void test_flip_latency() {
   std::cout << "[Test 5/5] Pointer-Flip Latency Benchmark (< 10 ns)... ";
   World world;
 
-  world.register_double_buffered_component<Position>();
-  world.create_entities(10'000, Position{0.0f, 0.0f});
+  world.enable_double_buffer<Position>();
+  world.spawn_batch(10'000, Position{0.0f, 0.0f});
 
   constexpr int ITERS = 100'000;
   auto start = std::chrono::high_resolution_clock::now();
 
   for (int i = 0; i < ITERS; ++i) {
-    world.flip_double_buffer<Position>();
+    world.flip<Position>();
   }
 
   auto end = std::chrono::high_resolution_clock::now();

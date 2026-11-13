@@ -48,9 +48,9 @@ void test_parallel_query_parity() {
   ThreadPool pool(4);
 
   constexpr size_t COUNT = 50'000;
-  world.create_entities(COUNT, Position{1.0f, 2.0f}, Velocity{3.0f, 4.0f});
+  world.spawn_batch(COUNT, Position{1.0f, 2.0f}, Velocity{3.0f, 4.0f});
 
-  world.parallel_query<Position, const Velocity>(
+  world.query_parallel<Position, const Velocity>(
       pool, [](uint32_t count, Position *pos, const Velocity *vel) {
         for (uint32_t i = 0; i < count; ++i) {
           pos[i].x += vel[i].vx;
@@ -84,11 +84,11 @@ void test_parallel_command_buffers() {
   ParallelCommandBuffer cmd_buffers(pool.worker_count());
 
   constexpr size_t COUNT = 10'000;
-  std::vector<Entity> entities = world.create_entities(
+  std::vector<Entity> entities = world.spawn_batch(
       COUNT, Position{0.0f, 0.0f}
   );
 
-  world.parallel_query<Entity, const Position>(
+  world.query_parallel<Entity, const Position>(
       pool,
       cmd_buffers,
       [](uint32_t count,
@@ -97,13 +97,13 @@ void test_parallel_command_buffers() {
          const Position *) {
         for (uint32_t i = 0; i < count; ++i) {
           if (ents[i].index() % 2 == 0) {
-            cmd.destroy_entity(ents[i]);
+            cmd.despawn(ents[i]);
           }
         }
       }
   );
 
-  world.playback_parallel_commands(cmd_buffers);
+  world.commit(cmd_buffers);
   assert(world.entity_count() == COUNT / 2);
 
   std::cout << "PASSED\n";
@@ -118,27 +118,27 @@ void test_triple_buffered_ring_streaming() {
   World world;
 
   constexpr size_t COUNT = 1000;
-  world.create_entities(COUNT, Position{42.0f, 84.0f});
+  world.spawn_batch(COUNT, Position{42.0f, 84.0f});
 
   constexpr size_t SLOT_BYTES = 64 * 1024;
   std::vector<uint8_t> vram_base(SLOT_BYTES * 3, 0);
 
-  size_t b0 = world.stream_component_to_ring<Position>(
+  size_t b0 = world.stream_gpu<Position>(
       0, vram_base.data(), SLOT_BYTES
   );
   assert(b0 == COUNT * sizeof(Position));
 
-  size_t b1 = world.stream_component_to_ring<Position>(
+  size_t b1 = world.stream_gpu<Position>(
       1, vram_base.data(), SLOT_BYTES
   );
   assert(b1 == COUNT * sizeof(Position));
 
-  size_t b2 = world.stream_component_to_ring<Position>(
+  size_t b2 = world.stream_gpu<Position>(
       2, vram_base.data(), SLOT_BYTES
   );
   assert(b2 == COUNT * sizeof(Position));
 
-  size_t b3 = world.stream_component_to_ring<Position>(
+  size_t b3 = world.stream_gpu<Position>(
       3, vram_base.data(), SLOT_BYTES
   );
   assert(b3 == COUNT * sizeof(Position));
@@ -156,7 +156,7 @@ void test_draw_indirect_with_culling() {
   World world;
 
   constexpr size_t COUNT = 5000;
-  world.create_entities(COUNT, Position{1.0f, 1.0f});
+  world.spawn_batch(COUNT, Position{1.0f, 1.0f});
 
   Archetype *arch = world.graph().archetypes().back().get();
   auto &chunks = world.get_archetype_chunks(arch);
@@ -169,7 +169,7 @@ void test_draw_indirect_with_culling() {
   std::vector<DrawIndirectCommand> cmd_buffer(64);
 
   // Culling predicate: only draw if max_x > 0
-  size_t count = world.write_draw_indirect_commands(
+  size_t count = world.indirect_draw(
       arch,
       cmd_buffer.data(),
       cmd_buffer.size(),

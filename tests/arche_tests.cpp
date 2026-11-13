@@ -258,12 +258,12 @@ void test_swap_and_pop_compaction() {
   // 1. Spawn 5 entities with deterministic coordinates
   std::vector<Entity> entities;
   for (int i = 0; i < 5; ++i) {
-    entities.push_back(world.create_entity(Pos{static_cast<float>(i), 0.0f}));
+    entities.push_back(world.spawn(Pos{static_cast<float>(i), 0.0f}));
   }
 
   // 2. Destroy middle entity (index 2) triggering Swap-and-Pop
   Entity doomed = entities[2];
-  assert(world.destroy_entity(doomed));
+  assert(world.despawn(doomed));
   assert(!world.is_valid(doomed));
 
   // 3. Verify that all surviving entities remain fully valid
@@ -273,7 +273,7 @@ void test_swap_and_pop_compaction() {
   assert(world.is_valid(entities[4]));
 
   // 4. Verify component value integrity for the moved entity
-  assert(world.get_component<Pos>(entities[4]).x == 4.0f);
+  assert(world.get<Pos>(entities[4]).x == 4.0f);
 
   std::cout << "PASSED\n";
 }
@@ -297,7 +297,7 @@ void test_swap_and_pop_compaction() {
  * 1. Mutations recorded to `CommandBuffer` do not affect the `World` prior to
  * playback.
  * 2. Entity remains fully valid and queryable while commands are queued.
- * 3. `playback(world)` executes all recorded commands in exact FIFO order.
+ * 3. `commit(world)` executes all recorded commands in exact FIFO order.
  */
 void test_deferred_command_buffer() {
   std::cout << "[Test 5/6] Deferred CommandBuffer Playback... ";
@@ -305,17 +305,17 @@ void test_deferred_command_buffer() {
   CommandBuffer cmd;
 
   // 1. Create initial entity
-  Entity e = world.create_entity(Pos{1.0f, 2.0f});
+  Entity e = world.spawn(Pos{1.0f, 2.0f});
   assert(world.is_valid(e));
 
   // 2. Record deferred destruction in command buffer
-  cmd.destroy_entity(e);
+  cmd.despawn(e);
 
   // 3. Verify entity is still alive prior to playback
   assert(world.is_valid(e));
 
   // 4. Flush and execute command buffer
-  cmd.playback(world);
+  cmd.commit(world);
 
   // 5. Verify entity is successfully destroyed
   assert(!world.is_valid(e));

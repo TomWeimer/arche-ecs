@@ -101,7 +101,7 @@ int main() {
       using EnTTRegistry2M = entt::basic_registry<std::uint64_t>;
 
       arche::World world;
-      world.create_entities(COUNT_2M, Position{0.0f, 0.0f}, Velocity{1.0f, 2.0f});
+      world.spawn_batch(COUNT_2M, Position{0.0f, 0.0f}, Velocity{1.0f, 2.0f});
       auto query = world.query<Position, const Velocity>();
 
       bench_2m.title("1. 2M Entities: Simple Streaming (Pos + Vel)")
@@ -166,7 +166,7 @@ int main() {
       using EnTTRegistry2M = entt::basic_registry<std::uint64_t>;
 
       arche::World world;
-      world.create_entities(COUNT_2M, Position{500.0f, 500.0f}, Velocity{10.0f, 15.0f});
+      world.spawn_batch(COUNT_2M, Position{500.0f, 500.0f}, Velocity{10.0f, 15.0f});
       auto query = world.query<Position, Velocity>();
 
       bench_2m.title("2. 2M Entities: Realistic Swarm Physics (Euler + Bounds)")
@@ -220,15 +220,15 @@ int main() {
     // 1C. 2,000,000 Entities: Multi-Threaded Scaling (8 Threads vs Single)
     {
       arche::World world;
-      world.create_entities(COUNT_2M, Position{0.0f, 0.0f}, Velocity{1.0f, 2.0f});
+      world.spawn_batch(COUNT_2M, Position{0.0f, 0.0f}, Velocity{1.0f, 2.0f});
       auto query = world.query<Position, const Velocity>();
 
       const uint32_t threads = std::max(2u, std::thread::hardware_concurrency());
       arche::ThreadPool pool(threads);
 
       bench_2m.title("3. 2M Entities: Multi-Threaded Chunk Parallelism")
-          .run("arche-ecs (8-Thread parallel_query)", [&] {
-            world.parallel_query<Position, const Velocity>(
+          .run("arche-ecs (8-Thread query_parallel)", [&] {
+            world.query_parallel<Position, const Velocity>(
                 pool, [](uint32_t count, Position *pos, const Velocity *vel) {
                   for (uint32_t i = 0; i < count; ++i) {
                     pos[i].x += vel[i].vx * 0.016f;
@@ -259,7 +259,7 @@ int main() {
     bench_wide.warmup(5).minEpochIterations(15);
 
     arche::World world;
-    world.create_entities(
+    world.spawn_batch(
         COUNT_500K,
         Position{0.0f, 0.0f}, Velocity{1.0f, 2.0f}, Acceleration{0.1f, 0.2f},
         Rotation{0.5f}, Scale{1.0f, 1.0f}, Mass{2.0f}, Radius{5.0f},
@@ -359,7 +359,7 @@ int main() {
 
     // 5A. In-Place Entity Sorting Speed (500k Entities sorted by Position.x)
     bench_sort.title("5. In-Place Entity Sorting Speed (500k Entities)")
-        .run("arche-ecs (sort_archetype in-place cycle chasing)", [&] {
+        .run("arche-ecs (sort in-place cycle chasing)", [&] {
           arche::World world;
           std::vector<Position> positions(COUNT_500K);
           std::mt19937 rng(1337);
@@ -368,12 +368,12 @@ int main() {
             positions[i] = Position{dist(rng), dist(rng)};
           }
           std::vector<arche::Entity> ents(COUNT_500K);
-          world.create_entities_soa(
+          world.spawn_batch(
               COUNT_500K, std::span<arche::Entity>(ents), positions.data()
           );
 
           arche::Archetype *arch = world.get_record(ents[0]).archetype;
-          world.sort_archetype<Position>(arch, [](const Position &a, const Position &b) {
+          world.sort<Position>(arch, [](const Position &a, const Position &b) {
             return a.x < b.x;
           });
         })
@@ -401,7 +401,7 @@ int main() {
         positions[i] = Position{dist(rng), dist(rng)};
       }
       std::vector<arche::Entity> ents(COUNT_500K);
-      world.create_entities_soa(
+      world.spawn_batch(
           COUNT_500K, std::span<arche::Entity>(ents), positions.data(), velocities.data()
       );
       auto query = world.query<Position, const Velocity>();
@@ -418,7 +418,7 @@ int main() {
 
       // Now sort entities in-place by X coordinate
       arche::Archetype *arch = world.get_record(ents[0]).archetype;
-      world.sort_archetype<Position>(arch, [](const Position &a, const Position &b) {
+      world.sort<Position>(arch, [](const Position &a, const Position &b) {
         return a.x < b.x;
       });
 
@@ -445,26 +445,26 @@ int main() {
     {
       constexpr size_t PER_TABLE = COUNT_200K / 20; // 10k entities per table
       arche::World world;
-      world.create_entities(PER_TABLE, Position{}, Velocity{}, Tag0{});
-      world.create_entities(PER_TABLE, Position{}, Velocity{}, Tag1{});
-      world.create_entities(PER_TABLE, Position{}, Velocity{}, Tag2{});
-      world.create_entities(PER_TABLE, Position{}, Velocity{}, Tag3{});
-      world.create_entities(PER_TABLE, Position{}, Velocity{}, Tag4{});
-      world.create_entities(PER_TABLE, Position{}, Velocity{}, Tag5{});
-      world.create_entities(PER_TABLE, Position{}, Velocity{}, Tag6{});
-      world.create_entities(PER_TABLE, Position{}, Velocity{}, Tag7{});
-      world.create_entities(PER_TABLE, Position{}, Velocity{}, Tag8{});
-      world.create_entities(PER_TABLE, Position{}, Velocity{}, Tag9{});
-      world.create_entities(PER_TABLE, Position{}, Velocity{}, Tag10{});
-      world.create_entities(PER_TABLE, Position{}, Velocity{}, Tag11{});
-      world.create_entities(PER_TABLE, Position{}, Velocity{}, Tag12{});
-      world.create_entities(PER_TABLE, Position{}, Velocity{}, Tag13{});
-      world.create_entities(PER_TABLE, Position{}, Velocity{}, Tag14{});
-      world.create_entities(PER_TABLE, Position{}, Velocity{}, Tag15{});
-      world.create_entities(PER_TABLE, Position{}, Velocity{}, Tag16{});
-      world.create_entities(PER_TABLE, Position{}, Velocity{}, Tag17{});
-      world.create_entities(PER_TABLE, Position{}, Velocity{}, Tag18{});
-      world.create_entities(PER_TABLE, Position{}, Velocity{}, Tag19{});
+      world.spawn_batch(PER_TABLE, Position{}, Velocity{}, Tag0{});
+      world.spawn_batch(PER_TABLE, Position{}, Velocity{}, Tag1{});
+      world.spawn_batch(PER_TABLE, Position{}, Velocity{}, Tag2{});
+      world.spawn_batch(PER_TABLE, Position{}, Velocity{}, Tag3{});
+      world.spawn_batch(PER_TABLE, Position{}, Velocity{}, Tag4{});
+      world.spawn_batch(PER_TABLE, Position{}, Velocity{}, Tag5{});
+      world.spawn_batch(PER_TABLE, Position{}, Velocity{}, Tag6{});
+      world.spawn_batch(PER_TABLE, Position{}, Velocity{}, Tag7{});
+      world.spawn_batch(PER_TABLE, Position{}, Velocity{}, Tag8{});
+      world.spawn_batch(PER_TABLE, Position{}, Velocity{}, Tag9{});
+      world.spawn_batch(PER_TABLE, Position{}, Velocity{}, Tag10{});
+      world.spawn_batch(PER_TABLE, Position{}, Velocity{}, Tag11{});
+      world.spawn_batch(PER_TABLE, Position{}, Velocity{}, Tag12{});
+      world.spawn_batch(PER_TABLE, Position{}, Velocity{}, Tag13{});
+      world.spawn_batch(PER_TABLE, Position{}, Velocity{}, Tag14{});
+      world.spawn_batch(PER_TABLE, Position{}, Velocity{}, Tag15{});
+      world.spawn_batch(PER_TABLE, Position{}, Velocity{}, Tag16{});
+      world.spawn_batch(PER_TABLE, Position{}, Velocity{}, Tag17{});
+      world.spawn_batch(PER_TABLE, Position{}, Velocity{}, Tag18{});
+      world.spawn_batch(PER_TABLE, Position{}, Velocity{}, Tag19{});
       auto query = world.query<Position, const Velocity>();
 
       bench_frag.title("7. Deep Fragmentation (200k Entities across 20 Archetypes)")
@@ -545,8 +545,8 @@ int main() {
     // 7B. Exclusion Filtering: Without<FrozenTag> on 100k Entities
     {
       arche::World world;
-      world.create_entities(COUNT_100K / 2, Position{0.0f, 0.0f}, Velocity{1.0f, 2.0f});
-      world.create_entities(COUNT_100K / 2, Position{0.0f, 0.0f}, Velocity{1.0f, 2.0f}, FrozenTag{});
+      world.spawn_batch(COUNT_100K / 2, Position{0.0f, 0.0f}, Velocity{1.0f, 2.0f});
+      world.spawn_batch(COUNT_100K / 2, Position{0.0f, 0.0f}, Velocity{1.0f, 2.0f}, FrozenTag{});
       auto query = world.query<Position, const Velocity>(arche::Without<FrozenTag>{});
 
       bench_frag.title("8. Exclusion Filter Query (Without<FrozenTag>, 100k Entities)")
@@ -613,7 +613,7 @@ int main() {
       arche::World world;
       std::vector<arche::Entity> arche_entities(COUNT_100K);
       for (size_t i = 0; i < COUNT_100K; ++i) {
-        arche_entities[i] = world.create_entity(Position{static_cast<float>(i), 0.0f});
+        arche_entities[i] = world.spawn(Position{static_cast<float>(i), 0.0f});
       }
       std::vector<arche::Entity> shuffled_arche = arche_entities;
       std::shuffle(shuffled_arche.begin(), shuffled_arche.end(), rng);
@@ -622,7 +622,7 @@ int main() {
       bench_life.title("9. Random Access (100k Component Lookups)")
           .run("arche-ecs (SlotMap Indirection)", [&] {
             for (const auto &e : shuffled_arche) {
-              sum_arche += world.get_component<Position>(e).x;
+              sum_arche += world.get<Position>(e).x;
             }
             ankerl::nanobench::doNotOptimizeAway(sum_arche);
           });
@@ -666,14 +666,14 @@ int main() {
       bench_life.title("10. Entity Creation (20k Entities: Pos + Vel)")
           .run("arche-ecs (Chunked Bulk Spawn)", [&] {
             arche::World world;
-            world.create_entities(
+            world.spawn_batch(
                 MUTATION_COUNT, Position{0.0f, 0.0f}, Velocity{1.0f, 2.0f}
             );
           })
-          .run("arche-ecs (Single create_entity loop)", [&] {
+          .run("arche-ecs (Single spawn loop)", [&] {
             arche::World world;
             for (size_t i = 0; i < MUTATION_COUNT; ++i) {
-              world.create_entity(Position{0.0f, 0.0f}, Velocity{1.0f, 2.0f});
+              world.spawn(Position{0.0f, 0.0f}, Velocity{1.0f, 2.0f});
             }
           })
           .run("EnTT (Registry Emplace loop)", [&] {
@@ -710,10 +710,10 @@ int main() {
             arche::World world;
             std::vector<arche::Entity> entities(MUTATION_COUNT);
             for (size_t i = 0; i < MUTATION_COUNT; ++i) {
-              entities[i] = world.create_entity(Position{0.0f, 0.0f});
+              entities[i] = world.spawn(Position{0.0f, 0.0f});
             }
             for (size_t i = 0; i < MUTATION_COUNT; ++i) {
-              world.add_component(entities[i], ExtraData{});
+              world.add(entities[i], ExtraData{});
             }
           })
           .run("Flecs (Table Transition)", [&] {
@@ -735,10 +735,10 @@ int main() {
             arche::World world;
             std::vector<arche::Entity> entities(MUTATION_COUNT);
             for (size_t i = 0; i < MUTATION_COUNT; ++i) {
-              entities[i] = world.create_entity(Position{0.0f, 0.0f}, Velocity{1.0f, 2.0f});
+              entities[i] = world.spawn(Position{0.0f, 0.0f}, Velocity{1.0f, 2.0f});
             }
             for (size_t i = 0; i < MUTATION_COUNT; ++i) {
-              world.destroy_entity(entities[i]);
+              world.despawn(entities[i]);
             }
           })
           .run("EnTT (Sparse Pool Swap-Pop)", [&] {

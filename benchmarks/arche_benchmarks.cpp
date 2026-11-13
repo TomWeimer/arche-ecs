@@ -114,7 +114,7 @@ void run_trivial_movement_benchmark(size_t entity_count, int iterations) {
   // 1. Populate world with entity_count entities in [Position, Velocity]
   // archetype
   for (size_t i = 0; i < entity_count; ++i) {
-    world.create_entity(
+    world.spawn(
         Position{static_cast<float>(i), static_cast<float>(i)},
         Velocity{1.0f, -1.0f}
     );
@@ -207,13 +207,13 @@ void run_spawn_despawn_stress_benchmark(size_t batch_size) {
   batch.reserve(batch_size);
   for (size_t i = 0; i < batch_size; ++i) {
     batch.push_back(
-        world.create_entity(Position{0.0f, 0.0f}, Velocity{1.0f, 1.0f})
+        world.spawn(Position{0.0f, 0.0f}, Velocity{1.0f, 1.0f})
     );
   }
 
   // 2. Bulk despawn phase (Swap-and-Pop)
   for (Entity e : batch) {
-    world.destroy_entity(e);
+    world.despawn(e);
   }
 
   const auto end_time = std::chrono::high_resolution_clock::now();
@@ -252,7 +252,7 @@ void run_gpu_streaming_benchmark(size_t entity_count, int iterations) {
 
   // 1. Populate world
   for (size_t i = 0; i < entity_count; ++i) {
-    world.create_entity(
+    world.spawn(
         Position{static_cast<float>(i), static_cast<float>(i * 2)},
         Velocity{1.0f, 1.0f}
     );
@@ -301,14 +301,14 @@ void run_parallel_scaling_benchmark(
   World world;
   arche::ThreadPool pool(thread_count);
 
-  world.create_entities(
+  world.spawn_batch(
       entity_count, Position{0.0f, 0.0f}, Velocity{1.0f, 1.0f}
   );
 
   constexpr float dt = 0.01666f;
 
   // Warm-up
-  world.parallel_query<Position, const Velocity>(
+  world.query_parallel<Position, const Velocity>(
       pool, [](uint32_t count, Position *pos, const Velocity *vel) {
         for (uint32_t i = 0; i < count; ++i) {
           pos[i].x += vel[i].vx * dt;
@@ -320,7 +320,7 @@ void run_parallel_scaling_benchmark(
   const uint64_t start_tsc = read_tsc();
 
   for (int it = 0; it < iterations; ++it) {
-    world.parallel_query<Position, const Velocity>(
+    world.query_parallel<Position, const Velocity>(
         pool, [](uint32_t count, Position *pos, const Velocity *vel) {
           for (uint32_t i = 0; i < count; ++i) {
             pos[i].x += vel[i].vx * dt;
@@ -357,7 +357,7 @@ void run_bulk_lifecycle_stress_benchmark(size_t entity_count) {
 
   // 1. Bulk spawn 1,000,000 entities
   auto start = std::chrono::high_resolution_clock::now();
-  std::vector<Entity> entities = world.create_entities(
+  std::vector<Entity> entities = world.spawn_batch(
       entity_count, Position{1.0f, 2.0f}, Velocity{3.0f, 4.0f}
   );
   auto end = std::chrono::high_resolution_clock::now();
@@ -371,7 +371,7 @@ void run_bulk_lifecycle_stress_benchmark(size_t entity_count) {
   }
 
   start = std::chrono::high_resolution_clock::now();
-  world.destroy_entities(to_destroy);
+  world.despawn_batch(to_destroy);
   end = std::chrono::high_resolution_clock::now();
   std::chrono::duration<double, std::milli> despawn_ms = end - start;
 
@@ -407,7 +407,7 @@ void run_cache_locality_permutation_benchmark(size_t entity_count) {
   }
 
   std::vector<Entity> entities(entity_count);
-  world.create_entities_soa(
+  world.spawn_batch(
       entity_count, std::span<Entity>(entities), positions.data()
   );
 
@@ -420,7 +420,7 @@ void run_cache_locality_permutation_benchmark(size_t entity_count) {
     for (size_t i = 0; i < 5000; ++i) {
       // Access random neighbor
       const size_t target_idx = (i * 7919) % entity_count;
-      sum += world.get_component<Position>(entities[target_idx]).x;
+      sum += world.get<Position>(entities[target_idx]).x;
     }
     const auto end = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double, std::micro> elapsed_us = end - start;
@@ -430,7 +430,7 @@ void run_cache_locality_permutation_benchmark(size_t entity_count) {
   const double pre_sort_us = measure_neighbor_latency();
 
   // 2. Apply Morton-order permutation (sorting by position.x)
-  world.sort_archetype<Position>(
+  world.sort<Position>(
       arch, [](const Position &a, const Position &b) { return a.x < b.x; }
   );
 
@@ -454,7 +454,7 @@ void run_ring_vram_streaming_benchmark(size_t entity_count, int iterations) {
             << " Entities (8 MB)] ---\n";
   World world;
 
-  world.create_entities(
+  world.spawn_batch(
       entity_count, Position{1.0f, 2.0f}, Velocity{3.0f, 4.0f}
   );
 
@@ -465,7 +465,7 @@ void run_ring_vram_streaming_benchmark(size_t entity_count, int iterations) {
   size_t bytes_written = 0;
 
   for (int it = 0; it < iterations; ++it) {
-    bytes_written = world.stream_component_to_ring<Position>(
+    bytes_written = world.stream_gpu<Position>(
         it, vram_ring.data(), slot_bytes
     );
   }

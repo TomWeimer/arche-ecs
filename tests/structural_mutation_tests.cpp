@@ -60,26 +60,26 @@ void test_spawning_and_reading() {
   World world;
 
   // 1. Spawn entity with Position and Velocity
-  Entity e1 = world.create_entity(
+  Entity e1 = world.spawn(
       Position{10.0f, 20.0f}, Velocity{1.0f, -2.0f}
   );
 
   // 2. Verify handle validity and component presence
   assert(world.is_alive(e1));
   assert(world.is_valid(e1));
-  assert(world.has_component<Position>(e1));
-  assert(world.has_component<Velocity>(e1));
-  assert(!world.has_component<TagBurning>(e1));
+  assert(world.has<Position>(e1));
+  assert(world.has<Velocity>(e1));
+  assert(!world.has<TagBurning>(e1));
 
   // 3. Verify retrieved values match initial values
-  Position &pos = world.get_component<Position>(e1);
-  Velocity &vel = world.get_component<Velocity>(e1);
+  Position &pos = world.get<Position>(e1);
+  Velocity &vel = world.get<Velocity>(e1);
   assert(pos.x == 10.0f && pos.y == 20.0f);
   assert(vel.vx == 1.0f && vel.vy == -2.0f);
 
   // 4. In-place mutation must persist in storage
   pos.x = 99.0f;
-  assert(world.get_component<Position>(e1).x == 99.0f);
+  assert(world.get<Position>(e1).x == 99.0f);
 
   std::cout << "PASSED\n";
 }
@@ -115,25 +115,25 @@ void test_cross_archetype_migration() {
   World world;
 
   // 1. Create entity with single Position component
-  Entity e = world.create_entity(Position{5.0f, 15.0f});
-  assert(!world.has_component<TagBurning>(e));
+  Entity e = world.spawn(Position{5.0f, 15.0f});
+  assert(!world.has<TagBurning>(e));
 
   // 2. Add TagBurning: triggers graph traversal and migration to new archetype
-  world.add_component(e, TagBurning{25.0f});
+  world.add(e, TagBurning{25.0f});
 
   // 3. Verify entity state in destination archetype
   assert(world.is_alive(e));
-  assert(world.has_component<Position>(e));
-  assert(world.has_component<TagBurning>(e));
-  assert(world.get_component<Position>(e).x == 5.0f);
-  assert(world.get_component<Position>(e).y == 15.0f);
-  assert(world.get_component<TagBurning>(e).damage_per_sec == 25.0f);
+  assert(world.has<Position>(e));
+  assert(world.has<TagBurning>(e));
+  assert(world.get<Position>(e).x == 5.0f);
+  assert(world.get<Position>(e).y == 15.0f);
+  assert(world.get<TagBurning>(e).damage_per_sec == 25.0f);
 
   // 4. Remove TagBurning: triggers migration back to source archetype
-  world.remove_component<TagBurning>(e);
-  assert(!world.has_component<TagBurning>(e));
-  assert(world.has_component<Position>(e));
-  assert(world.get_component<Position>(e).x == 5.0f);
+  world.remove<TagBurning>(e);
+  assert(!world.has<TagBurning>(e));
+  assert(world.has<Position>(e));
+  assert(world.get<Position>(e).x == 5.0f);
 
   std::cout << "PASSED\n";
 }
@@ -169,17 +169,17 @@ void test_swap_and_pop_cascading_destruction() {
   // 1. Populate world with multiple entities in a single archetype
   std::vector<Entity> list;
   for (int i = 0; i < 10; ++i) {
-    list.push_back(world.create_entity(Position{static_cast<float>(i), 0.0f}));
+    list.push_back(world.spawn(Position{static_cast<float>(i), 0.0f}));
   }
 
   // 2. Destroy middle entity: list[3] (triggers swap with list[9])
   Entity e3 = list[3];
-  assert(world.destroy_entity(e3));
+  assert(world.despawn(e3));
   assert(!world.is_alive(e3));
 
   // 3. Destroy beginning entity: list[0] (triggers swap with list[8])
   Entity e0 = list[0];
-  assert(world.destroy_entity(e0));
+  assert(world.despawn(e0));
   assert(!world.is_alive(e0));
 
   // 4. All surviving entities must remain alive and retain their exact
@@ -189,7 +189,7 @@ void test_swap_and_pop_cascading_destruction() {
       continue;
     }
     assert(world.is_alive(list[i]));
-    assert(world.get_component<Position>(list[i]).x == static_cast<float>(i));
+    assert(world.get<Position>(list[i]).x == static_cast<float>(i));
   }
 
   std::cout << "PASSED\n";
@@ -222,7 +222,7 @@ void test_deferred_command_buffer() {
   // 1. Spawn test entities
   std::vector<Entity> entities;
   for (int i = 0; i < 5; ++i) {
-    entities.push_back(world.create_entity(
+    entities.push_back(world.spawn(
         Position{static_cast<float>(i), static_cast<float>(i * 2)}
     ));
   }
@@ -230,7 +230,7 @@ void test_deferred_command_buffer() {
   // 2. Simulate loop recording: queue destruction of even entities
   for (size_t i = 0; i < entities.size(); ++i) {
     if (i % 2 == 0) {
-      cmd.destroy_entity(entities[i]);
+      cmd.despawn(entities[i]);
     }
   }
 
@@ -239,7 +239,7 @@ void test_deferred_command_buffer() {
   assert(world.is_alive(entities[2]));
 
   // 4. Flush commands at synchronization boundary
-  cmd.playback(world);
+  cmd.commit(world);
   assert(cmd.empty());
 
   // 5. After playback: even entities must be destroyed, odd entities must

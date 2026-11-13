@@ -65,14 +65,14 @@ void test_basic_query_matching() {
   World world;
 
   // 1. Archetype 1: [Position, Velocity] (2 entities)
-  world.create_entity(Position{1.0f, 2.0f}, Velocity{0.1f, 0.2f});
-  world.create_entity(Position{3.0f, 4.0f}, Velocity{0.3f, 0.4f});
+  world.spawn(Position{1.0f, 2.0f}, Velocity{0.1f, 0.2f});
+  world.spawn(Position{3.0f, 4.0f}, Velocity{0.3f, 0.4f});
 
   // 2. Archetype 2: [Position, Velocity, Mass] (1 entity — must also match!)
-  world.create_entity(Position{5.0f, 6.0f}, Velocity{0.5f, 0.6f}, Mass{10.0f});
+  world.spawn(Position{5.0f, 6.0f}, Velocity{0.5f, 0.6f}, Mass{10.0f});
 
   // 3. Archetype 3: [Position] (1 entity — must NOT match)
-  world.create_entity(Position{7.0f, 8.0f});
+  world.spawn(Position{7.0f, 8.0f});
 
   // 4. Execute query using world.query<Position, Velocity>() helper
   size_t count = 0;
@@ -109,8 +109,8 @@ void test_per_entity_for_each() {
   std::cout << "[Test 2/6] Ergonomic Per-Entity Callback (for_each)... ";
   World world;
 
-  world.create_entity(Position{10.0f, 20.0f}, Velocity{1.0f, 2.0f});
-  world.create_entity(Position{30.0f, 40.0f}, Velocity{3.0f, 4.0f});
+  world.spawn(Position{10.0f, 20.0f}, Velocity{1.0f, 2.0f});
+  world.spawn(Position{30.0f, 40.0f}, Velocity{3.0f, 4.0f});
 
   // 1. In-place modification via for_each visitor
   auto query = world.query<Position, Velocity>();
@@ -158,7 +158,7 @@ void test_chunk_visitor_vectorization() {
 
   constexpr int ENTITY_COUNT = 1000;
   for (int i = 0; i < ENTITY_COUNT; ++i) {
-    world.create_entity(
+    world.spawn(
         Position{static_cast<float>(i), 0.0f}, Velocity{1.0f, 2.0f}
     );
   }
@@ -205,22 +205,22 @@ void test_query_filters_with_and_without() {
   World world;
 
   // Entity A: Normal live entity [Position, Velocity]
-  Entity e_live = world.create_entity(
+  Entity e_live = world.spawn(
       Position{1.0f, 1.0f}, Velocity{1.0f, 0.0f}
   );
 
   // Entity B: Dead entity [Position, Velocity, TagDead]
-  Entity e_dead = world.create_entity(
+  Entity e_dead = world.spawn(
       Position{2.0f, 2.0f}, Velocity{1.0f, 0.0f}, TagDead{}
   );
 
   // Entity C: Heavy live entity [Position, Velocity, Mass]
-  Entity e_heavy = world.create_entity(
+  Entity e_heavy = world.spawn(
       Position{3.0f, 3.0f}, Velocity{1.0f, 0.0f}, Mass{50.0f}
   );
 
   // Entity D: Heavy dead entity [Position, Velocity, Mass, TagDead]
-  Entity e_heavy_dead = world.create_entity(
+  Entity e_heavy_dead = world.spawn(
       Position{4.0f, 4.0f}, Velocity{1.0f, 0.0f}, Mass{50.0f}, TagDead{}
   );
 
@@ -292,7 +292,7 @@ void test_query_entity_and_deferred_mutation() {
   // 1. Spawn a row of entities with decreasing Y positions
   std::vector<Entity> created;
   for (int i = 0; i < 10; ++i) {
-    created.push_back(world.create_entity(
+    created.push_back(world.spawn(
         Position{static_cast<float>(i), static_cast<float>(5 - i)},
         Velocity{0.0f, 0.0f}
     ));
@@ -303,9 +303,9 @@ void test_query_entity_and_deferred_mutation() {
   for (auto [entity, pos, vel] : world.query<Entity, Position, Velocity>()) {
     (void)vel;
     if (pos.y < 0.0f) {
-      cmd.destroy_entity(entity);
+      cmd.despawn(entity);
     } else if (pos.y == 0.0f) {
-      cmd.add_component(entity, TagDead{});
+      cmd.add(entity, TagDead{});
     }
   }
 
@@ -313,7 +313,7 @@ void test_query_entity_and_deferred_mutation() {
   assert(world.entity_count() == 10);
 
   // 4. Playback deferred commands safely outside the query loop
-  cmd.playback(world);
+  cmd.commit(world);
   assert(cmd.empty());
 
   // 5. Verify results:
@@ -323,14 +323,14 @@ void test_query_entity_and_deferred_mutation() {
 
   // Entity with pos.y == 0 (index 5) must now possess TagDead
   assert(world.is_alive(created[5]));
-  assert(world.has_component<TagDead>(created[5]));
+  assert(world.has<TagDead>(created[5]));
 
-  // 6. Also test deferred create_entity via CommandBuffer
-  cmd.create_entity(Position{100.0f, 200.0f}, Velocity{10.0f, 20.0f});
-  cmd.create_entity(Position{300.0f, 400.0f}, Velocity{30.0f, 40.0f});
+  // 6. Also test deferred spawn via CommandBuffer
+  cmd.spawn(Position{100.0f, 200.0f}, Velocity{10.0f, 20.0f});
+  cmd.spawn(Position{300.0f, 400.0f}, Velocity{30.0f, 40.0f});
   assert(world.entity_count() == 6); // Not yet created
 
-  cmd.playback(world);
+  cmd.commit(world);
   assert(world.entity_count() == 8); // Now created!
 
   // Verify the newly created entities can be queried immediately
@@ -373,7 +373,7 @@ void test_high_density_throughput_and_cycles() {
 
   constexpr int NUM_ENTITIES = 50'000;
   for (int i = 0; i < NUM_ENTITIES; ++i) {
-    world.create_entity(
+    world.spawn(
         Position{static_cast<float>(i), static_cast<float>(i * 2)},
         Velocity{0.5f, -0.5f}
     );

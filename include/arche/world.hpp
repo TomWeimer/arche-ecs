@@ -134,7 +134,7 @@ public:
    * @param max_bytes Capacity of destination buffer in bytes.
    * @return Total bytes written to destination_buffer.
    */
-  inline size_t create_snapshot(void *destination_buffer, size_t max_bytes);
+  inline size_t save_snapshot(void *destination_buffer, size_t max_bytes);
 
   /**
    * @brief Restores the entire world state from a raw memory snapshot buffer in
@@ -143,7 +143,7 @@ public:
    * @param snapshot_buffer Pointer to snapshot memory.
    * @param bytes Size of snapshot buffer in bytes.
    */
-  inline void restore_snapshot(const void *snapshot_buffer, size_t bytes);
+  inline void load_snapshot(const void *snapshot_buffer, size_t bytes);
 
   // --- In-Place Archetype Permutation & Cache Locality -----------------------
 
@@ -160,7 +160,7 @@ public:
    * @param target_indices Span of size N where target_indices[i] indicates the
    * source index whose entity data should be placed at destination index i.
    */
-  void apply_permutation(
+  void permute(
       Archetype *arch,
       std::span<const uint32_t> target_indices
   );
@@ -176,7 +176,7 @@ public:
    * @param comp Comparator callable.
    */
   template <typename Component, typename Compare>
-  void sort_archetype(Archetype *arch, Compare &&comp);
+  void sort(Archetype *arch, Compare &&comp);
 
   // --- Double-Buffered Component Columns -------------------------------------
 
@@ -184,7 +184,7 @@ public:
    * @brief Registers component T as double-buffered with dual read/write chunk
    * slices.
    */
-  template <typename T> inline void register_double_buffered_component() {
+  template <typename T> inline void enable_double_buffer() {
     registry_.register_double_buffered<std::decay_t<T>>();
   }
 
@@ -193,13 +193,13 @@ public:
    * component T, advancing the simulation tick and stamping chunk dirty
    * versions automatically.
    */
-  template <typename T> inline void flip_double_buffer() noexcept {
+  template <typename T> inline void flip() noexcept {
     const TypeID tid = type_id<std::decay_t<T>>();
-    advance_tick(); // Advances monotonic simulation tick
+    tick(); // Advances monotonic simulation tick
     for (const auto &arch_ptr : graph_.archetypes()) {
       arch_ptr->flip_double_buffer(tid);
       for (Chunk *chunk : get_archetype_chunks(arch_ptr.get())) {
-        mark_chunk_dirty<T>(chunk); // Automatically synchronize dirty version!
+        mark_dirty<T>(chunk); // Automatically synchronize dirty version!
       }
     }
   }
@@ -250,27 +250,11 @@ public:
   /**
    * @brief Creates a new entity with an initial set of components.
    *
-   * @details
-   * ### Execution Steps:
-   * 1. **Register Types:** Registers each component type in the TypeRegistry if
-   * not already known.
-   * 2. **Resolve Archetype:** Finds or creates the target Archetype in the
-   * graph matching this component set.
-   * 3. **Allocate Entity ID:** Obtains a fresh generational Entity handle from
-   * the SlotMap.
-   * 4. **Allocate Chunk Slot:** Finds an active chunk with available space (or
-   * acquires a new one from the ChunkPool) and stores the entity handle in its
-   * entity array.
-   * 5. **Construct Components:** Constructs each component value in-place
-   * inside its respective column row.
-   * 6. **Update Tracking:** Increments the archetype entity counter and records
-   * the entity's chunk and row in the SlotMap.
-   *
    * @tparam Comps Component types to attach to the entity.
    * @param components Values for each component.
    * @return The newly created Entity handle.
    */
-  template <typename... Comps> Entity create_entity(Comps &&...components) {
+  template <typename... Comps> Entity spawn(Comps &&...components) {
     // 1. Resolve or create unique archetype for this component combination
     Archetype *arch = resolve_archetype<Comps...>();
 
@@ -290,7 +274,7 @@ public:
 
     // 5. Mark the chunk as dirty
     chunk->advance_structure_version(current_tick_);
-    (mark_chunk_dirty<std::decay_t<Comps>>(chunk), ...);
+    (mark_dirty<std::decay_t<Comps>>(chunk), ...);
 
     return entity;
   }
@@ -301,30 +285,6 @@ public:
    * @brief Spawns N entities initialized with identical component values in
    * a single high-throughput batch (Component Broadcasting).
    *
-   * @details
-   * ### When to use `create_entities`:
-   * Use this function when you need to spawn a large number of entities that
-   * share identical starting component state — for example:
-   * - Spawning 50,000 particle or boid agents with default velocities and
-   * positions.
-   * - Instantiating waves of enemy projectiles with uniform speed and damage.
-   * - Pre-populating entity pools during level initialization.
-   *
-   * ### Allocation & Performance Characteristics:
-   * 1. **Bulk Slot Allocation:** Drains all available recycled slots from the
-   * SlotMap free-list first, then resizes the underlying slot array once for
-   * remaining entities.
-   * 2. **Contiguous Chunk Packing:** Fills active 64 KB memory chunks to
-   * capacity before acquiring new chunks from the ChunkPool, avoiding
-   * fragmentation.
-   * 3. **In-Place Component Construction:** Placement-news component copies
-   * directly into chunk column rows without intermediate container overhead.
-   * 4. **Return Value:** Returns a newly allocated `std::vector<Entity>`
-   * holding all `count` generational handles.
-   *
-   * @see create_entities_soa For streaming pre-computed, unique component
-   * arrays with zero heap allocations.
-   *
    * @tparam Comps Component types to attach to every spawned entity.
    * @param count Number of entities to spawn (must be >= 0).
    * @param components Component values broadcast-copied to each entity.
@@ -332,38 +292,12 @@ public:
    * generational handles.
    */
   template <typename... Comps>
-  std::vector<Entity> create_entities(size_t count, const Comps &...components);
+  requires (!(std::is_same_v<std::decay_t<Comps>, std::span<Entity>> || ...))
+  std::vector<Entity> spawn_batch(size_t count, const Comps &...components);
 
   /**
    * @brief Spawns N entities from pre-computed contiguous external column
    * arrays with zero heap allocations (Direct Structure-of-Arrays Streaming).
-   *
-   * @details
-   * ### When to use `create_entities_soa`:
-   * Use this function when every entity has **unique**, pre-computed component
-   * data — for example:
-   * - Loading world/level entities from disk or network snapshots.
-   * - Streaming particle simulations generated by compute kernels or physics
-   * engines.
-   * - Ingesting procedurally generated terrain, crowd, or vehicle matrices.
-   *
-   * ### Key Differences from `create_entities`:
-   * | Feature | `create_entities` (Broadcast) | `create_entities_soa`
-   * (Streaming) | | :--- | :--- | :--- | | **Data Source** | Single prototype
-   * value per component | Contiguous external arrays (`const Comp*`) | |
-   * **Component Values** | Identical copies for all N entities | Unique,
-   * per-entity values for each row | | **Handle Output** | Returns newly
-   * allocated `std::vector` | Writes directly into caller's `std::span<Entity>`
-   * | | **Heap Allocations** | Allocates return `vector` | **Zero heap
-   * allocations** (100% in-place) | | **Throughput** | ~125 Million ops/sec |
-   * **~275+ Million ops/sec** (saturates RAM bandwidth) |
-   *
-   * ### Execution Invariants:
-   * - `out_entities.size()` must be greater than or equal to `count`.
-   * - Each pointer in `column_data...` must point to a contiguous buffer of at
-   * least `count` elements.
-   * - Transfers component data via bulk `std::memcpy` directly into
-   * cache-aligned chunk columns.
    *
    * @tparam Comps Component types corresponding to each input column array.
    * @param count Number of entities to spawn.
@@ -372,42 +306,33 @@ public:
    * (`const Comp*`).
    */
   template <typename... Comps>
-  void create_entities_soa(
+  void spawn_batch(
       size_t count,
       std::span<Entity> out_entities,
       const Comps *...column_data
   );
 
   /// Destroys an entity and reclaims its slot in constant time.
-  bool destroy_entity(Entity entity);
+  bool despawn(Entity entity);
 
   /**
    * @brief Destroys a batch of entities in a single cache-efficient pass.
    *
    * @param entities Span of Entity handles to destroy.
    */
-  void destroy_entities(std::span<const Entity> entities);
+  void despawn_batch(std::span<const Entity> entities);
 
   // --- Component Management --------------------------------------------------
 
   /**
    * @brief Checks if an entity has a specific component.
    *
-   * @details
-   * ### Execution Steps:
-   * 1. **Check Liveness:** Verifies that the entity is alive in the SlotMap
-   * (returns false if dead).
-   * 2. **Get Archetype:** Retrieves the entity's current archetype from the
-   * SlotMap record.
-   * 3. **Check Signature:** Tests the archetype's 128-bit component bitmask to
-   * see if the component's TypeID bit is set.
-   *
    * @tparam T Component type to test for.
    * @param entity Entity handle to inspect.
    * @return true if the entity has the component; false otherwise.
    */
   template <typename T>
-  [[nodiscard]] bool has_component(Entity entity) const noexcept {
+  [[nodiscard]] bool has(Entity entity) const noexcept {
     const EntityRecord *record = slot_map_.find_record(entity);
     if (!record || !record->archetype) {
       return false;
@@ -418,22 +343,11 @@ public:
   /**
    * @brief Returns a reference to an entity's component.
    *
-   * @details
-   * ### Execution Steps:
-   * 1. **Validate Entity:** Verifies that the entity is alive and retrieves its
-   * record from the SlotMap.
-   * 2. **Find Column:** Looks up the component's column index in the entity's
-   * archetype.
-   * 3. **Locate Memory:** Calculates the exact byte address of the component
-   * inside the chunk using its column offset and row.
-   * 4. **Access Value:** Casts the memory address to the component type and
-   * returns a mutable reference.
-   *
    * @tparam T Component type to access.
    * @param entity Entity handle.
    * @return Mutable reference to the requested component.
    */
-  template <typename T> [[nodiscard]] T &get_component(Entity entity) {
+  template <typename T> [[nodiscard]] T &get(Entity entity) {
     // 1. Validate entity liveness and retrieve its archetype and chunk location
     const EntityRecord &record = get_alive_record(entity);
     Archetype *arch = record.archetype;
@@ -454,30 +368,36 @@ public:
   }
 
   /**
-   * @brief Attaches a new component to an existing entity.
+   * @brief Returns a const reference to an entity's component.
    *
-   * @details
-   * ### Execution Steps:
-   * 1. **Register Type:** Ensures the component type is registered in the
-   * TypeRegistry.
-   * 2. **Validate State:** Asserts that the entity is alive and does not
-   * already have this component.
-   * 3. **Find Target Archetype:** Follows the graph transition edge
-   * (+Component) to find or create the destination archetype.
-   * 4. **Migrate Entity:**
-   *    - Allocates a row and stores the entity handle in a destination chunk.
-   *    - Copies or moves all existing components to their corresponding columns
-   * in the destination chunk.
-   *    - Writes the new component into its column.
-   *    - Removes the old row from the source chunk using swap-and-pop.
-   *    - Updates the entity's location in the SlotMap to point to the new chunk
-   * and row.
+   * @tparam T Component type to access.
+   * @param entity Entity handle.
+   * @return Const reference to the requested component.
+   */
+  template <typename T> [[nodiscard]] const T &get(Entity entity) const {
+    const EntityRecord &record = get_alive_record(entity);
+    Archetype *arch = record.archetype;
+
+    const TypeID tid = type_id<T>();
+    const int16_t col = arch->column_index(tid);
+    assert(col >= 0 && "Component not present on entity");
+
+    const Chunk *chunk = record.chunk;
+    assert(chunk != nullptr);
+
+    const auto &layout = arch->column_layout(static_cast<size_t>(col));
+    const void *ptr = chunk->component_element(layout, record.row);
+    return *reinterpret_cast<const T *>(ptr);
+  }
+
+  /**
+   * @brief Attaches a new component to an existing entity.
    *
    * @tparam T Component type to add.
    * @param entity Entity handle to modify.
    * @param component Component data to attach.
    */
-  template <typename T> void add_component(Entity entity, T &&component) {
+  template <typename T> void add(Entity entity, T &&component) {
     // 1. Register the component type and get its unique ID
     registry_.register_type<std::decay_t<T>>();
     const TypeID type = type_id<std::decay_t<T>>();
@@ -501,25 +421,10 @@ public:
   /**
    * @brief Removes a component type from an existing entity.
    *
-   * @details
-   * ### Execution Steps:
-   * 1. **Validate State:** Asserts that the entity is alive and currently has
-   * this component.
-   * 2. **Find Target Archetype:** Follows the graph transition edge
-   * (-Component) to find the destination archetype.
-   * 3. **Migrate Entity:**
-   *    - Allocates a row and stores the entity handle in a destination chunk.
-   *    - Copies or moves all remaining components to their columns in the
-   * destination chunk.
-   *    - Removes the old row from the source chunk using swap-and-pop (which
-   * destructs the removed component).
-   *    - Updates the entity's location in the SlotMap to point to the new chunk
-   * and row.
-   *
    * @tparam T Component type to remove.
    * @param entity Entity handle to modify.
    */
-  template <typename T> void remove_component(Entity entity) {
+  template <typename T> void remove(Entity entity) {
     // 1. Get the unique ID for the component type to remove
     const TypeID type = type_id<std::decay_t<T>>();
 
@@ -555,7 +460,7 @@ public:
    *
    * @return The newly incremented simulation tick.
    */
-  inline uint32_t advance_tick() noexcept {
+  inline uint32_t tick() noexcept {
     current_tick_ = advance_nonzero(current_tick_);
     return current_tick_;
   }
@@ -566,7 +471,7 @@ public:
    * @tparam T Component type that was modified.
    * @param chunk Chunk containing the component column.
    */
-  template <typename T> inline void mark_chunk_dirty(Chunk *chunk) noexcept {
+  template <typename T> inline void mark_dirty(Chunk *chunk) noexcept {
     assert(chunk != nullptr);
     Archetype *arch = chunk->archetype();
     const int16_t col = arch->column_index(type_id<T>());
@@ -585,10 +490,10 @@ public:
    * @param entity Entity whose component was modified.
    */
   template <typename T>
-  inline void mark_component_dirty(Entity entity) noexcept {
+  inline void mark_dirty(Entity entity) noexcept {
     const EntityRecord *rec = slot_map_.find_record(entity);
     if (rec && rec->chunk) {
-      mark_chunk_dirty<T>(rec->chunk);
+      mark_dirty<T>(rec->chunk);
     }
   }
 
@@ -842,14 +747,14 @@ public:
    * lock-free work-stealing.
    */
   template <typename... Components, typename Func>
-  inline void parallel_query(ThreadPool &pool, Func &&func);
+  inline void query_parallel(ThreadPool &pool, Func &&func);
 
   /**
    * @brief Executes a parallel query with lock-free thread-local mutation
    * recording.
    */
   template <typename... Components, typename Func>
-  inline void parallel_query(
+  inline void query_parallel(
       ThreadPool &pool,
       ParallelCommandBuffer &cmd_buffers,
       Func &&func
@@ -859,15 +764,18 @@ public:
    * @brief Sequentially replays and clears all thread-local command buffers
    * recorded during parallel work.
    */
-  inline void playback_parallel_commands(ParallelCommandBuffer &cmd_buffers);
+  inline void commit(ParallelCommandBuffer &cmd_buffers);
+
+  /**
+   * @brief Sequentially replays and clears a single command buffer.
+   */
+  inline void commit(CommandBuffer &cmd_buffer);
 
   // --- Triple-Buffered GPU Ring Streaming & Multi-Draw Indirect --------------
 
   /**
    * @brief Streams component data to one of three mapped VRAM ring slots with
    * optional chunk culling.
-   * @details Defined in `include/arche/world.hpp`. Replaces unconditional PCIe
-   * streaming of off-screen/culled chunks to VRAM.
    */
   struct PassAllCullingPredicate {
     constexpr bool operator()(const ChunkHeader &) const noexcept {
@@ -876,7 +784,7 @@ public:
   };
 
   template <typename T, typename CullingPredicate = PassAllCullingPredicate>
-  inline size_t stream_component_to_ring(
+  inline size_t stream_gpu(
       uint32_t ring_index,
       void *ring_buffer_base,
       size_t ring_slot_capacity_bytes,
@@ -889,7 +797,7 @@ public:
    * metadata predicate.
    */
   template <typename CullingPredicate = PassAllCullingPredicate>
-  inline size_t write_draw_indirect_commands(
+  inline size_t indirect_draw(
       Archetype *arch,
       void *destination_buffer,
       size_t max_commands,
@@ -1156,7 +1064,8 @@ void World::populate_chunks_batch(
 }
 
 template <typename... Comps>
-std::vector<Entity> World::create_entities(
+requires (!(std::is_same_v<std::decay_t<Comps>, std::span<Entity>> || ...))
+std::vector<Entity> World::spawn_batch(
     size_t count,
     const Comps &...components
 ) {
@@ -1183,7 +1092,7 @@ std::vector<Entity> World::create_entities(
 
         // 3.5 Mark the chunks as dirty
         chunk->advance_structure_version(current_tick_);
-        (mark_chunk_dirty<std::decay_t<Comps>>(chunk), ...);
+        (mark_dirty<std::decay_t<Comps>>(chunk), ...);
       }
   );
 
@@ -1191,7 +1100,7 @@ std::vector<Entity> World::create_entities(
 }
 
 template <typename... Comps>
-void World::create_entities_soa(
+void World::spawn_batch(
     size_t count,
     std::span<Entity> out_entities,
     const Comps *...column_data
@@ -1221,7 +1130,7 @@ void World::create_entities_soa(
 
         // 3.5 Mark the chunks as dirty
         chunk->advance_structure_version(current_tick_);
-        (mark_chunk_dirty<std::decay_t<Comps>>(chunk), ...);
+        (mark_dirty<std::decay_t<Comps>>(chunk), ...);
       }
   );
 }
@@ -1231,7 +1140,7 @@ void World::create_entities_soa(
 // =============================================================================
 
 template <typename Component, typename Compare>
-void World::sort_archetype(Archetype *arch, Compare &&comp) {
+void World::sort(Archetype *arch, Compare &&comp) {
   assert(arch != nullptr);
   const size_t total = arch->entity_count();
   if (total <= 1) {
@@ -1280,7 +1189,7 @@ void World::sort_archetype(Archetype *arch, Compare &&comp) {
   }
 
   // 4. Apply the sorted permutation in-place via cycle chasing
-  apply_permutation(arch, sorted_indices);
+  permute(arch, sorted_indices);
 }
 
 // =============================================================================
@@ -1332,7 +1241,7 @@ inline void World::dispatch_parallel_chunks(
 }
 
 template <typename... Components, typename Func>
-inline void World::parallel_query(ThreadPool &pool, Func &&func) {
+inline void World::query_parallel(ThreadPool &pool, Func &&func) {
   auto unpack_ptrs =
       []<size_t... Is>(
           Chunk *chunk, const auto &offsets, std::index_sequence<Is...>
@@ -1357,7 +1266,7 @@ inline void World::parallel_query(ThreadPool &pool, Func &&func) {
 }
 
 template <typename T, typename CullingPredicate>
-inline size_t World::stream_component_to_ring(
+inline size_t World::stream_gpu(
     uint32_t ring_index,
     void *ring_buffer_base,
     size_t ring_slot_capacity_bytes,
@@ -1401,7 +1310,7 @@ inline size_t World::stream_component_to_ring(
 }
 
 template <typename CullingPredicate>
-inline size_t World::write_draw_indirect_commands(
+inline size_t World::indirect_draw(
     Archetype *arch,
     void *destination_buffer,
     size_t max_commands,
@@ -1441,7 +1350,7 @@ inline size_t World::write_draw_indirect_commands(
 // Instant Snapshot & Rollback Implementation
 // =============================================================================
 
-inline size_t World::create_snapshot(
+inline size_t World::save_snapshot(
     void *destination_buffer,
     size_t max_bytes
 ) {
@@ -1463,7 +1372,7 @@ inline size_t World::create_snapshot(
       arch_metadata_bytes + chunk_bytes;
 
   if (max_bytes < required_bytes) {
-    throw std::runtime_error("create_snapshot: buffer capacity too small");
+    throw std::runtime_error("save_snapshot: buffer capacity too small");
   }
 
   uint8_t *cursor = static_cast<uint8_t *>(destination_buffer);
@@ -1504,10 +1413,10 @@ inline size_t World::create_snapshot(
   return required_bytes;
 }
 
-inline void World::restore_snapshot(const void *snapshot_buffer, size_t bytes) {
+inline void World::load_snapshot(const void *snapshot_buffer, size_t bytes) {
   assert(snapshot_buffer != nullptr && "Snapshot source cannot be null");
   if (bytes < sizeof(SnapshotHeader)) {
-    throw std::runtime_error("restore_snapshot: buffer smaller than header");
+    throw std::runtime_error("load_snapshot: buffer smaller than header");
   }
 
   const uint8_t *cursor = static_cast<const uint8_t *>(snapshot_buffer);
@@ -1517,7 +1426,7 @@ inline void World::restore_snapshot(const void *snapshot_buffer, size_t bytes) {
 
   if (header.magic != 0x48435241 || header.version != 1) {
     throw std::runtime_error(
-        "restore_snapshot: invalid snapshot header magic or version"
+        "load_snapshot: invalid snapshot header magic or version"
     );
   }
 

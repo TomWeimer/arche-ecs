@@ -57,7 +57,7 @@ void test_chunk_user_metadata() {
   assert(alignof(ChunkHeader) == 64);
 
   World world;
-  world.create_entity(Position{1.0f, 2.0f}, Velocity{3.0f, 4.0f});
+  world.spawn(Position{1.0f, 2.0f}, Velocity{3.0f, 4.0f});
 
   // Query chunk to inspect user metadata slot
   world.query<Position>().for_each_chunk([](uint32_t count, Position *pos) {
@@ -99,7 +99,7 @@ void test_simd_tail_padded_execution() {
 
   // Create 1,603 entities (forces a non-multiple of 16)
   constexpr size_t COUNT = 1603;
-  std::vector<Entity> entities = world.create_entities(
+  std::vector<Entity> entities = world.spawn_batch(
       COUNT, Position{1.0f, 1.0f}, Velocity{2.0f, 3.0f}
   );
 
@@ -126,7 +126,7 @@ void test_simd_tail_padded_execution() {
 
   // Verify all 1,603 active entities received correct updates
   for (size_t i = 0; i < COUNT; ++i) {
-    const auto &pos = world.get_component<Position>(entities[i]);
+    const auto &pos = world.get<Position>(entities[i]);
     assert(pos.x == 3.0f);
     assert(pos.y == 4.0f);
   }
@@ -148,7 +148,7 @@ void test_lookahead_prefetching() {
 
   // Create 50,000 entities spanning ~30 chunks
   constexpr size_t COUNT = 50'000;
-  world.create_entities(COUNT, Position{0.0f, 0.0f}, Velocity{1.0f, 1.0f});
+  world.spawn_batch(COUNT, Position{0.0f, 0.0f}, Velocity{1.0f, 1.0f});
 
   size_t total_processed = 0;
   auto q = world.query<Position, const Velocity>();

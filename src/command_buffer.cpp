@@ -28,7 +28,7 @@ namespace arche {
  *
  * @param world Central World instance to apply the recorded modifications to.
  */
-void CommandBuffer::playback(World &world) {
+void CommandBuffer::commit(World &world) {
   size_t offset = 0;
 
   // Reads a plain data value and advances the byte stream offset safely
@@ -57,7 +57,7 @@ void CommandBuffer::playback(World &world) {
     case CommandType::DestroyEntity: {
       Entity entity{};
       read_value(entity);
-      world.destroy_entity(entity);
+      world.despawn(entity);
       break;
     }
     case CommandType::AddComponent: {
@@ -94,7 +94,7 @@ void CommandBuffer::playback(World &world) {
       const Entity *entities =
           reinterpret_cast<const Entity *>(&buffer_[offset]);
       offset += count * sizeof(Entity);
-      world.destroy_entities(std::span<const Entity>(entities, count));
+      world.despawn_batch(std::span<const Entity>(entities, count));
       break;
     }
     default:

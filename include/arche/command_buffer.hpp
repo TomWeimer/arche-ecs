@@ -116,17 +116,13 @@ public:
   /**
    * @brief Queues the creation of a new entity with initial component values.
    *
-   * @details
-   * The entity creation and component construction are deferred until playback.
-   * Components must be trivially copyable POD types.
-   *
    * @tparam Comps Component types to attach to the new entity.
    * @param components Values for each component.
    */
-  template <typename... Comps> inline void create_entity(Comps... components) {
+  template <typename... Comps> inline void spawn(Comps... components) {
     static_assert(
         (std::is_trivially_copyable_v<std::decay_t<Comps>> && ...),
-        "Deferred create_entity requires trivially copyable POD components"
+        "Deferred spawn requires trivially copyable POD components"
     );
     write_pod(CommandType::CreateEntity);
     write_pod<SpawnFn>(&spawn_entity_helper<Comps...>);
@@ -136,20 +132,20 @@ public:
   /**
    * @brief Queues the destruction of an entity.
    *
-   * @param entity Handle of the entity to destroy during playback.
+   * @param entity Handle of the entity to destroy during commit.
    */
-  inline void destroy_entity(Entity entity) {
+  inline void despawn(Entity entity) {
     write_pod(CommandType::DestroyEntity);
     write_pod(entity);
   }
 
   /**
    * @brief Queues batched destruction of multiple entities for zero-redundancy
-   * playback.
+   * commit.
    *
-   * @param entities Span of Entity handles to destroy during playback.
+   * @param entities Span of Entity handles to destroy during commit.
    */
-  inline void destroy_entities(std::span<const Entity> entities) {
+  inline void despawn_batch(std::span<const Entity> entities) {
     if (entities.empty()) {
       return;
     }
@@ -163,12 +159,12 @@ public:
    *
    * @tparam T Component type (must be trivially copyable plain data).
    * @param entity Target entity to receive the component.
-   * @param component Component data to attach during playback.
+   * @param component Component data to attach during commit.
    */
-  template <typename T> inline void add_component(Entity entity, T component) {
+  template <typename T> inline void add(Entity entity, T component) {
     static_assert(
         std::is_trivially_copyable_v<T>,
-        "Deferred add_component requires trivially copyable data types"
+        "Deferred add requires trivially copyable data types"
     );
     write_pod(CommandType::AddComponent);
     write_pod(entity);
@@ -183,7 +179,7 @@ public:
    * @tparam T Component type to strip from the entity.
    * @param entity Target entity losing the component.
    */
-  template <typename T> inline void remove_component(Entity entity) {
+  template <typename T> inline void remove(Entity entity) {
     write_pod(CommandType::RemoveComponent);
     write_pod(entity);
     write_pod(type_id<T>());
@@ -193,7 +189,7 @@ public:
 
   /// Executes all recorded commands against the World in order, then clears the
   /// buffer.
-  void playback(World &world);
+  void commit(World &world);
 
   /**
    * @brief Clears all queued commands, keeping allocated capacity for reuse.
@@ -227,7 +223,7 @@ private:
     }
     std::apply(
         [&world](auto &&...items) {
-          world.create_entity(std::forward<decltype(items)>(items)...);
+          world.spawn(std::forward<decltype(items)>(items)...);
         },
         tuple
     );

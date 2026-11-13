@@ -168,7 +168,7 @@ void test_component_span_views() {
 
   // 1. Populate world across chunks with deterministic coordinate data
   for (int i = 0; i < TOTAL_ENTITIES; ++i) {
-    world.create_entity(
+    world.spawn(
         GpuPosition{static_cast<float>(i), static_cast<float>(i * 2)}
     );
   }
@@ -257,7 +257,7 @@ void test_stream_component_to_mock_vram() {
 
   // 1. Populate 50,000 entities across multiple 64 KB chunks
   for (int i = 0; i < NUM_ENTITIES; ++i) {
-    world.create_entity(
+    world.spawn(
         GpuPosition{static_cast<float>(i), static_cast<float>(i * 3)}
     );
   }

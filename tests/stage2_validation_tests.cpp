@@ -38,10 +38,10 @@ void test_full_parallel_physics_pipeline() {
   World world;
   ThreadPool pool(4);
 
-  world.register_double_buffered_component<Position>();
+  world.enable_double_buffer<Position>();
 
   constexpr size_t COUNT = 100'000;
-  world.create_entities(
+  world.spawn_batch(
       COUNT, Position{0.0f, 0.0f}, Velocity{1.0f, 2.0f}, BoidTag{}
   );
 
@@ -49,10 +49,10 @@ void test_full_parallel_physics_pipeline() {
 
   // Run 5 full physics frames
   for (int frame = 0; frame < 5; ++frame) {
-    world.advance_tick();
+    world.tick();
 
     // Parallel integration reading from Buffer A and writing to Buffer B
-    world.parallel_query<const Position, Write<Position>, const Velocity>(
+    world.query_parallel<const Position, Write<Position>, const Velocity>(
         pool,
         [](uint32_t count,
            const Position *r,
@@ -66,7 +66,7 @@ void test_full_parallel_physics_pipeline() {
     );
 
     // Flip buffer sub-step
-    world.flip_double_buffer<Position>();
+    world.flip<Position>();
   }
 
   // Verify numerical accuracy across all 100k entities
@@ -97,7 +97,7 @@ void test_permutation_and_reactive_cache() {
   auto query = world.query<Position, Velocity>();
 
   constexpr size_t COUNT = 5000;
-  std::vector<Entity> entities = world.create_entities(
+  std::vector<Entity> entities = world.spawn_batch(
       COUNT, Position{0.0f, 0.0f}, Velocity{1.0f, 1.0f}
   );
 
@@ -109,7 +109,7 @@ void test_permutation_and_reactive_cache() {
     perm[i] = static_cast<uint32_t>(COUNT - 1 - i);
   }
 
-  world.apply_permutation(arch, perm);
+  world.permute(arch, perm);
 
   // Existing query must read all permuted entities without failure
   size_t count = 0;
@@ -134,10 +134,10 @@ void test_parallel_mutation_churn() {
   ParallelCommandBuffer cmd_buffers(pool.worker_count());
 
   constexpr size_t COUNT = 20'000;
-  world.create_entities(COUNT, Position{1.0f, 1.0f});
+  world.spawn_batch(COUNT, Position{1.0f, 1.0f});
 
   // Parallel loop: destroy half the entities and spawn replacements
-  world.parallel_query<Entity, const Position>(
+  world.query_parallel<Entity, const Position>(
       pool,
       cmd_buffers,
       [](uint32_t count,
@@ -146,14 +146,14 @@ void test_parallel_mutation_churn() {
          const Position *) {
         for (uint32_t i = 0; i < count; ++i) {
           if (ents[i].index() % 2 == 0) {
-            cmd.destroy_entity(ents[i]);
-            cmd.create_entity(Position{99.0f, 99.0f});
+            cmd.despawn(ents[i]);
+            cmd.spawn(Position{99.0f, 99.0f});
           }
         }
       }
   );
 
-  world.playback_parallel_commands(cmd_buffers);
+  world.commit(cmd_buffers);
 
   // Total entity count must remain exactly COUNT
   assert(world.entity_count() == COUNT);
