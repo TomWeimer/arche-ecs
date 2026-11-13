@@ -319,7 +319,7 @@ public:
    * @return Mutable pointer to the base of the Entity handle array.
    */
   [[nodiscard]] inline Entity *entity_slice() noexcept {
-    constexpr size_t HEADER_RESERVE = sizeof(ChunkHeader);
+    constexpr size_t HEADER_RESERVE = ChunkGeometry::HEADER_BYTES;
     return reinterpret_cast<Entity *>(
         reinterpret_cast<uint8_t *>(this) + HEADER_RESERVE
     );
@@ -330,7 +330,7 @@ public:
    * Entity[K]`.
    */
   [[nodiscard]] inline const Entity *entity_slice() const noexcept {
-    constexpr size_t HEADER_RESERVE = sizeof(ChunkHeader);
+    constexpr size_t HEADER_RESERVE = ChunkGeometry::HEADER_BYTES;
     return reinterpret_cast<const Entity *>(
         reinterpret_cast<const uint8_t *>(this) + HEADER_RESERVE
     );

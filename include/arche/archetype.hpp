@@ -343,7 +343,7 @@ private:
     if (alignment <= 1) {
       return offset;
     }
-    return (offset + alignment - 1) & ~(alignment - 1);
+    return arche::math::align_up(offset, alignment);
   }
 
   /**

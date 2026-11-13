@@ -87,20 +87,19 @@ void World::clear() {
  * @return true if the entity was found and destroyed; false if already dead.
  */
 bool World::destroy_entity(Entity entity) {
-  // 1. Check if the entity handle is valid and currently alive
-  if (!slot_map_.is_alive(entity)) {
+  // 1. Retrieve the entity's storage record (validating liveness in a single lookup)
+  const EntityRecord *record = slot_map_.find_record(entity);
+  if (!record) {
     return false;
   }
 
-  // 2. Retrieve the entity's storage record (archetype, chunk, and row index)
-  const EntityRecord &record = slot_map_.get_record(entity);
-  Archetype *arch = record.archetype;
-  Chunk *chunk = record.chunk;
+  Archetype *arch = record->archetype;
+  Chunk *chunk = record->chunk;
   assert(arch != nullptr && chunk != nullptr);
 
-  // 3. Swap the last entity into this row, pop it, and run destructors for its
+  // 2. Swap the last entity into this row, pop it, and run destructors for its
   // components
-  chunk->swap_and_pop(record.row, slot_map_, arch->column_layouts());
+  chunk->swap_and_pop(record->row, slot_map_, arch->column_layouts());
   arch->decrement_entity_count();
 
   // 4. Mark the chunk as modified
@@ -133,19 +132,10 @@ std::pair<Chunk *, uint32_t> World::allocate_slot(
     Archetype *arch,
     Entity entity
 ) {
-  auto &chunks = get_archetype_chunks(arch);
-
-  // 1. Acquire a new chunk buffer from the pool if current chunk is full or
-  // none exist
-  if (chunks.empty() || chunks.back()->is_full()) {
-    void *raw = chunk_pool_.acquire_buffer();
-    auto *chunk = Chunk::create(raw, arch, arch->chunk_capacity(), chunk_size_);
-    chunk->set_chunk_index(static_cast<uint32_t>(chunks.size()));
-    chunks.push_back(chunk);
-  }
+  // 1. Acquire an active chunk with available capacity (allocating from pool if needed)
+  Chunk *active = acquire_chunk_for(arch);
 
   // 2. Append the entity handle to the active chunk and return its location
-  Chunk *active = chunks.back();
   const uint32_t row = active->append_entity(entity);
   return {active, row};
 }
@@ -290,20 +280,15 @@ void World::apply_command_add_component(
     TypeID tid,
     const void *data
 ) {
-  // 1. Skip if entity was destroyed prior to command playback
-  if (!is_alive(entity)) {
+  // 1. Retrieve record (skipping if entity was destroyed prior to command playback)
+  const EntityRecord *rec = slot_map_.find_record(entity);
+  if (!rec || !rec->archetype || rec->archetype->has_component(tid)) {
     return;
   }
 
-  // 2. Skip if entity already contains this component
-  const auto &rec = slot_map_.get_record(entity);
-  if (!rec.archetype || rec.archetype->has_component(tid)) {
-    return;
-  }
-
-  // 3. Follow graph transition edge (+tid) and migrate entity
-  Archetype *dst = graph_.traverse_add(rec.archetype, tid);
-  migrate_entity(entity, rec, rec.archetype, dst, tid, data);
+  // 2. Follow graph transition edge (+tid) and migrate entity
+  Archetype *dst = graph_.traverse_add(rec->archetype, tid);
+  migrate_entity(entity, *rec, rec->archetype, dst, tid, data);
 }
 
 /**
@@ -313,20 +298,15 @@ void World::apply_command_add_component(
  * @param tid TypeID of the component being removed.
  */
 void World::apply_command_remove_component(Entity entity, TypeID tid) {
-  // 1. Skip if entity was destroyed prior to command playback
-  if (!is_alive(entity)) {
+  // 1. Retrieve record (skipping if entity was destroyed prior to command playback)
+  const EntityRecord *rec = slot_map_.find_record(entity);
+  if (!rec || !rec->archetype || !rec->archetype->has_component(tid)) {
     return;
   }
 
-  // 2. Skip if entity does not possess this component
-  const auto &rec = slot_map_.get_record(entity);
-  if (!rec.archetype || !rec.archetype->has_component(tid)) {
-    return;
-  }
-
-  // 3. Follow graph transition edge (-tid) and migrate entity
-  Archetype *dst = graph_.traverse_remove(rec.archetype, tid);
-  migrate_entity(entity, rec, rec.archetype, dst, tid, nullptr);
+  // 2. Follow graph transition edge (-tid) and migrate entity
+  Archetype *dst = graph_.traverse_remove(rec->archetype, tid);
+  migrate_entity(entity, *rec, rec->archetype, dst, tid, nullptr);
 }
 
 // =============================================================================

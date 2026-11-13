@@ -332,18 +332,11 @@ public:
    */
   template <typename T>
   [[nodiscard]] bool has_component(Entity entity) const noexcept {
-    // 1. Verify that the entity is alive
-    if (!slot_map_.is_alive(entity)) {
+    const EntityRecord *record = slot_map_.find_record(entity);
+    if (!record || !record->archetype) {
       return false;
     }
-    // 2. Ensure the entity is assigned to an archetype
-    const EntityRecord &record = slot_map_.get_record(entity);
-    if (!record.archetype) {
-      return false;
-    }
-    // 3. Test whether the component's TypeID bit is set in the archetype
-    // bitmask
-    return record.archetype->has_component(type_id<T>());
+    return record->archetype->has_component(type_id<T>());
   }
 
   /**
@@ -570,9 +563,7 @@ public:
 
         // 4. Resolve raw contiguous column pointer using precomputed byte
         // offset
-        const T *col_ptr = reinterpret_cast<const T *>(
-            chunk->component_slice(layout.chunk_byte_offset)
-        );
+        const T *col_ptr = chunk->typed_slice<T>(layout.chunk_byte_offset);
 
         // 5. Emplace a non-owning span wrapping the contiguous pointer and
         // active entity count
@@ -706,13 +697,13 @@ private:
    * @brief Validates that an entity is alive and returns its record.
    */
   [[nodiscard]] const EntityRecord &get_alive_record(Entity entity) const {
+    const EntityRecord *record = slot_map_.find_record(entity);
     assert(
-        slot_map_.is_alive(entity) &&
+        record != nullptr &&
         "Attempted to access component on dead or invalid entity"
     );
-    const EntityRecord &record = slot_map_.get_record(entity);
-    assert(record.archetype != nullptr && "Entity has no archetype");
-    return record;
+    assert(record->archetype != nullptr && "Entity has no archetype");
+    return *record;
   }
 
   /**
