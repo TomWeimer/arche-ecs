@@ -12,6 +12,8 @@
 #include "arche/type_registry.hpp"
 #include "arche/world.hpp"
 #include "arche/command_buffer.hpp"
+#include "arche/parallel_command_buffer.hpp"
+#include "arche/thread_pool.hpp"
 #include "arche/query_filter.hpp"
 #include "arche/query_iterator.hpp"
 #include "arche/query.hpp"

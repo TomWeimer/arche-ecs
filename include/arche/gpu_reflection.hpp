@@ -182,4 +182,26 @@ struct GpuBufferView {
   uint32_t alignment{0};
 };
 
+// =============================================================================
+// Vulkan-Compatible Indirect Draw Structures
+// =============================================================================
+
+/**
+ * @struct DrawIndirectCommand
+ * @brief Binary layout identical to VkDrawIndirectCommand for GPU-driven
+ * multi-draw.
+ */
+struct DrawIndirectCommand {
+  uint32_t vertex_count{0}; ///< Number of vertices to draw (chunk entity count)
+  uint32_t instance_count{1}; ///< Number of instances (1)
+  uint32_t first_vertex{0};   ///< Starting vertex offset in mapped VRAM buffer
+  uint32_t first_instance{0}; ///< First instance ID (0)
+};
+
+static_assert(
+    sizeof(DrawIndirectCommand) == 16,
+    "DrawIndirectCommand must be exactly 16 bytes (VkDrawIndirectCommand "
+    "compatible)"
+);
+
 } // namespace arche

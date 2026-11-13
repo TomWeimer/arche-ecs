@@ -47,6 +47,7 @@ template <typename... Components> class QueryIterator;
 template <typename... Components> class Query {
 public:
   template <typename... Comps> friend class QueryIterator;
+  friend class World;
 
   /// Iterator type for range-based for loops and structured bindings.
   using Iterator = QueryIterator<Components...>;
@@ -301,6 +302,7 @@ private:
         ...);
   }
 
+public:
   // --- Column & Memory Resolution Helpers ------------------------------------
 
   /**
@@ -374,6 +376,7 @@ private:
     }
   }
 
+private:
   /**
    * @brief Resolves a tuple of contiguous column pointers for all queried types
    * in a chunk.

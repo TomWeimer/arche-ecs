@@ -7,6 +7,7 @@
 #include "arche/gpu_reflection.hpp"
 #include "arche/query_cache.hpp"
 #include "arche/slot_map.hpp"
+#include "arche/thread_pool.hpp"
 #include "arche/type_registry.hpp"
 
 #include <cassert>
@@ -21,6 +22,7 @@
 namespace arche {
 
 class CommandBuffer;
+class ParallelCommandBuffer;
 template <typename... Components> class Query;
 
 // =============================================================================
@@ -682,6 +684,31 @@ public:
     return total_bytes;
   }
 
+  /**
+   * @brief Retrieves the active chunk list for an archetype.
+   *
+   * @param arch Pointer to the archetype.
+   * @return Reference to the vector of chunk pointers.
+   */
+  inline std::vector<Chunk *> &get_archetype_chunks(Archetype *arch) {
+    if (arch->id() >= archetype_chunks_.size()) {
+      archetype_chunks_.resize(arch->id() + 1);
+    }
+    return archetype_chunks_[arch->id()];
+  }
+
+  inline std::span<Chunk *const> get_archetype_chunks(
+      const Archetype *arch
+  ) const {
+    if (arch->id() >= archetype_chunks_.size()) {
+      return {};
+    }
+    return std::span<Chunk *const>(
+        archetype_chunks_[arch->id()].data(),
+        archetype_chunks_[arch->id()].size()
+    );
+  }
+
   /// @brief Returns the total active count of entities possessing component T.
   template <typename T>
   [[nodiscard]] uint32_t count_components() const noexcept {
@@ -808,6 +835,67 @@ public:
   template <typename... Components, typename... FilterArgs>
   [[nodiscard]] Query<Components...> query(FilterArgs &&...filters);
 
+  // --- Parallel Chunk Query & Work-Stealing ----------------------------------
+
+  /**
+   * @brief Executes a chunk-level parallel query across worker threads using
+   * lock-free work-stealing.
+   */
+  template <typename... Components, typename Func>
+  inline void parallel_query(ThreadPool &pool, Func &&func);
+
+  /**
+   * @brief Executes a parallel query with lock-free thread-local mutation
+   * recording.
+   */
+  template <typename... Components, typename Func>
+  inline void parallel_query(
+      ThreadPool &pool,
+      ParallelCommandBuffer &cmd_buffers,
+      Func &&func
+  );
+
+  /**
+   * @brief Sequentially replays and clears all thread-local command buffers
+   * recorded during parallel work.
+   */
+  inline void playback_parallel_commands(ParallelCommandBuffer &cmd_buffers);
+
+  // --- Triple-Buffered GPU Ring Streaming & Multi-Draw Indirect --------------
+
+  /**
+   * @brief Streams component data to one of three mapped VRAM ring slots with
+   * optional chunk culling.
+   * @details Defined in `include/arche/world.hpp`. Replaces unconditional PCIe
+   * streaming of off-screen/culled chunks to VRAM.
+   */
+  struct PassAllCullingPredicate {
+    constexpr bool operator()(const ChunkHeader &) const noexcept {
+      return true;
+    }
+  };
+
+  template <typename T, typename CullingPredicate = PassAllCullingPredicate>
+  inline size_t stream_component_to_ring(
+      uint32_t ring_index,
+      void *ring_buffer_base,
+      size_t ring_slot_capacity_bytes,
+      CullingPredicate &&is_visible = PassAllCullingPredicate{}
+  );
+
+  /**
+   * @brief Emits a contiguous array of DrawIndirectCommand structs for
+   * single-call multi-draw rendering, with optional chunk culling via user
+   * metadata predicate.
+   */
+  template <typename CullingPredicate = PassAllCullingPredicate>
+  inline size_t write_draw_indirect_commands(
+      Archetype *arch,
+      void *destination_buffer,
+      size_t max_commands,
+      CullingPredicate &&is_visible = PassAllCullingPredicate{}
+  );
+
 private:
   // --- Inlined Template / Lookup Helpers -------------------------------------
 
@@ -933,6 +1021,11 @@ private:
     }
   }
 
+  // --- Parallel Chunk Work-Stealing Driver -----------------------------------
+
+  template <typename... Components, typename WorkerFn>
+  inline void dispatch_parallel_chunks(ThreadPool &pool, WorkerFn &&worker);
+
   // --- Deduplicated Chunk Pagination Engine & Allocation Helper -------------
 
   /**
@@ -966,19 +1059,6 @@ private:
 
   /// Finds or allocates an open slot in a chunk for the given archetype.
   std::pair<Chunk *, uint32_t> allocate_slot(Archetype *arch, Entity entity);
-
-  /**
-   * @brief Retrieves the active chunk list for an archetype.
-   *
-   * @param arch Pointer to the archetype.
-   * @return Reference to the vector of chunk pointers.
-   */
-  inline std::vector<Chunk *> &get_archetype_chunks(Archetype *arch) {
-    if (arch->id() >= archetype_chunks_.size()) {
-      archetype_chunks_.resize(arch->id() + 1);
-    }
-    return archetype_chunks_[arch->id()];
-  }
 
   /// Recycles an empty chunk back to the memory pool.
   void recycle_chunk(Archetype *arch, Chunk *chunk);
@@ -1190,6 +1270,160 @@ void World::sort_archetype(Archetype *arch, Compare &&comp) {
 
   // 3. Apply the sorted permutation in-place
   apply_permutation(arch, sorted_indices);
+}
+
+// =============================================================================
+// Parallel Query & Ring Streaming Implementations
+// =============================================================================
+
+// --- Unified Parallel Work-Stealing Driver -----------------------------------
+
+template <typename... Components, typename WorkerFn>
+inline void World::dispatch_parallel_chunks(
+    ThreadPool &pool,
+    WorkerFn &&worker
+) {
+  auto q = query<Components...>();
+
+  struct ChunkTask {
+    Chunk *chunk{nullptr};
+    std::array<uint32_t, sizeof...(Components)> offsets;
+  };
+
+  std::vector<ChunkTask> tasks;
+  // Pre-resolve offsets per archetype to avoid redundant lookups on worker
+  // threads
+  q.for_each_active_chunk([&](Chunk *chunk, Archetype *arch) {
+    tasks.push_back(
+        {chunk,
+         {Query<Components...>::template resolve_column_offset<Components>(
+             arch
+         )...}}
+    );
+  });
+
+  if (tasks.empty()) {
+    return;
+  }
+
+  const size_t total_tasks = tasks.size();
+  std::atomic<size_t> next_task{0};
+
+  pool.parallel_for([&](uint32_t thread_id) {
+    while (true) {
+      const size_t idx = next_task.fetch_add(1, std::memory_order_relaxed);
+      if (idx >= total_tasks) {
+        break;
+      }
+      worker(thread_id, tasks[idx].chunk, tasks[idx].offsets);
+    }
+  });
+}
+
+template <typename... Components, typename Func>
+inline void World::parallel_query(ThreadPool &pool, Func &&func) {
+  auto unpack_ptrs =
+      []<size_t... Is>(
+          Chunk *chunk, const auto &offsets, std::index_sequence<Is...>
+      ) {
+        return std::make_tuple(
+            Query<Components...>::template get_column_ptr<Components>(
+                chunk, offsets[Is]
+            )...
+        );
+      };
+
+  dispatch_parallel_chunks<Components...>(
+      pool, [&](uint32_t, Chunk *chunk, const auto &offsets) {
+        std::apply(
+            [&](auto &&...ptrs) { func(chunk->count(), ptrs...); },
+            unpack_ptrs(
+                chunk, offsets, std::index_sequence_for<Components...>{}
+            )
+        );
+      }
+  );
+}
+
+template <typename T, typename CullingPredicate>
+inline size_t World::stream_component_to_ring(
+    uint32_t ring_index,
+    void *ring_buffer_base,
+    size_t ring_slot_capacity_bytes,
+    CullingPredicate &&is_visible
+) {
+  assert(ring_buffer_base != nullptr && "Ring buffer pointer cannot be null");
+  const uint32_t slot = ring_index % 3;
+  uint8_t *slot_dest = static_cast<uint8_t *>(ring_buffer_base) +
+      (slot * ring_slot_capacity_bytes);
+
+  const TypeID tid = type_id<T>();
+  size_t total_bytes = 0;
+
+  for (const auto &arch_ptr : graph_.archetypes()) {
+    Archetype *arch = arch_ptr.get();
+    if (!arch->has_component(tid)) {
+      continue;
+    }
+
+    const auto *layout = arch->column_layout_for(tid);
+    assert(layout != nullptr);
+
+    for (Chunk *chunk : get_archetype_chunks(arch)) {
+      if (chunk->is_empty()) {
+        continue;
+      }
+      if (!is_visible(chunk->header())) {
+        continue;
+      }
+      const size_t bytes = chunk->count() * sizeof(T);
+      if (total_bytes + bytes > ring_slot_capacity_bytes) {
+        return total_bytes;
+      }
+      const void *src = chunk->component_element(*layout, 0);
+      std::memcpy(slot_dest + total_bytes, src, bytes);
+      total_bytes += bytes;
+    }
+  }
+
+  return total_bytes;
+}
+
+template <typename CullingPredicate>
+inline size_t World::write_draw_indirect_commands(
+    Archetype *arch,
+    void *destination_buffer,
+    size_t max_commands,
+    CullingPredicate &&is_visible
+) {
+  assert(destination_buffer != nullptr && arch != nullptr);
+  auto *cmds = static_cast<DrawIndirectCommand *>(destination_buffer);
+  size_t written = 0;
+  uint32_t vertex_offset = 0;
+
+  for (Chunk *chunk : get_archetype_chunks(arch)) {
+    if (chunk->is_empty()) {
+      continue;
+    }
+    // Test culling predicate against chunk header (e.g. Macro AABB)
+    if (!is_visible(chunk->header())) {
+      vertex_offset += chunk->count();
+      continue;
+    }
+    if (written >= max_commands) {
+      break;
+    }
+
+    cmds[written] = DrawIndirectCommand{
+        .vertex_count = chunk->count(),
+        .instance_count = 1,
+        .first_vertex = vertex_offset,
+        .first_instance = 0,
+    };
+    vertex_offset += chunk->count();
+    ++written;
+  }
+  return written;
 }
 
 // =============================================================================
