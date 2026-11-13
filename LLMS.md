@@ -298,6 +298,52 @@ When consuming `arche-ecs` inside an external project (such as *Colony*), add th
 - Use `world.tick()` to advance simulation versions; use `arche::Mutated<T>{tick}` and `arche::Added{tick}` for O(1) chunk change detection.
 - Use `world.sort<Key>(arch, comp)` and `world.permute(arch, indices)` for in-place cache locality sorting.
 - Use `world.stream_gpu<T>(ring_idx, vram, cap)` and `world.indirect_draw(...)` for direct GPU rendering.
+- Optimization Flags: In CMake, link `arche::arche`, set `INTERPROCEDURAL_OPTIMIZATION TRUE` on targets, and compile with `-O3 -march=native -ffast-math -fno-rtti` (or `/O2 /arch:AVX2 /fp:fast` on MSVC).
 - Strictly forbidden: EnTT syntax (`registry.view`, `emplace`), Flecs syntax (`entity().set`), and deprecated Stage 1 methods (`create_entity`, `get_component`, `playback`).
 ```
+
+---
+
+## 5. CMake & Compiler Optimization Template for AI Agents
+
+When asked to generate or modify a `CMakeLists.txt` for a project using `arche-ecs`, emit this canonical template:
+
+```cmake
+cmake_minimum_required(VERSION 3.20)
+project(my_simulation LANGUAGES CXX)
+
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+# 1. Fetch arche-ecs
+include(FetchContent)
+FetchContent_Declare(
+    arche
+    GIT_REPOSITORY https://github.com/TomWeimer/arche-ecs.git
+    GIT_TAG main
+)
+FetchContent_MakeAvailable(arche)
+
+# 2. Define Consumer Target
+add_executable(my_simulation src/main.cpp)
+target_link_libraries(my_simulation PRIVATE arche::arche)
+
+# 3. CRUCIAL: Interprocedural Optimization (LTO)
+set_property(TARGET my_simulation PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
+set_property(TARGET arche PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
+
+# 4. CRUCIAL: Native SIMD Vectorization & Fast-Math
+if (MSVC)
+    target_compile_options(my_simulation PRIVATE /O2 /arch:AVX2 /fp:fast)
+else()
+    target_compile_options(my_simulation PRIVATE 
+        -O3 
+        -march=native 
+        -ffast-math 
+        -fno-rtti
+        -fno-math-errno
+    )
+endif()
+```
+
 

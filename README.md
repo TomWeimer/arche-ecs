@@ -156,7 +156,7 @@ include(FetchContent)
 
 FetchContent_Declare(
     arche
-    GIT_REPOSITORY https://github.com/smilies009/arche-ecs.git
+    GIT_REPOSITORY https://github.com/TomWeimer/arche-ecs.git
     GIT_TAG main
 )
 FetchContent_MakeAvailable(arche)
