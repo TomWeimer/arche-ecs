@@ -83,6 +83,12 @@ struct alignas(64) ChunkHeader {
 
   /// Intrusive reverse link pointer.
   ChunkHeader *prev{nullptr};
+
+  /// Internal padding to align to 64 bytes
+  uint8_t reserved[24]{0};
+
+  /// 64-byte user metadata slot (e.g. for Macro AABBs or Spatial Hashes)
+  alignas(16) uint8_t user_metadata[64]{0};
 };
 
 static_assert(
@@ -90,9 +96,24 @@ static_assert(
     "ChunkHeader must be standard layout for predictable memory offsets"
 );
 static_assert(
-    sizeof(ChunkHeader) == 64,
-    "ChunkHeader must be padded to exactly 64 bytes"
+    sizeof(ChunkHeader) == 128,
+    "ChunkHeader must be padded to exactly 128 bytes (two cache lines)"
 );
+
+// =============================================================================
+// Chunk Geometry Helper Constants
+// =============================================================================
+
+/**
+ * @struct ChunkGeometry
+ * @brief Standardized chunk header and payload layout constants.
+ * @details Defined in `include/arche/chunk.hpp`. Replaces hardcoded header
+ * reserve magic numbers across Archetype and ChunkPool.
+ */
+struct ChunkGeometry {
+  static constexpr size_t HEADER_BYTES = sizeof(ChunkHeader);
+  static constexpr size_t PAYLOAD_BYTES = 65536 - HEADER_BYTES;
+};
 
 // =============================================================================
 // Hardware-Adaptive Chunk Storage (Structure of Arrays)
@@ -304,6 +325,66 @@ public:
     return reinterpret_cast<const Entity *>(
         reinterpret_cast<const uint8_t *>(this) + HEADER_RESERVE
     );
+  }
+
+  // --- Typed Slice Accessors (Deduplicated Pointer Casting) ------------------
+
+  /**
+   * @brief Returns a typed pointer to a component column slice.
+   * @details Defined in `include/arche/chunk.hpp`. Replaces repetitive
+   * `reinterpret_cast<T*>(chunk->component_slice(offset))` in Query and World.
+   */
+  template <typename T>
+  [[nodiscard]] inline T *typed_slice(uint32_t byte_offset) noexcept {
+    return reinterpret_cast<T *>(component_slice(byte_offset));
+  }
+
+  template <typename T>
+  [[nodiscard]] inline const T *typed_slice(
+      uint32_t byte_offset
+  ) const noexcept {
+    return reinterpret_cast<const T *>(component_slice(byte_offset));
+  }
+
+  // --- User Metadata Slot (Macro Spatial Culling) ----------------------------
+
+  /**
+   * @brief Accesses the chunk's 64-byte cache-aligned user metadata slot.
+   *
+   * @tparam T User metadata type (must be POD, size <= 64 bytes, align <= 16
+   * bytes).
+   * @return Mutable reference to the user metadata struct.
+   */
+  template <typename T> [[nodiscard]] inline T &user_metadata() noexcept {
+    static_assert(
+        sizeof(T) <= sizeof(header_.user_metadata),
+        "User metadata type exceeds 64-byte reserve"
+    );
+    static_assert(
+        alignof(T) <= 16,
+        "User metadata type alignment exceeds 16-byte boundary"
+    );
+    return *reinterpret_cast<T *>(header_.user_metadata);
+  }
+
+  /**
+   * @brief Accesses the chunk's 64-byte cache-aligned user metadata slot
+   * (read-only).
+   *
+   * @tparam T User metadata type.
+   * @return Const reference to the user metadata struct.
+   */
+  template <typename T>
+  [[nodiscard]] inline const T &user_metadata() const noexcept {
+    static_assert(
+        sizeof(T) <= sizeof(header_.user_metadata),
+        "User metadata type exceeds 64-byte reserve"
+    );
+    static_assert(
+        alignof(T) <= 16,
+        "User metadata type alignment exceeds 16-byte boundary"
+    );
+    return *reinterpret_cast<const T *>(header_.user_metadata);
   }
 
   /**

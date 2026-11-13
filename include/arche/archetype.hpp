@@ -3,6 +3,7 @@
 #include "arche/chunk.hpp"
 #include "arche/component_mask.hpp"
 #include "arche/entity.hpp"
+#include "arche/math_utils.hpp"
 #include "arche/type_registry.hpp"
 
 #include <algorithm>
@@ -67,6 +68,12 @@ public:
   // --- Constants -------------------------------------------------------------
 
   static constexpr size_t MAX_COMPONENTS = ComponentMask::MAX_COMPONENTS;
+
+  /// 16 elements (64B AVX-512/AVX2/NEON)
+  static constexpr uint32_t SIMD_VECTOR_WIDTH = 16;
+
+  /// Tail padding elements per column
+  static constexpr uint32_t SIMD_TAIL_PADDING = 16;
 
 private:
   // --- Member Data -----------------------------------------------------------
@@ -360,18 +367,31 @@ private:
   [[nodiscard]] inline uint32_t _calculate_chunk_capacity(
       uint32_t entity_size_sum
   ) const noexcept {
-    constexpr uint32_t CHUNK_HEADER_RESERVE = 64;
+    constexpr uint32_t
+        CHUNK_HEADER_RESERVE = ChunkGeometry::HEADER_BYTES; // 128 bytes
     constexpr uint32_t MAX_ALIGN_PADDING_ALLOWANCE = 256;
 
-    constexpr uint32_t overhead = CHUNK_HEADER_RESERVE +
-        MAX_ALIGN_PADDING_ALLOWANCE;
+    // Overhead accounts for header, alignment padding, and SIMD tail padding
+    const uint32_t tail_padding_bytes = static_cast<uint32_t>(
+        (sizeof(Entity) + entity_size_sum) * SIMD_TAIL_PADDING
+    );
 
-    const uint32_t available_bytes = (chunk_size_ > overhead)
-        ? (chunk_size_ - CHUNK_HEADER_RESERVE - MAX_ALIGN_PADDING_ALLOWANCE)
+    const uint32_t total_overhead = CHUNK_HEADER_RESERVE +
+        MAX_ALIGN_PADDING_ALLOWANCE + tail_padding_bytes;
+
+    const uint32_t available_bytes = (chunk_size_ > total_overhead)
+        ? (chunk_size_ - total_overhead)
         : 1;
 
-    const uint32_t capacity = available_bytes / entity_size_sum;
-    return (capacity == 0) ? 1 : capacity;
+    const uint32_t raw_capacity = available_bytes / entity_size_sum;
+
+    // Round down to nearest multiple of SIMD_VECTOR_WIDTH using
+    // arche::math::round_down_simd
+    const uint32_t aligned_capacity = (raw_capacity >= SIMD_VECTOR_WIDTH)
+        ? arche::math::round_down_simd<SIMD_VECTOR_WIDTH>(raw_capacity)
+        : raw_capacity;
+
+    return (aligned_capacity == 0) ? 1 : aligned_capacity;
   }
 
   /**
@@ -379,13 +399,16 @@ private:
    * memory.
    */
   inline void _build_column_layouts(const TypeRegistry &registry) {
-    constexpr uint32_t CHUNK_HEADER_RESERVE = 64;
+    constexpr uint32_t
+        CHUNK_HEADER_RESERVE = ChunkGeometry::HEADER_BYTES; // 128 bytes
 
     // Offset 0 of chunk payload holds the dense Entity ID array:
     // Entity[capacity]
     uint32_t current_offset = CHUNK_HEADER_RESERVE;
     current_offset = _align_up(current_offset, alignof(Entity));
-    current_offset += chunk_capacity_ * static_cast<uint32_t>(sizeof(Entity));
+    // Allocate Entity array with SIMD tail padding
+    current_offset += (chunk_capacity_ + SIMD_TAIL_PADDING) *
+        static_cast<uint32_t>(sizeof(Entity));
 
     // Layout each component column sequentially with hardware alignment
     for (size_t i = 0; i < types_.size(); ++i) {
@@ -405,12 +428,10 @@ private:
 
       // Maps this component's TypeID to its column index for instant O(1)
       // lookup without linear search during query iteration
-
-      // Maps this component's TypeID to its column index for instant O(1)
-      // lookup without linear search during query iteration
       type_to_column_[t] = static_cast<int16_t>(i);
 
-      current_offset += chunk_capacity_ * desc.size;
+      // Allocate column storage plus 16 elements of tail padding
+      current_offset += (chunk_capacity_ + SIMD_TAIL_PADDING) * desc.size;
     }
 
     // Guarantee that calculated SoA slices fit within the allocated chunk size

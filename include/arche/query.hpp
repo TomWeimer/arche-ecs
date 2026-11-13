@@ -103,6 +103,36 @@ public:
   }
 
   /**
+   * @brief High-performance chunk visitor with tail-padded vector iteration
+   * bounds.
+   *
+   * @details
+   * Exposes both `active_count` and `padded_count` (`(active_count + 15) &
+   * ~15`). Because every component column is tail-padded by 16 elements, vector
+   * SIMD loops (AVX2, AVX-512, NEON) can iterate up to `padded_count`
+   * unconditionally with zero scalar cleanup epilogues.
+   *
+   * @tparam Func Callable accepting `(uint32_t active_count, uint32_t
+   * padded_count, Components*...)`.
+   * @param func User lambda executed once per chunk.
+   */
+  template <typename Func> inline void for_each_chunk_padded(Func &&func) {
+    for_each_active_chunk([&](Chunk *chunk, const auto &match) {
+      const uint32_t active = chunk->count();
+      // Round up to nearest vector width using arche::math::round_up_simd
+      // (defined in math_utils.hpp)
+      const uint32_t padded = arche::math::round_up_simd<16>(active);
+      func(
+          active,
+          padded,
+          get_column_ptr<Components>(
+              chunk, match.offsets[type_index<Components>()]
+          )...
+      );
+    });
+  }
+
+  /**
    * @brief Convenient per-entity visitor passing direct component references.
    *
    * @tparam Func Callable accepting `(Components&...)`.
@@ -304,7 +334,7 @@ private:
     if constexpr (std::is_same_v<std::decay_t<Comp>, Entity>) {
       return chunk->entity_slice();
     } else {
-      return reinterpret_cast<Comp *>(chunk->component_slice(offset));
+      return chunk->typed_slice<Comp>(offset);
     }
   }
 
@@ -326,6 +356,44 @@ private:
   // --- Chunk Traversal & Row Invocation Helpers ------------------------------
 
   /**
+   * @brief Issues lookahead cache prefetch hints for an upcoming chunk and its
+   * active component columns.
+   *
+   * @details
+   * Prefetches into L1/L2 data cache with high temporal locality before the
+   * iteration loop advances to the next chunk:
+   * 1. ChunkHeader (128 bytes = two 64-byte cache lines).
+   * 2. The first cache line of each queried component column slice.
+   *
+   * @param next_chunk Pointer to the upcoming chunk to prefetch.
+   * @param match Cached archetype column offsets for queried component types.
+   */
+  static inline void prefetch_next_chunk(
+      const Chunk *next_chunk,
+      const ArchetypeMatch &match
+  ) noexcept {
+#if defined(__GNUC__) || defined(__clang__)
+    // 1. Prefetch ChunkHeader (128 bytes = 2 cache lines of 64 bytes)
+    __builtin_prefetch(next_chunk, 0, 3);
+    __builtin_prefetch(
+        reinterpret_cast<const uint8_t *>(next_chunk) + 64, 0, 3
+    );
+
+    // 2. Prefetch first cache line of each queried component column
+    ((__builtin_prefetch(
+         reinterpret_cast<const uint8_t *>(next_chunk) +
+             match.offsets[type_index<Components>()],
+         0, // 0 = read
+         3  // 3 = high temporal locality (L1/L2)
+     )),
+     ...);
+#else
+    (void)next_chunk;
+    (void)match;
+#endif
+  }
+
+  /**
    * @brief Traverses all non-empty memory chunks across all matching
    * archetypes.
    */
@@ -333,10 +401,20 @@ private:
   inline void for_each_active_chunk(Visitor &&visitor) {
     for (const auto &match : matching_archetypes_) {
       const auto &chunks = get_chunks_for(match.archetype);
-      for (Chunk *chunk : chunks) {
-        if (!chunk->is_empty()) {
-          visitor(chunk, match);
+      const size_t num_chunks = chunks.size();
+
+      for (size_t i = 0; i < num_chunks; ++i) {
+        Chunk *chunk = chunks[i];
+        if (chunk->is_empty()) {
+          continue;
         }
+
+        // Lookahead prefetching: warm L1/L2 cache lines for the upcoming chunk
+        if (i + 1 < num_chunks) {
+          prefetch_next_chunk(chunks[i + 1], match);
+        }
+
+        visitor(chunk, match);
       }
     }
   }

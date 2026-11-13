@@ -82,6 +82,11 @@ add_executable(batch_lifecycle_tests tests/batch_lifecycle_tests.cpp)
 target_link_libraries(batch_lifecycle_tests PRIVATE arche::arche)
 add_test(NAME batch_lifecycle_tests COMMAND batch_lifecycle_tests)
 
+# Module 011 Tests: SIMD Tail-Padding, Prefetching & Hardware Allocators
+add_executable(simd_and_hardware_tests tests/simd_and_hardware_tests.cpp)
+target_link_libraries(simd_and_hardware_tests PRIVATE arche::arche)
+add_test(NAME simd_and_hardware_tests COMMAND simd_and_hardware_tests)
+
 # Custom Target: run all unit tests
 add_custom_target(run_tests
     COMMAND entity_tests
@@ -94,7 +99,8 @@ add_custom_target(run_tests
     COMMAND arche_tests
     COMMAND handles_and_snapshots_tests
     COMMAND batch_lifecycle_tests
-    DEPENDS entity_tests type_tests archetype_tests chunk_storage_tests structural_mutation_tests query_tests gpu_reflection_tests arche_tests handles_and_snapshots_tests batch_lifecycle_tests
+    COMMAND simd_and_hardware_tests
+    DEPENDS entity_tests type_tests archetype_tests chunk_storage_tests structural_mutation_tests query_tests gpu_reflection_tests arche_tests handles_and_snapshots_tests batch_lifecycle_tests simd_and_hardware_tests
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
     COMMENT "Executing all unit tests..."
 )
@@ -116,5 +122,6 @@ add_custom_target(fclean
         $<TARGET_FILE:arche_benchmarks>
         $<TARGET_FILE:handles_and_snapshots_tests>
         $<TARGET_FILE:batch_lifecycle_tests>
+        $<TARGET_FILE:simd_and_hardware_tests>
     COMMENT "Full clean: removing intermediate objects and binaries..."
 )
