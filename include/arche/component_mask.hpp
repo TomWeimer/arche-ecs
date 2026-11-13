@@ -1,6 +1,6 @@
 #pragma once
 
-#include "arche/type_id.hpp"
+#include "arche/type_registry.hpp"
 
 #include <bit>
 #include <cstddef>

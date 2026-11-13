@@ -6,7 +6,6 @@
 #include "arche/component_mask.hpp"
 #include "arche/entity.hpp"
 #include "arche/hardware.hpp"
-#include "arche/type_id.hpp"
 #include "arche/type_registry.hpp"
 
 // Memory Layout & Storage
@@ -16,11 +15,9 @@
 
 // Queries, Filters & Iteration
 #include "arche/query.hpp"
-#include "arche/query_filter.hpp"
 
 // Concurrency & Commands
 #include "arche/command_buffer.hpp"
-#include "arche/parallel_command_buffer.hpp"
 #include "arche/thread_pool.hpp"
 
 // Central World Facade
