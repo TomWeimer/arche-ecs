@@ -172,9 +172,9 @@ public:
     }
 ```
 
-### 2.4 Embedding `ResourceContainer` inside `arche::World`
+### 2.4 Embedding `ResourceContainer` and `Scheduler` inside `arche::World`
 
-To provide a single unified container for simulation state (matching Bevy and Flecs), `arche::World` directly embeds a `ResourceContainer` and exposes convenient forwarding methods:
+To provide a single unified container for simulation state (matching Bevy and Flecs), `arche::World` directly embeds both `ResourceContainer` and its default `Scheduler`. It exposes high-level facade methods for resources and plugins while still permitting external standalone schedulers:
 
 ```cpp
 class World {
@@ -209,8 +209,68 @@ public:
     [[nodiscard]] inline ResourceContainer& resources() noexcept { return resources_; }
     [[nodiscard]] inline const ResourceContainer& resources() const noexcept { return resources_; }
 
+    // --- Scheduler & Frame Execution ----------------------------------------
+
+    [[nodiscard]] inline Scheduler& scheduler() noexcept { return scheduler_; }
+    [[nodiscard]] inline const Scheduler& scheduler() const noexcept { return scheduler_; }
+
+    /// Advances tick counter and executes all scheduled batches across thread pool
+    inline void run_frame(ThreadPool& pool, float dt) {
+        tick();
+        scheduler_.run(*this, pool, dt);
+    }
+
+    // --- Plugin Installation API --------------------------------------------
+
+    /// 1. Stateless Plugin (Uses internal world scheduler)
+    template <Plugin P>
+    World& add_plugin() {
+        register_plugin_name<P>();
+        P plugin{};
+        plugin.build(*this, scheduler_);
+        return *this;
+    }
+
+    /// 2. Stateful / Configured Plugin Instance (Uses internal world scheduler)
+    template <Plugin P>
+    World& add_plugin(P&& plugin) {
+        register_plugin_name<std::decay_t<P>>();
+        plugin.build(*this, scheduler_);
+        return *this;
+    }
+
+    /// 3. Stateless Plugin with External Standalone Scheduler
+    template <Plugin P>
+    World& add_plugin(Scheduler& ext_scheduler) {
+        register_plugin_name<P>();
+        P plugin{};
+        plugin.build(*this, ext_scheduler);
+        return *this;
+    }
+
+    /// 4. Stateful Plugin Instance with External Standalone Scheduler
+    template <Plugin P>
+    World& add_plugin(P&& plugin, Scheduler& ext_scheduler) {
+        register_plugin_name<std::decay_t<P>>();
+        plugin.build(*this, ext_scheduler);
+        return *this;
+    }
+
 private:
+    template <typename P>
+    void register_plugin_name() {
+        const std::string_view p_name = P::name();
+        for (const auto& name : installed_plugins_) {
+            if (name == p_name) {
+                throw std::runtime_error("arche::World: Plugin '" + std::string(p_name) + "' is already installed.");
+            }
+        }
+        installed_plugins_.emplace_back(p_name);
+    }
+
     ResourceContainer resources_;
+    Scheduler scheduler_;
+    std::vector<std::string> installed_plugins_;
     // ... existing archetype chunk storage ...
 };
 ```
@@ -329,7 +389,9 @@ using SystemFunction = void(*)(SystemContext&);
 } // namespace arche
 ```
 
-### 4.2 Complete Scheduler Implementation Design
+### 4.2 The Plugin / Module Architecture & DAG Compiler
+
+To achieve complete encapsulation and eliminate header bloat in consumer applications, systems and resources are packaged into **Plugins**:
 
 ```cpp
 #pragma once
@@ -338,14 +400,28 @@ using SystemFunction = void(*)(SystemContext&);
 #include <vector>
 #include <functional>
 #include <memory>
+#include <stdexcept>
+#include <concepts>
 #include <arche/arche.hpp>
 
 namespace arche {
 
 enum class SystemScale : uint8_t {
-    Narrow,  ///< Run concurrently alongside other Narrow systems in inter-parallel batches
-    Wide,    ///< Heavy system granted exclusive thread pool access for chunk parallel_for
+    Narrow,    ///< Run concurrently alongside other Narrow systems in inter-parallel batches
+    Wide,      ///< Heavy system granted exclusive thread pool access for chunk parallel_for
     Sequential ///< Runs synchronously on main thread
+};
+
+class Scheduler;
+
+/// C++20 Concept defining a modular engine plugin with mandatory name() and build()
+template <typename P>
+concept Plugin = requires(P plugin, World& world, Scheduler& scheduler) {
+    // 1. Mandatory build entrypoint
+    { plugin.build(world, scheduler) } -> std::same_as<void>;
+
+    // 2. Mandatory unique plugin name for diagnostics and duplicate prevention
+    { P::name() } -> std::convertible_to<std::string_view>;
 };
 
 class Scheduler {
@@ -376,18 +452,24 @@ public:
         return *this;
     }
 
-    /// Compile the execution graph into flat, conflict-free parallel batches
-    void compile() {
+    /// Compile the execution graph and perform init-time validation
+    void compile(World& world) {
         if (!dirty_) return;
         batches_.clear();
 
         const size_t n = systems_.size();
         if (n == 0) return;
 
+        // 1. Init-time Validation: Verify all required resources exist in World
+        for (const auto& sys : systems_) {
+            // Check that every resource in read/write masks is registered in World
+            // If missing, throws a clear diagnostic exception before the first frame runs.
+        }
+
+        // 2. Greedy level-partitioning algorithm (Interleaving across all plugins)
         std::vector<bool> scheduled(n, false);
         size_t scheduled_count = 0;
 
-        // Greedy level-partitioning algorithm
         while (scheduled_count < n) {
             Batch current_batch;
             AccessDescriptor batch_access{};
@@ -428,7 +510,7 @@ public:
     /// Run one frame across arche::ThreadPool with zero mutexes
     void run(World& world, ThreadPool& pool, float dt) {
         if (dirty_) {
-            compile();
+            compile(world);
         }
 
         // Parallel CommandBuffer per worker thread for deferred mutations
@@ -470,37 +552,58 @@ private:
 
 ---
 
-## 5. End-to-End Consumer Integration Example
+## 5. End-to-End Consumer Integration Example: Modular Plugins
 
-Here is how a consumer simulation (physics, spatial indexing, movement) uses `ResourceContainer` and `Scheduler`:
+This example shows how consumer projects organize systems into self-contained **Plugins**. `main.cpp` contains **zero low-level component references** and reads like a clean architecture manifest:
 
 ```cpp
 #include <arche/arche.hpp>
 #include <iostream>
 
-// 1. Plain Old Data Components
-struct Position { float x, y, z; };
-struct Velocity { float vx, vy, vz; };
-struct Mass     { float value; };
+// =============================================================================
+// Module 1: Core Simulation Clock Plugin
+// =============================================================================
 
-// 2. World Resources (Global Singletons)
 struct SimulationClock {
     float total_time{0.0f};
     uint64_t frame_count{0};
 };
+
+void time_step_system(arche::SystemContext& ctx) {
+    auto& clock = ctx.world.resource<SimulationClock>();
+    clock.total_time += ctx.dt;
+    clock.frame_count++;
+}
+
+struct CoreClockPlugin {
+    static constexpr std::string_view name() noexcept { return "CoreClockPlugin"; }
+
+    void build(arche::World& world, arche::Scheduler& scheduler) const {
+        // CoreClockPlugin owns and initializes the clock
+        world.insert_resource<SimulationClock>();
+
+        scheduler.add_system(
+            "TimeStep",
+            arche::AccessBuilder{}.writes_resource<SimulationClock>().build(),
+            time_step_system,
+            arche::SystemScale::Narrow
+        );
+    }
+};
+
+// =============================================================================
+// Module 2: Physics & Flocking Simulation Plugin (Stateful Config)
+// =============================================================================
+
+struct Position { float x, y, z; };
+struct Velocity { float vx, vy, vz; };
+struct Mass     { float value; };
 
 struct GravityConfig {
     float gx{0.0f};
     float gy{-9.81f};
     float gz{0.0f};
 };
-
-// 3. Independent Systems
-void time_step_system(arche::SystemContext& ctx) {
-    auto& clock = ctx.world.resource<SimulationClock>();
-    clock.total_time += ctx.dt;
-    clock.frame_count++;
-}
 
 void gravity_system(arche::SystemContext& ctx) {
     const auto& gravity = ctx.world.resource<GravityConfig>();
@@ -526,51 +629,64 @@ void movement_system(arche::SystemContext& ctx) {
     });
 }
 
+struct PhysicsPlugin {
+    float custom_gravity_y{-9.81f};
+
+    static constexpr std::string_view name() noexcept { return "PhysicsPlugin"; }
+
+    void build(arche::World& world, arche::Scheduler& scheduler) const {
+        world.insert_resource<GravityConfig>(0.0f, custom_gravity_y, 0.0f);
+
+        scheduler
+            .add_system("Gravity", 
+                arche::AccessBuilder{}
+                    .reads_resource<GravityConfig>()
+                    .reads<Mass>()
+                    .writes<Velocity>()
+                    .build(), 
+                gravity_system,
+                arche::SystemScale::Wide)
+            .add_system("Movement", 
+                arche::AccessBuilder{}
+                    .reads<Velocity>()
+                    .writes<Position>()
+                    .build(), 
+                movement_system,
+                arche::SystemScale::Wide);
+    }
+};
+
+// =============================================================================
+// Application Entrypoint: Ultra-Clean Composition
+// =============================================================================
+
 int main() {
     arche::World world;
     arche::ThreadPool pool(std::thread::hardware_concurrency());
-    arche::Scheduler scheduler;
 
-    // Register World Resources directly on World
-    world.insert_resource<SimulationClock>();
-    world.insert_resource<GravityConfig>(0.0f, -9.81f, 0.0f);
+    // 1. Stateless Plugin Installation (Uses world's embedded scheduler)
+    world.add_plugin<CoreClockPlugin>();
 
-    // Spawn 100,000 Entities
+    // 2. Stateful Plugin Installation with Custom Settings
+    world.add_plugin(PhysicsPlugin{.custom_gravity_y = -19.62f});
+
+    // (Optional: external standalone scheduler overload is also supported)
+    // arche::Scheduler custom_scheduler;
+    // world.add_plugin<CoreClockPlugin>(custom_scheduler);
+
+    // 3. Spawn entities
     world.spawn_batch(100'000, Position{0, 0, 0}, Velocity{0, 0, 0}, Mass{1.0f});
 
-    // Register Systems with Declarative Access
-    scheduler
-        .add_system("TimeStep", 
-            arche::AccessBuilder{}.writes_resource<SimulationClock>().build(), 
-            time_step_system,
-            arche::SystemScale::Narrow)
-        .add_system("Gravity", 
-            arche::AccessBuilder{}
-                .reads_resource<GravityConfig>()
-                .reads<Mass>()
-                .writes<Velocity>()
-                .build(), 
-            gravity_system,
-            arche::SystemScale::Wide)
-        .add_system("Movement", 
-            arche::AccessBuilder{}
-                .reads<Velocity>()
-                .writes<Position>()
-                .build(), 
-            movement_system,
-            arche::SystemScale::Wide);
+    // 4. Compile DAG (Interleaves systems across plugins in optimal parallel order)
+    world.scheduler().compile(world);
 
-    // Compile DAG (Batch 0: TimeStep; Batch 1: Gravity; Batch 2: Movement)
-    scheduler.compile();
-
-    // 120 Hz Simulation Frame
+    // 5. 120 Hz Simulation Frame Loop
     const float dt = 1.0f / 120.0f;
     for (int frame = 0; frame < 600; ++frame) {
-        world.tick();
-        scheduler.run(world, pool, dt);
+        world.run_frame(pool, dt);
     }
 
-    std::cout << "Simulation completed smoothly for " 
+    std::cout << "Simulation completed successfully for " 
               << world.resource<SimulationClock>().frame_count << " frames.\n";
     return 0;
 }

@@ -6,6 +6,7 @@
 #include "arche/component_mask.hpp"
 #include "arche/entity.hpp"
 #include "arche/hardware.hpp"
+#include "arche/resource.hpp"
 #include "arche/type_registry.hpp"
 
 // Memory Layout & Storage
@@ -22,6 +23,11 @@
 
 // Central World Facade
 #include "arche/world.hpp"
+
+// Scheduling, Access & Plugins
+#include "arche/access.hpp"
+#include "arche/plugin.hpp"
+#include "arche/scheduler.hpp"
 
 // IWYU pragma: end_exports
 

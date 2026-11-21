@@ -15,6 +15,7 @@ add_library(arche STATIC
     src/chunk.cpp
     src/world.cpp
     src/command_buffer.cpp
+    src/scheduler.cpp
 )
 
 target_include_directories(arche PUBLIC
@@ -122,6 +123,26 @@ add_executable(public_api_tests tests/public_api_tests.cpp)
 target_link_libraries(public_api_tests PRIVATE arche::arche)
 add_test(NAME public_api_tests COMMAND public_api_tests)
 
+# Module 019 Tests: ResourceContainer & Type-Safe World Singletons
+add_executable(resource_tests tests/resource_tests.cpp)
+target_link_libraries(resource_tests PRIVATE arche::arche)
+add_test(NAME resource_tests COMMAND resource_tests)
+
+# Module 020 Tests: Declarative Access Descriptors & Conflict Detection
+add_executable(access_tests tests/access_tests.cpp)
+target_link_libraries(access_tests PRIVATE arche::arche)
+add_test(NAME access_tests COMMAND access_tests)
+
+# Module 021 Tests: Scheduler DAG & Parallel Execution
+add_executable(scheduler_tests tests/scheduler_tests.cpp)
+target_link_libraries(scheduler_tests PRIVATE arche::arche)
+add_test(NAME scheduler_tests COMMAND scheduler_tests)
+
+# Module 022 Tests: Plugin Concept & World Integration
+add_executable(plugin_tests tests/plugin_tests.cpp)
+target_link_libraries(plugin_tests PRIVATE arche::arche)
+add_test(NAME plugin_tests COMMAND plugin_tests)
+
 # Module 018 Example: Colony 120 Hz Swarm Simulation Loop
 add_executable(colony_simulation_loop examples/colony_simulation_loop.cpp)
 target_link_libraries(colony_simulation_loop PRIVATE arche::arche)
@@ -146,7 +167,11 @@ add_custom_target(run_tests
     COMMAND multithreaded_query_tests
     COMMAND stage2_validation_tests
     COMMAND public_api_tests
-    DEPENDS entity_tests type_tests archetype_tests chunk_storage_tests structural_mutation_tests query_tests gpu_reflection_tests arche_tests handles_and_snapshots_tests batch_lifecycle_tests simd_and_hardware_tests dirty_ticks_tests query_caching_tests archetype_permutation_tests double_buffered_tests multithreaded_query_tests stage2_validation_tests public_api_tests
+    COMMAND resource_tests
+    COMMAND access_tests
+    COMMAND scheduler_tests
+    COMMAND plugin_tests
+    DEPENDS entity_tests type_tests archetype_tests chunk_storage_tests structural_mutation_tests query_tests gpu_reflection_tests arche_tests handles_and_snapshots_tests batch_lifecycle_tests simd_and_hardware_tests dirty_ticks_tests query_caching_tests archetype_permutation_tests double_buffered_tests multithreaded_query_tests stage2_validation_tests public_api_tests resource_tests access_tests scheduler_tests plugin_tests
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
     COMMENT "Executing all unit tests..."
 )
@@ -176,6 +201,10 @@ add_custom_target(fclean
         $<TARGET_FILE:multithreaded_query_tests>
         $<TARGET_FILE:stage2_validation_tests>
         $<TARGET_FILE:public_api_tests>
+        $<TARGET_FILE:resource_tests>
+        $<TARGET_FILE:access_tests>
+        $<TARGET_FILE:scheduler_tests>
+        $<TARGET_FILE:plugin_tests>
         $<TARGET_FILE:colony_simulation_loop>
     COMMENT "Full clean: removing intermediate objects and binaries..."
 )

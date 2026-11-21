@@ -1,4 +1,5 @@
 #include "arche/world.hpp"
+#include "arche/command_buffer.hpp"
 #include "arche/hardware.hpp"
 
 #include <algorithm>
@@ -634,10 +635,7 @@ void permute_entities_and_sync_slots(
  * @param target_indices Permutation mapping of size equal to
  * arch->entity_count().
  */
-void World::permute(
-    Archetype *arch,
-    std::span<const uint32_t> target_indices
-) {
+void World::permute(Archetype *arch, std::span<const uint32_t> target_indices) {
   // 1. Validation & Early Out
   assert(arch != nullptr);
   const size_t total = arch->entity_count();

@@ -232,6 +232,15 @@ public:
     return (id < slots_.size()) && (slots_[id].ptr != nullptr);
   }
 
+  /**
+   * @brief Checks if a resource with the specified runtime ResourceID is present.
+   * @param id The runtime ResourceID.
+   * @return true If the slot exists and holds an allocated resource.
+   */
+  [[nodiscard]] inline bool has(ResourceID id) const noexcept {
+    return (id < slots_.size()) && (slots_[id].ptr != nullptr);
+  }
+
   // --- Resource Insertion & Deletion -----------------------------------------
 
   /**

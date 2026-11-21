@@ -7,9 +7,11 @@
 #include "arche/detail/slot_map.hpp"
 #include "arche/entity.hpp"
 #include "arche/gpu_reflection.hpp"
+#include "arche/plugin.hpp"
+#include "arche/resource.hpp"
+#include "arche/scheduler.hpp"
 #include "arche/thread_pool.hpp"
 #include "arche/type_registry.hpp"
-
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
@@ -82,6 +84,17 @@ private:
   /// Assigns unique IDs and stores memory layout/lifecycle functions for
   /// component types.
   TypeRegistry registry_;
+
+  /// Manage the different resources, each resource possess a ResourceID. The
+  /// pool of ResourceIDs and ComponentIDs are disjoint.
+  ResourceContainer resources_;
+
+  /// Shedules the order of execution of the systems using their scale and read,
+  /// write dependencies
+  Scheduler scheduler_;
+
+  /// Name of installed plugins
+  std::vector<std::string> installed_plugins_;
 
   /// Tracks living entity IDs, generation numbers, and their exact storage
   /// location (archetype, chunk, row).
@@ -160,10 +173,7 @@ public:
    * @param target_indices Span of size N where target_indices[i] indicates the
    * source index whose entity data should be placed at destination index i.
    */
-  void permute(
-      Archetype *arch,
-      std::span<const uint32_t> target_indices
-  );
+  void permute(Archetype *arch, std::span<const uint32_t> target_indices);
 
   /**
    * @brief Sorts all entities in an archetype in-place based on a component
@@ -292,7 +302,7 @@ public:
    * generational handles.
    */
   template <typename... Comps>
-  requires (!(std::is_same_v<std::decay_t<Comps>, std::span<Entity>> || ...))
+    requires(!(std::is_same_v<std::decay_t<Comps>, std::span<Entity>> || ...))
   std::vector<Entity> spawn_batch(size_t count, const Comps &...components);
 
   /**
@@ -331,8 +341,7 @@ public:
    * @param entity Entity handle to inspect.
    * @return true if the entity has the component; false otherwise.
    */
-  template <typename T>
-  [[nodiscard]] bool has(Entity entity) const noexcept {
+  template <typename T> [[nodiscard]] bool has(Entity entity) const noexcept {
     const EntityRecord *record = slot_map_.find_record(entity);
     if (!record || !record->archetype) {
       return false;
@@ -489,8 +498,7 @@ public:
    * @tparam T Component type that was modified.
    * @param entity Entity whose component was modified.
    */
-  template <typename T>
-  inline void mark_dirty(Entity entity) noexcept {
+  template <typename T> inline void mark_dirty(Entity entity) noexcept {
     const EntityRecord *rec = slot_map_.find_record(entity);
     if (rec && rec->chunk) {
       mark_dirty<T>(rec->chunk);
@@ -771,6 +779,87 @@ public:
    */
   inline void commit(CommandBuffer &cmd_buffer);
 
+  // --- Resources Management --------------------------------------------------
+
+  template <typename T, typename... Args>
+  inline T &insert_resource(Args &&...args) {
+    return resources_.insert<T>(std::forward<Args>(args)...);
+  }
+
+  template <typename T> [[nodiscard]] inline T &resource() {
+    return resources_.get<T>();
+  }
+
+  template <typename T> [[nodiscard]] inline const T &resource() const {
+    return resources_.get<T>();
+  }
+
+  template <typename T>
+  [[nodiscard]] inline bool has_resource() const noexcept {
+    return resources_.has<T>();
+  }
+
+  [[nodiscard]] inline bool has_resource(ResourceID id) const noexcept {
+    return resources_.has(id);
+  }
+
+  template <typename T> inline bool remove_resource() {
+    return resources_.remove<T>();
+  }
+
+  [[nodiscard]] inline ResourceContainer &resources() noexcept {
+    return resources_;
+  }
+  [[nodiscard]] inline const ResourceContainer &resources() const noexcept {
+    return resources_;
+  }
+
+  // --- Scheduler & Frame Execution ----------------------------------------
+
+  [[nodiscard]] inline Scheduler &scheduler() noexcept { return scheduler_; }
+  [[nodiscard]] inline const Scheduler &scheduler() const noexcept {
+    return scheduler_;
+  }
+
+  /// Advances tick counter and executes all scheduled batches across thread
+  /// pool
+  inline void run_frame(ThreadPool &pool, float dt) {
+    tick();
+    scheduler_.run(*this, pool, dt);
+  }
+
+  // --- Plugin Installation API --------------------------------------------
+
+  /// 1. Stateless Plugin (Uses internal world scheduler)
+  template <Plugin P> World &add_plugin() {
+    register_plugin_name<P>();
+    P plugin{};
+    plugin.build(*this, scheduler_);
+    return *this;
+  }
+
+  /// 2. Stateful / Configured Plugin Instance (Uses internal world scheduler)
+  template <Plugin P> World &add_plugin(P &&plugin) {
+    register_plugin_name<std::decay_t<P>>();
+    plugin.build(*this, scheduler_);
+    return *this;
+  }
+
+  /// 3. Stateless Plugin with External Standalone Scheduler
+  template <Plugin P> World &add_plugin(Scheduler &ext_scheduler) {
+    register_plugin_name<P>();
+    P plugin{};
+    plugin.build(*this, ext_scheduler);
+    return *this;
+  }
+
+  /// 4. Stateful Plugin Instance with External Standalone Scheduler
+  template <Plugin P> World &add_plugin(P &&plugin, Scheduler &ext_scheduler) {
+    register_plugin_name<std::decay_t<P>>();
+    plugin.build(*this, ext_scheduler);
+    return *this;
+  }
+
   // --- Triple-Buffered GPU Ring Streaming & Multi-Draw Indirect --------------
 
   /**
@@ -1010,6 +1099,22 @@ private:
 
   /// Applies a deferred component removal command during playback.
   void apply_command_remove_component(Entity entity, TypeID tid);
+
+  // --- Plugin helper ---------------------------------------------------------
+
+  /// Add a plugin name and throw if it does already exist
+  template <typename P> void register_plugin_name() {
+    const std::string_view p_name = P::name();
+    for (const auto &name : installed_plugins_) {
+      if (name == p_name) {
+        throw std::runtime_error(
+            "arche::World: Plugin '" + std::string(p_name) +
+            "' is already installed."
+        );
+      }
+    }
+    installed_plugins_.emplace_back(p_name);
+  }
 };
 
 // =============================================================================
@@ -1064,7 +1169,7 @@ void World::populate_chunks_batch(
 }
 
 template <typename... Comps>
-requires (!(std::is_same_v<std::decay_t<Comps>, std::span<Entity>> || ...))
+  requires(!(std::is_same_v<std::decay_t<Comps>, std::span<Entity>> || ...))
 std::vector<Entity> World::spawn_batch(
     size_t count,
     const Comps &...components
@@ -1156,7 +1261,8 @@ void World::sort(Archetype *arch, Compare &&comp) {
   );
 
   // 1. Gather component keys and their original global indices contiguously.
-  // This avoids 20+ million expensive integer divisions and modulos during std::sort.
+  // This avoids 20+ million expensive integer divisions and modulos during
+  // std::sort.
   struct KeyIndex {
     Component key;
     uint32_t index;
@@ -1175,11 +1281,12 @@ void World::sort(Archetype *arch, Compare &&comp) {
     }
   }
 
-  // 2. Sort the contiguous key-index array in CPU cache with zero chunk indirection
+  // 2. Sort the contiguous key-index array in CPU cache with zero chunk
+  // indirection
   std::sort(
-      keys.begin(),
-      keys.end(),
-      [&](const KeyIndex &a, const KeyIndex &b) { return comp(a.key, b.key); }
+      keys.begin(), keys.end(), [&](const KeyIndex &a, const KeyIndex &b) {
+        return comp(a.key, b.key);
+      }
   );
 
   // 3. Extract the permutation target indices
@@ -1350,10 +1457,7 @@ inline size_t World::indirect_draw(
 // Instant Snapshot & Rollback Implementation
 // =============================================================================
 
-inline size_t World::save_snapshot(
-    void *destination_buffer,
-    size_t max_bytes
-) {
+inline size_t World::save_snapshot(void *destination_buffer, size_t max_bytes) {
   assert(
       destination_buffer != nullptr && "Snapshot destination cannot be null"
   );
