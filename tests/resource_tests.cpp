@@ -317,36 +317,36 @@ void test_world_resource_facade() {
 
   arche::World world;
 
-  assert(!world.has_resource<SimulationClock>());
-  assert(!world.has_resource<GravityConfig>());
+  assert(!world.resources.has<SimulationClock>());
+  assert(!world.resources.has<GravityConfig>());
 
   // In-place construction on World
-  world.insert_resource<SimulationClock>(0.008f, 500ULL);
-  world.insert_resource<GravityConfig>(0.0f, -9.81f, 0.0f);
+  world.resources.insert<SimulationClock>(0.008f, 500ULL);
+  world.resources.insert<GravityConfig>(0.0f, -9.81f, 0.0f);
 
-  assert(world.has_resource<SimulationClock>());
-  assert(world.has_resource<GravityConfig>());
+  assert(world.resources.has<SimulationClock>());
+  assert(world.resources.has<GravityConfig>());
 
   // Mutable access through World
-  auto &clock = world.resource<SimulationClock>();
+  auto &clock = world.resources.get<SimulationClock>();
   assert(clock.dt == 0.008f);
   assert(clock.frame == 500ULL);
   clock.frame = 501ULL;
-  assert(world.resource<SimulationClock>().frame == 501ULL);
+  assert(world.resources.get<SimulationClock>().frame == 501ULL);
 
   // Const access through const World&
   const arche::World &cworld = world;
-  assert(cworld.has_resource<GravityConfig>());
-  assert(cworld.resource<GravityConfig>().y == -9.81f);
+  assert(cworld.resources.has<GravityConfig>());
+  assert(cworld.resources.get<GravityConfig>().y == -9.81f);
 
-  // Direct ResourceContainer reference access
-  assert(world.resources().has<SimulationClock>());
-  assert(cworld.resources().has<GravityConfig>());
+  // Const and mutable resource checks
+  assert(world.resources.has<SimulationClock>());
+  assert(cworld.resources.has<GravityConfig>());
 
   // Removal through World
-  assert(world.remove_resource<SimulationClock>());
-  assert(!world.has_resource<SimulationClock>());
-  assert(!world.remove_resource<SimulationClock>());
+  assert(world.resources.remove<SimulationClock>());
+  assert(!world.resources.has<SimulationClock>());
+  assert(!world.resources.remove<SimulationClock>());
 
   std::cout << "PASSED\n";
 }

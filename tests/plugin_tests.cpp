@@ -45,13 +45,13 @@ struct ValidClockPlugin {
   static constexpr std::string_view name() noexcept { return "ValidClockPlugin"; }
 
   void build(World &world, Scheduler &scheduler) const {
-    world.insert_resource<SimulationClock>();
+    world.resources.insert<SimulationClock>();
 
     scheduler.add_system(
         "ClockTick",
         Access{}.writes_resource<SimulationClock>().build(),
         [](SystemContext &ctx) {
-          auto &clock = ctx.world.resource<SimulationClock>();
+          auto &clock = ctx.world.resources.get<SimulationClock>();
           clock.total_time += 0.016f;
           clock.frame_count++;
         },
@@ -67,13 +67,13 @@ struct ConfigurablePhysicsPlugin {
   static constexpr std::string_view name() noexcept { return "ConfigurablePhysicsPlugin"; }
 
   void build(World &world, Scheduler &scheduler) const {
-    world.insert_resource<PhysicsSettings>(custom_gravity);
+    world.resources.insert<PhysicsSettings>(custom_gravity);
 
     scheduler.add_system(
         "ApplyGravity",
         Access{}.reads_resource<PhysicsSettings>().writes<Velocity>().build(),
         [](SystemContext &ctx) {
-          const auto &settings = ctx.world.resource<PhysicsSettings>();
+          const auto &settings = ctx.world.resources.get<PhysicsSettings>();
           (void)settings;
         },
         SystemScale::Wide
@@ -138,18 +138,18 @@ void test_stateless_plugin_installation() {
   ThreadPool pool(2);
 
   // Install via type template parameter
-  world.add_plugin<ValidClockPlugin>();
+  world.systems.add_plugin<ValidClockPlugin>();
 
   // Resource was initialized
-  assert(world.has_resource<SimulationClock>());
-  assert(world.resource<SimulationClock>().frame_count == 0);
+  assert(world.resources.has<SimulationClock>());
+  assert(world.resources.get<SimulationClock>().frame_count == 0);
 
   // Compile and run a frame
-  world.scheduler().compile(world);
-  world.run_frame(pool, 0.016f);
+  world.systems.compile();
+  world.systems.run(pool);
 
-  assert(world.resource<SimulationClock>().frame_count == 1);
-  assert(world.resource<SimulationClock>().total_time > 0.0f);
+  assert(world.resources.get<SimulationClock>().frame_count == 1);
+  assert(world.resources.get<SimulationClock>().total_time > 0.0f);
 
   std::cout << "PASSED\n";
 }
@@ -165,14 +165,14 @@ void test_stateful_plugin_installation() {
   ThreadPool pool(2);
 
   // Install configured instance
-  world.add_plugin(ConfigurablePhysicsPlugin{.custom_gravity = -19.62f});
+  world.systems.add_plugin(ConfigurablePhysicsPlugin{.custom_gravity = -19.62f});
 
   // Resource was inserted with custom parameter
-  assert(world.has_resource<PhysicsSettings>());
-  assert(world.resource<PhysicsSettings>().gravity_y == -19.62f);
+  assert(world.resources.has<PhysicsSettings>());
+  assert(world.resources.get<PhysicsSettings>().gravity_y == -19.62f);
 
-  world.scheduler().compile(world);
-  world.run_frame(pool, 0.016f);
+  world.systems.compile();
+  world.systems.run(pool);
 
   std::cout << "PASSED\n";
 }
@@ -189,18 +189,18 @@ void test_external_scheduler_overloads() {
   Scheduler ext_scheduler;
 
   // 1. Stateless plugin targeting external scheduler
-  world.add_plugin<ValidClockPlugin>(ext_scheduler);
-  assert(world.has_resource<SimulationClock>());
+  world.systems.add_plugin<ValidClockPlugin>(ext_scheduler);
+  assert(world.resources.has<SimulationClock>());
 
   // 2. Stateful plugin targeting external scheduler
-  world.add_plugin(ConfigurablePhysicsPlugin{.custom_gravity = -25.0f}, ext_scheduler);
-  assert(world.resource<PhysicsSettings>().gravity_y == -25.0f);
+  world.systems.add_plugin(ConfigurablePhysicsPlugin{.custom_gravity = -25.0f}, ext_scheduler);
+  assert(world.resources.get<PhysicsSettings>().gravity_y == -25.0f);
 
   // Run via external scheduler
   ext_scheduler.compile(world);
-  ext_scheduler.run(world, pool, 0.016f);
+  ext_scheduler.run(world, pool);
 
-  assert(world.resource<SimulationClock>().frame_count == 1);
+  assert(world.resources.get<SimulationClock>().frame_count == 1);
 
   std::cout << "PASSED\n";
 }
@@ -215,29 +215,29 @@ void test_duplicate_plugin_prevention() {
   World world;
 
   // First installation succeeds
-  world.add_plugin<ValidClockPlugin>();
+  world.systems.add_plugin<ValidClockPlugin>();
 
   // Second installation of identical plugin must throw std::runtime_error
   bool threw = false;
   try {
-    world.add_plugin<ValidClockPlugin>();
+    world.systems.add_plugin<ValidClockPlugin>();
   } catch (const std::runtime_error &e) {
     threw = true;
   }
   assert(threw);
 
   // Second installation of stateful plugin with duplicate name throws
-  world.add_plugin(ConfigurablePhysicsPlugin{});
+  world.systems.add_plugin(ConfigurablePhysicsPlugin{});
   threw = false;
   try {
-    world.add_plugin(ConfigurablePhysicsPlugin{.custom_gravity = -5.0f});
+    world.systems.add_plugin(ConfigurablePhysicsPlugin{.custom_gravity = -5.0f});
   } catch (const std::runtime_error &e) {
     threw = true;
   }
   assert(threw);
 
   // Installing a different plugin succeeds
-  world.add_plugin<RenderPlugin>();
+  world.systems.add_plugin<RenderPlugin>();
 
   std::cout << "PASSED\n";
 }
@@ -252,19 +252,19 @@ void test_world_run_frame_advances_tick() {
   World world;
   ThreadPool pool(2);
 
-  world.add_plugin<ValidClockPlugin>();
-  world.scheduler().compile(world);
+  world.systems.add_plugin<ValidClockPlugin>();
+  world.systems.compile();
 
-  const uint32_t initial_tick = world.current_tick();
-  assert(initial_tick >= 1);
+  const uint32_t initial_version = world.version();
+  assert(initial_version >= 1);
 
-  world.run_frame(pool, 0.016f);
-  assert(world.current_tick() == initial_tick + 1);
+  world.systems.run(pool);
+  assert(world.version() == initial_version + 1);
 
-  world.run_frame(pool, 0.016f);
-  assert(world.current_tick() == initial_tick + 2);
+  world.systems.run(pool);
+  assert(world.version() == initial_version + 2);
 
-  assert(world.resource<SimulationClock>().frame_count == 2);
+  assert(world.resources.get<SimulationClock>().frame_count == 2);
 
   std::cout << "PASSED\n";
 }

@@ -1,4 +1,5 @@
 #include "arche/arche.hpp"
+#include "arche/world_access.hpp"
 
 #include <cassert>
 #include <chrono>
@@ -32,35 +33,49 @@ struct Velocity {
 // =============================================================================
 
 /**
- * @brief Validates world tick advancement and chunk column version stamping.
+ * @brief Validates world tick advancement, SystemContext::tick(), and automatic column version stamping.
  */
 void test_world_ticking_and_stamping() {
   std::cout << "[Test 1/4] Monotonic World Ticking & Version Stamping... ";
   World world;
 
-  assert(world.current_tick() == 1);
-  uint32_t t2 = world.tick();
-  assert(t2 == 2);
-  assert(world.current_tick() == 2);
+  assert(world.version() == 1);
 
-  // Spawning an entity at tick 2 stamps chunk structure and columns with tick 2
+  // Spawning an entity at version 1 stamps chunk structure and columns with version 1
   Entity e = world.spawn(Position{1.0f, 2.0f}, Velocity{3.0f, 4.0f});
-  assert(world.is_valid(e));
+  assert(world.entities.contains(e));
 
-  // Advance tick to 5 and mark Position dirty
-  world.tick(); // 3
-  world.tick(); // 4
-  world.tick(); // 5
-  world.mark_dirty<Position>(e);
+  // Register a system that declares write access to Position
+  uint32_t observed_tick = 0;
+  world.systems.add_system(
+      "PositionMutator",
+      arche::Access{}.writes<Position>().build(),
+      [&](arche::SystemContext &ctx) {
+        observed_tick = ctx.tick();
+        assert(ctx.current_tick() == ctx.tick());
+        assert(ctx.version() == ctx.tick());
+      }
+  );
 
-  // Querying with Mutated<Position>{4} should match the chunk
+  // Frame 1: run_systems() advances version to 2 and auto-stamps Position
+  world.systems.run();
+  assert(world.version() == 2);
+  assert(observed_tick == 2);
+
+  // Frames 2, 3, 4: advances version to 5 and auto-stamps Position
+  world.systems.run(); // 3
+  world.systems.run(); // 4
+  world.systems.run(); // 5
+  assert(world.version() == 5);
+  assert(observed_tick == 5);
+
+  // Querying with Mutated<Position>{4} should match the chunk (stamped at 5 > 4)
   size_t matches = 0;
   world.query<Position>(Mutated<Position>{4})
       .for_each_chunk([&](uint32_t count, Position *) { matches += count; });
   assert(matches == 1);
 
-  // Querying with Mutated<Position>{5} should NOT match (modified at 5, not >
-  // 5)
+  // Querying with Mutated<Position>{5} should NOT match (modified at 5, not > 5)
   matches = 0;
   world.query<Position>(Mutated<Position>{5})
       .for_each_chunk([&](uint32_t count, Position *) { matches += count; });
@@ -83,19 +98,18 @@ void test_skip_dormant_chunks() {
 
   // Create 50,000 entities across ~30-50 chunks at tick 1
   constexpr size_t COUNT = 50'000;
-  std::vector<Entity> entities = world.spawn_batch(
-      COUNT, Position{0.0f, 0.0f}, Velocity{1.0f, 1.0f}
+  std::vector<Entity> entities = world.spawn(
+      {.count = COUNT}, Position{0.0f, 0.0f}, Velocity{1.0f, 1.0f}
   );
 
-  // Advance simulation to tick 100
+  // Advance simulation to version 100
   for (int i = 0; i < 99; ++i) {
-    world.tick();
+    world.systems.run();
   }
-  assert(world.current_tick() == 100);
+  assert(world.version() == 100);
 
-  // Mutate ONLY the first entity at tick 100
-  world.get<Position>(entities[0]).x = 999.0f;
-  world.mark_dirty<Position>(entities[0]);
+  // Mutate ONLY the first entity's chunk at tick 100 via get_mut (automatically stamps column version!)
+  world.get_mut<Position>(entities[0]).x = 999.0f;
 
   // Query entities where Position mutated since tick 50
   auto start = std::chrono::high_resolution_clock::now();
@@ -133,13 +147,13 @@ void test_added_filter() {
   World world;
 
   // Spawn initial entities at tick 1
-  world.spawn_batch(1000, Position{0.0f, 0.0f});
+  world.spawn({.count = 1000}, Position{0.0f, 0.0f});
 
-  // Advance tick to 10
+  // Advance version to 10
   for (int i = 0; i < 9; ++i) {
-    world.tick();
+    world.systems.run();
   }
-  assert(world.current_tick() == 10);
+  assert(world.version() == 10);
 
   // Querying Added{5} matches 0 entities because nothing spawned after tick 5
   size_t count = 0;
@@ -175,9 +189,9 @@ void test_tick_wraparound_protection() {
 
   // Manually advance to wrap-around edge
   for (int i = 0; i < 5; ++i) {
-    world.tick();
+    world.systems.run();
   }
-  assert(world.current_tick() > 0);
+  assert(world.version() > 0);
 
   std::cout << "PASSED\n";
 }

@@ -1,5 +1,5 @@
 #include "arche/arche.hpp"
-#include "arche/detail/slot_map.hpp"
+#include "arche/entity/slot_map.hpp"
 
 #include <cassert>
 #include <chrono>
@@ -145,7 +145,7 @@ void test_world_instant_snapshot_and_rollback() {
   // 2. Take raw memory snapshot
   std::vector<uint8_t> snapshot_buffer(64 * 1024 * 1024); // 64 MB buffer
   auto start = std::chrono::high_resolution_clock::now();
-  size_t bytes_written = world.save_snapshot(
+  size_t bytes_written = world.snapshots.save(
       snapshot_buffer.data(), snapshot_buffer.size()
   );
   auto end = std::chrono::high_resolution_clock::now();
@@ -158,18 +158,18 @@ void test_world_instant_snapshot_and_rollback() {
     world.despawn(initial_entities[i]);
   }
   for (int i = 5000; i < ENTITY_COUNT; ++i) {
-    world.get<Position>(initial_entities[i]).x = -999.0f;
+    world.get_mut<Position>(initial_entities[i]).x = -999.0f;
   }
 
   // 4. Instant rollback from snapshot
   start = std::chrono::high_resolution_clock::now();
-  world.load_snapshot(snapshot_buffer.data(), bytes_written);
+  world.snapshots.load(snapshot_buffer.data(), bytes_written);
   end = std::chrono::high_resolution_clock::now();
   std::chrono::duration<double, std::milli> restore_time = end - start;
 
   // 5. Verify 100% bit-exact restoration of components and handle validities
   for (int i = 0; i < ENTITY_COUNT; ++i) {
-    assert(world.is_valid(initial_entities[i]));
+    assert(world.entities.contains(initial_entities[i]));
     const auto &pos = world.get<Position>(initial_entities[i]);
     assert(pos.x == static_cast<float>(i));
     assert(pos.y == static_cast<float>(i * 2));

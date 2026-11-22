@@ -47,7 +47,7 @@ struct TagBurning {
  * column byte offsets.
  *
  * This test guarantees:
- * 1. Newly created entities are reported alive by `world.is_alive()`.
+ * 1. Newly created entities are reported alive by `world.entities.contains()`.
  * 2. `has_component<T>()` returns true for initial components and false for
  * unattached components.
  * 3. Initial values are faithfully stored and direct in-place mutations persist
@@ -63,15 +63,15 @@ void test_spawning_and_reading() {
   );
 
   // 2. Verify handle validity and component presence
-  assert(world.is_alive(e1));
-  assert(world.is_valid(e1));
+  assert(world.entities.contains(e1));
+  assert(world.entities.contains(e1));
   assert(world.has<Position>(e1));
   assert(world.has<Velocity>(e1));
   assert(!world.has<TagBurning>(e1));
 
-  // 3. Verify retrieved values match initial values
-  Position &pos = world.get<Position>(e1);
-  Velocity &vel = world.get<Velocity>(e1);
+  // 3. Verify retrieved values match initial values and support mutation
+  Position &pos = world.get_mut<Position>(e1);
+  Velocity &vel = world.get_mut<Velocity>(e1);
   assert(pos.x == 10.0f && pos.y == 20.0f);
   assert(vel.vx == 1.0f && vel.vy == -2.0f);
 
@@ -120,7 +120,7 @@ void test_cross_archetype_migration() {
   world.add(e, TagBurning{25.0f});
 
   // 3. Verify entity state in destination archetype
-  assert(world.is_alive(e));
+  assert(world.entities.contains(e));
   assert(world.has<Position>(e));
   assert(world.has<TagBurning>(e));
   assert(world.get<Position>(e).x == 5.0f);
@@ -173,12 +173,12 @@ void test_swap_and_pop_cascading_destruction() {
   // 2. Destroy middle entity: list[3] (triggers swap with list[9])
   Entity e3 = list[3];
   assert(world.despawn(e3));
-  assert(!world.is_alive(e3));
+  assert(!world.entities.contains(e3));
 
   // 3. Destroy beginning entity: list[0] (triggers swap with list[8])
   Entity e0 = list[0];
   assert(world.despawn(e0));
-  assert(!world.is_alive(e0));
+  assert(!world.entities.contains(e0));
 
   // 4. All surviving entities must remain alive and retain their exact
   // coordinate values
@@ -186,7 +186,7 @@ void test_swap_and_pop_cascading_destruction() {
     if (i == 3) {
       continue;
     }
-    assert(world.is_alive(list[i]));
+    assert(world.entities.contains(list[i]));
     assert(world.get<Position>(list[i]).x == static_cast<float>(i));
   }
 
@@ -233,8 +233,8 @@ void test_deferred_command_buffer() {
   }
 
   // 3. Before playback: all entities must remain untouched and alive
-  assert(world.is_alive(entities[0]));
-  assert(world.is_alive(entities[2]));
+  assert(world.entities.contains(entities[0]));
+  assert(world.entities.contains(entities[2]));
 
   // 4. Flush commands at synchronization boundary
   cmd.commit(world);
@@ -242,11 +242,11 @@ void test_deferred_command_buffer() {
 
   // 5. After playback: even entities must be destroyed, odd entities must
   // remain alive
-  assert(!world.is_alive(entities[0]));
-  assert(world.is_alive(entities[1]));
-  assert(!world.is_alive(entities[2]));
-  assert(world.is_alive(entities[3]));
-  assert(!world.is_alive(entities[4]));
+  assert(!world.entities.contains(entities[0]));
+  assert(world.entities.contains(entities[1]));
+  assert(!world.entities.contains(entities[2]));
+  assert(world.entities.contains(entities[3]));
+  assert(!world.entities.contains(entities[4]));
 
   std::cout << "PASSED\n";
 }

@@ -1,4 +1,5 @@
 #include "arche/arche.hpp"
+#include "arche/world_access.hpp"
 #include "test_components.hpp"
 
 #include <cassert>
@@ -6,12 +7,20 @@
 #include <iostream>
 #include <vector>
 
+namespace arche {
+struct WorldTestAccessor {
+  static void permute(World &w, arche::Archetype *arch, std::span<const uint32_t> indices) {
+    arche::permute(w, arch, indices);
+  }
+};
+} // namespace arche
+
 namespace {
 using arche::Entity;
 using arche::ParallelCommandBuffer;
 using arche::ThreadPool;
 using arche::World;
-using arche::Write;
+using arche::WorldTestAccessor;
 using arche::test::BoidTag;
 using arche::test::Position;
 using arche::test::Velocity;
@@ -30,35 +39,27 @@ void test_full_parallel_physics_pipeline() {
   World world;
   ThreadPool pool(4);
 
-  world.enable_double_buffer<Position>();
-
   constexpr size_t COUNT = 100'000;
-  world.spawn_batch(
-      COUNT, Position{0.0f, 0.0f}, Velocity{1.0f, 2.0f}, BoidTag{}
+  world.spawn(
+      {.count = COUNT}, Position{0.0f, 0.0f}, Velocity{1.0f, 2.0f}, BoidTag{}
   );
 
   constexpr float dt = 0.01666f;
 
   // Run 5 full physics frames
   for (int frame = 0; frame < 5; ++frame) {
-    world.tick();
-
-    // Parallel integration reading from Buffer A and writing to Buffer B
-    world.query_parallel<const Position, Write<Position>, const Velocity>(
+    // Parallel integration with chunk work-stealing across worker threads
+    world.query<Position, const Velocity>().each_parallel(
         pool,
         [](uint32_t count,
-           const Position *r,
-           Write<Position> w,
+           Position *pos,
            const Velocity *v) {
           for (uint32_t i = 0; i < count; ++i) {
-            w[i].x = r[i].x + v[i].vx * dt;
-            w[i].y = r[i].y + v[i].vy * dt;
+            pos[i].x += v[i].vx * dt;
+            pos[i].y += v[i].vy * dt;
           }
         }
     );
-
-    // Flip buffer sub-step
-    world.flip<Position>();
   }
 
   // Verify numerical accuracy across all 100k entities
@@ -89,11 +90,11 @@ void test_permutation_and_reactive_cache() {
   auto query = world.query<Position, Velocity>();
 
   constexpr size_t COUNT = 5000;
-  std::vector<Entity> entities = world.spawn_batch(
-      COUNT, Position{0.0f, 0.0f}, Velocity{1.0f, 1.0f}
+  std::vector<Entity> entities = world.spawn(
+      {.count = COUNT}, Position{0.0f, 0.0f}, Velocity{1.0f, 1.0f}
   );
 
-  arche::Archetype *arch = world.get_record(entities[0]).archetype;
+  arche::Archetype *arch = arche::internal::WorldAccess::slot_map(world).get_record(entities[0]).archetype;
 
   // Permute entities in reverse
   std::vector<uint32_t> perm(COUNT);
@@ -101,7 +102,7 @@ void test_permutation_and_reactive_cache() {
     perm[i] = static_cast<uint32_t>(COUNT - 1 - i);
   }
 
-  world.permute(arch, perm);
+  WorldTestAccessor::permute(world, arch, perm);
 
   // Existing query must read all permuted entities without failure
   size_t count = 0;
@@ -126,10 +127,10 @@ void test_parallel_mutation_churn() {
   ParallelCommandBuffer cmd_buffers(pool.worker_count());
 
   constexpr size_t COUNT = 20'000;
-  world.spawn_batch(COUNT, Position{1.0f, 1.0f});
+  world.spawn({.count = COUNT}, Position{1.0f, 1.0f});
 
   // Parallel loop: destroy half the entities and spawn replacements
-  world.query_parallel<Entity, const Position>(
+  world.query<Entity, const Position>().each_parallel(
       pool,
       cmd_buffers,
       [](uint32_t count,
@@ -145,10 +146,10 @@ void test_parallel_mutation_churn() {
       }
   );
 
-  world.commit(cmd_buffers);
+  cmd_buffers.commit(world);
 
   // Total entity count must remain exactly COUNT
-  assert(world.entity_count() == COUNT);
+  assert(world.entities.count() == COUNT);
 
   std::cout << "PASSED\n";
 }

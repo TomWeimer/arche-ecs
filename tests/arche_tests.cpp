@@ -1,6 +1,6 @@
 #include "arche/arche.hpp"
-#include "arche/detail/archetype_graph.hpp"
-#include "arche/detail/slot_map.hpp"
+#include "arche/archetype/archetype_graph.hpp"
+#include "arche/entity/slot_map.hpp"
 
 #include <cassert>
 #include <cstdint>
@@ -258,13 +258,13 @@ void test_swap_and_pop_compaction() {
   // 2. Destroy middle entity (index 2) triggering Swap-and-Pop
   Entity doomed = entities[2];
   assert(world.despawn(doomed));
-  assert(!world.is_valid(doomed));
+  assert(!world.entities.contains(doomed));
 
   // 3. Verify that all surviving entities remain fully valid
-  assert(world.is_valid(entities[0]));
-  assert(world.is_valid(entities[1]));
-  assert(world.is_valid(entities[3]));
-  assert(world.is_valid(entities[4]));
+  assert(world.entities.contains(entities[0]));
+  assert(world.entities.contains(entities[1]));
+  assert(world.entities.contains(entities[3]));
+  assert(world.entities.contains(entities[4]));
 
   // 4. Verify component value integrity for the moved entity
   assert(world.get<Pos>(entities[4]).x == 4.0f);
@@ -300,19 +300,19 @@ void test_deferred_command_buffer() {
 
   // 1. Create initial entity
   Entity e = world.spawn(Pos{1.0f, 2.0f});
-  assert(world.is_valid(e));
+  assert(world.entities.contains(e));
 
   // 2. Record deferred destruction in command buffer
   cmd.despawn(e);
 
   // 3. Verify entity is still alive prior to playback
-  assert(world.is_valid(e));
+  assert(world.entities.contains(e));
 
   // 4. Flush and execute command buffer
   cmd.commit(world);
 
   // 5. Verify entity is successfully destroyed
-  assert(!world.is_valid(e));
+  assert(!world.entities.contains(e));
 
   std::cout << "PASSED\n";
 }

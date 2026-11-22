@@ -97,7 +97,7 @@ int main() {
       using EnTTRegistry2M = entt::basic_registry<std::uint64_t>;
 
       arche::World world;
-      world.spawn_batch(COUNT_2M, Position{0.0f, 0.0f}, Velocity{1.0f, 2.0f});
+      world.spawn({.count = COUNT_2M}, Position{0.0f, 0.0f}, Velocity{1.0f, 2.0f});
       auto query = world.query<Position, const Velocity>();
 
       bench_2m.title("1. 2M Entities: Simple Streaming (Pos + Vel)")
@@ -162,7 +162,7 @@ int main() {
       using EnTTRegistry2M = entt::basic_registry<std::uint64_t>;
 
       arche::World world;
-      world.spawn_batch(COUNT_2M, Position{500.0f, 500.0f}, Velocity{10.0f, 15.0f});
+      world.spawn({.count = COUNT_2M}, Position{500.0f, 500.0f}, Velocity{10.0f, 15.0f});
       auto query = world.query<Position, Velocity>();
 
       bench_2m.title("2. 2M Entities: Realistic Swarm Physics (Euler + Bounds)")
@@ -216,7 +216,7 @@ int main() {
     // 1C. 2,000,000 Entities: Multi-Threaded Scaling (8 Threads vs Single)
     {
       arche::World world;
-      world.spawn_batch(COUNT_2M, Position{0.0f, 0.0f}, Velocity{1.0f, 2.0f});
+      world.spawn({.count = COUNT_2M}, Position{0.0f, 0.0f}, Velocity{1.0f, 2.0f});
       auto query = world.query<Position, const Velocity>();
 
       const uint32_t threads = std::max(2u, std::thread::hardware_concurrency());
@@ -224,7 +224,7 @@ int main() {
 
       bench_2m.title("3. 2M Entities: Multi-Threaded Chunk Parallelism")
           .run("arche-ecs (8-Thread query_parallel)", [&] {
-            world.query_parallel<Position, const Velocity>(
+            world.query<Position, const Velocity>().each_parallel(
                 pool, [](uint32_t count, Position *pos, const Velocity *vel) {
                   for (uint32_t i = 0; i < count; ++i) {
                     pos[i].x += vel[i].vx * 0.016f;
@@ -255,8 +255,8 @@ int main() {
     bench_wide.warmup(5).minEpochIterations(15);
 
     arche::World world;
-    world.spawn_batch(
-        COUNT_500K,
+    world.spawn(
+        {.count = COUNT_500K},
         Position{0.0f, 0.0f}, Velocity{1.0f, 2.0f}, Acceleration{0.1f, 0.2f},
         Rotation{0.5f}, Scale{1.0f, 1.0f}, Mass{2.0f}, Radius{5.0f},
         BoidState{1, 10}
@@ -364,12 +364,11 @@ int main() {
             positions[i] = Position{dist(rng), dist(rng)};
           }
           std::vector<arche::Entity> ents(COUNT_500K);
-          world.spawn_batch(
-              COUNT_500K, std::span<arche::Entity>(ents), positions.data()
+          world.spawn(
+              {.count = COUNT_500K}, std::span<arche::Entity>(ents), positions.data()
           );
 
-          arche::Archetype *arch = world.get_record(ents[0]).archetype;
-          world.sort<Position>(arch, [](const Position &a, const Position &b) {
+          arche::sort<Position>(world, [](const Position &a, const Position &b) {
             return a.x < b.x;
           });
         })
@@ -397,8 +396,8 @@ int main() {
         positions[i] = Position{dist(rng), dist(rng)};
       }
       std::vector<arche::Entity> ents(COUNT_500K);
-      world.spawn_batch(
-          COUNT_500K, std::span<arche::Entity>(ents), positions.data(), velocities.data()
+      world.spawn(
+          {.count = COUNT_500K}, std::span<arche::Entity>(ents), positions.data(), velocities.data()
       );
       auto query = world.query<Position, const Velocity>();
 
@@ -413,8 +412,7 @@ int main() {
           });
 
       // Now sort entities in-place by X coordinate
-      arche::Archetype *arch = world.get_record(ents[0]).archetype;
-      world.sort<Position>(arch, [](const Position &a, const Position &b) {
+      arche::sort<Position>(world, [](const Position &a, const Position &b) {
         return a.x < b.x;
       });
 
@@ -441,26 +439,26 @@ int main() {
     {
       constexpr size_t PER_TABLE = COUNT_200K / 20; // 10k entities per table
       arche::World world;
-      world.spawn_batch(PER_TABLE, Position{}, Velocity{}, Tag0{});
-      world.spawn_batch(PER_TABLE, Position{}, Velocity{}, Tag1{});
-      world.spawn_batch(PER_TABLE, Position{}, Velocity{}, Tag2{});
-      world.spawn_batch(PER_TABLE, Position{}, Velocity{}, Tag3{});
-      world.spawn_batch(PER_TABLE, Position{}, Velocity{}, Tag4{});
-      world.spawn_batch(PER_TABLE, Position{}, Velocity{}, Tag5{});
-      world.spawn_batch(PER_TABLE, Position{}, Velocity{}, Tag6{});
-      world.spawn_batch(PER_TABLE, Position{}, Velocity{}, Tag7{});
-      world.spawn_batch(PER_TABLE, Position{}, Velocity{}, Tag8{});
-      world.spawn_batch(PER_TABLE, Position{}, Velocity{}, Tag9{});
-      world.spawn_batch(PER_TABLE, Position{}, Velocity{}, Tag10{});
-      world.spawn_batch(PER_TABLE, Position{}, Velocity{}, Tag11{});
-      world.spawn_batch(PER_TABLE, Position{}, Velocity{}, Tag12{});
-      world.spawn_batch(PER_TABLE, Position{}, Velocity{}, Tag13{});
-      world.spawn_batch(PER_TABLE, Position{}, Velocity{}, Tag14{});
-      world.spawn_batch(PER_TABLE, Position{}, Velocity{}, Tag15{});
-      world.spawn_batch(PER_TABLE, Position{}, Velocity{}, Tag16{});
-      world.spawn_batch(PER_TABLE, Position{}, Velocity{}, Tag17{});
-      world.spawn_batch(PER_TABLE, Position{}, Velocity{}, Tag18{});
-      world.spawn_batch(PER_TABLE, Position{}, Velocity{}, Tag19{});
+      world.spawn({.count = PER_TABLE}, Position{}, Velocity{}, Tag0{});
+      world.spawn({.count = PER_TABLE}, Position{}, Velocity{}, Tag1{});
+      world.spawn({.count = PER_TABLE}, Position{}, Velocity{}, Tag2{});
+      world.spawn({.count = PER_TABLE}, Position{}, Velocity{}, Tag3{});
+      world.spawn({.count = PER_TABLE}, Position{}, Velocity{}, Tag4{});
+      world.spawn({.count = PER_TABLE}, Position{}, Velocity{}, Tag5{});
+      world.spawn({.count = PER_TABLE}, Position{}, Velocity{}, Tag6{});
+      world.spawn({.count = PER_TABLE}, Position{}, Velocity{}, Tag7{});
+      world.spawn({.count = PER_TABLE}, Position{}, Velocity{}, Tag8{});
+      world.spawn({.count = PER_TABLE}, Position{}, Velocity{}, Tag9{});
+      world.spawn({.count = PER_TABLE}, Position{}, Velocity{}, Tag10{});
+      world.spawn({.count = PER_TABLE}, Position{}, Velocity{}, Tag11{});
+      world.spawn({.count = PER_TABLE}, Position{}, Velocity{}, Tag12{});
+      world.spawn({.count = PER_TABLE}, Position{}, Velocity{}, Tag13{});
+      world.spawn({.count = PER_TABLE}, Position{}, Velocity{}, Tag14{});
+      world.spawn({.count = PER_TABLE}, Position{}, Velocity{}, Tag15{});
+      world.spawn({.count = PER_TABLE}, Position{}, Velocity{}, Tag16{});
+      world.spawn({.count = PER_TABLE}, Position{}, Velocity{}, Tag17{});
+      world.spawn({.count = PER_TABLE}, Position{}, Velocity{}, Tag18{});
+      world.spawn({.count = PER_TABLE}, Position{}, Velocity{}, Tag19{});
       auto query = world.query<Position, const Velocity>();
 
       bench_frag.title("7. Deep Fragmentation (200k Entities across 20 Archetypes)")
@@ -541,8 +539,8 @@ int main() {
     // 7B. Exclusion Filtering: Without<FrozenTag> on 100k Entities
     {
       arche::World world;
-      world.spawn_batch(COUNT_100K / 2, Position{0.0f, 0.0f}, Velocity{1.0f, 2.0f});
-      world.spawn_batch(COUNT_100K / 2, Position{0.0f, 0.0f}, Velocity{1.0f, 2.0f}, FrozenTag{});
+      world.spawn({.count = COUNT_100K / 2}, Position{0.0f, 0.0f}, Velocity{1.0f, 2.0f});
+      world.spawn({.count = COUNT_100K / 2}, Position{0.0f, 0.0f}, Velocity{1.0f, 2.0f}, FrozenTag{});
       auto query = world.query<Position, const Velocity>(arche::Without<FrozenTag>{});
 
       bench_frag.title("8. Exclusion Filter Query (Without<FrozenTag>, 100k Entities)")
@@ -662,8 +660,8 @@ int main() {
       bench_life.title("10. Entity Creation (20k Entities: Pos + Vel)")
           .run("arche-ecs (Chunked Bulk Spawn)", [&] {
             arche::World world;
-            world.spawn_batch(
-                MUTATION_COUNT, Position{0.0f, 0.0f}, Velocity{1.0f, 2.0f}
+            world.spawn(
+                {.count = MUTATION_COUNT}, Position{0.0f, 0.0f}, Velocity{1.0f, 2.0f}
             );
           })
           .run("arche-ecs (Single spawn loop)", [&] {

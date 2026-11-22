@@ -1,4 +1,5 @@
 #include "arche/arche.hpp"
+#include "arche/world_access.hpp"
 
 #include <cassert>
 #include <iostream>
@@ -42,9 +43,9 @@ void test_parallel_query_parity() {
   ThreadPool pool(4);
 
   constexpr size_t COUNT = 50'000;
-  world.spawn_batch(COUNT, Position{1.0f, 2.0f}, Velocity{3.0f, 4.0f});
+  world.spawn({.count = COUNT}, Position{1.0f, 2.0f}, Velocity{3.0f, 4.0f});
 
-  world.query_parallel<Position, const Velocity>(
+  world.query<Position, const Velocity>().each_parallel(
       pool, [](uint32_t count, Position *pos, const Velocity *vel) {
         for (uint32_t i = 0; i < count; ++i) {
           pos[i].x += vel[i].vx;
@@ -78,11 +79,11 @@ void test_parallel_command_buffers() {
   ParallelCommandBuffer cmd_buffers(pool.worker_count());
 
   constexpr size_t COUNT = 10'000;
-  std::vector<Entity> entities = world.spawn_batch(
-      COUNT, Position{0.0f, 0.0f}
+  std::vector<Entity> entities = world.spawn(
+      {.count = COUNT}, Position{0.0f, 0.0f}
   );
 
-  world.query_parallel<Entity, const Position>(
+  world.query<Entity, const Position>().each_parallel(
       pool,
       cmd_buffers,
       [](uint32_t count,
@@ -97,8 +98,8 @@ void test_parallel_command_buffers() {
       }
   );
 
-  world.commit(cmd_buffers);
-  assert(world.entity_count() == COUNT / 2);
+  cmd_buffers.commit(world);
+  assert(world.entities.count() == COUNT / 2);
 
   std::cout << "PASSED\n";
 }
@@ -107,78 +108,64 @@ void test_parallel_command_buffers() {
 // Unit Test 3: Triple-Buffered GPU Ring Streaming
 // =============================================================================
 
-void test_triple_buffered_ring_streaming() {
-  std::cout << "[Test 3/4] Triple-Buffered GPU Ring Streaming... ";
+void test_chunk_views_and_streaming() {
+  std::cout << "[Test 3/4] Component Chunk Views & Linear Streaming... ";
   World world;
 
   constexpr size_t COUNT = 1000;
-  world.spawn_batch(COUNT, Position{42.0f, 84.0f});
+  world.spawn({.count = COUNT}, Position{42.0f, 84.0f});
 
-  constexpr size_t SLOT_BYTES = 64 * 1024;
-  std::vector<uint8_t> vram_base(SLOT_BYTES * 3, 0);
+  auto views = world.gpu.view_chunks<Position>();
+  assert(!views.empty());
 
-  size_t b0 = world.stream_gpu<Position>(
-      0, vram_base.data(), SLOT_BYTES
-  );
-  assert(b0 == COUNT * sizeof(Position));
+  size_t total_count = 0;
+  for (const auto &span : views) {
+    total_count += span.count();
+    assert(span.data() != nullptr);
+  }
+  assert(total_count == COUNT);
 
-  size_t b1 = world.stream_gpu<Position>(
-      1, vram_base.data(), SLOT_BYTES
-  );
-  assert(b1 == COUNT * sizeof(Position));
-
-  size_t b2 = world.stream_gpu<Position>(
-      2, vram_base.data(), SLOT_BYTES
-  );
-  assert(b2 == COUNT * sizeof(Position));
-
-  size_t b3 = world.stream_gpu<Position>(
-      3, vram_base.data(), SLOT_BYTES
-  );
-  assert(b3 == COUNT * sizeof(Position));
+  std::vector<Position> dest(COUNT);
+  size_t streamed = world.gpu.stream_to<Position>(dest.data());
+  assert(streamed == COUNT * sizeof(Position));
+  assert(dest[0].x == 42.0f && dest[0].y == 84.0f);
 
   std::cout << "PASSED\n";
 }
 
 // =============================================================================
-// Unit Test 4: Multi-Draw Indirect Generation with Culling
+// Unit Test 4: Chunk User Metadata Filtering
 // =============================================================================
 
-void test_draw_indirect_with_culling() {
-  std::cout << "[Test 4/4] Multi-Draw Indirect Generation with Macro AABB "
-               "Culling... ";
+void test_chunk_user_metadata_culling() {
+  std::cout << "[Test 4/4] Chunk User Metadata Macro AABB Filtering... ";
   World world;
 
   constexpr size_t COUNT = 5000;
-  world.spawn_batch(COUNT, Position{1.0f, 1.0f});
+  world.spawn({.count = COUNT}, Position{1.0f, 1.0f});
 
-  Archetype *arch = world.graph().archetypes().back().get();
-  auto &chunks = world.get_archetype_chunks(arch);
+  Archetype *arch = arche::internal::WorldAccess::graph(world).archetypes().back().get();
+  auto &chunks = world.archetypes.chunks(arch);
   assert(chunks.size() >= 2);
 
   // Set user metadata on chunk 0 (visible) and chunk 1 (culled)
   chunks[0]->user_metadata<TestAABB>() = TestAABB{-10.0f, 10.0f};
   chunks[1]->user_metadata<TestAABB>() = TestAABB{-999.0f, -900.0f};
 
-  std::vector<DrawIndirectCommand> cmd_buffer(64);
+  // Filter chunks using user metadata predicate
+  size_t visible_chunks = 0;
+  for (arche::Chunk *chunk : chunks) {
+    if (chunk->is_empty()) continue;
+    const auto *aabb = reinterpret_cast<const TestAABB *>(
+        chunk->header().user_metadata
+    );
+    if (aabb->max_x > 0.0f) {
+      visible_chunks++;
+    }
+  }
 
-  // Culling predicate: only draw if max_x > 0
-  size_t count = world.indirect_draw(
-      arch,
-      cmd_buffer.data(),
-      cmd_buffer.size(),
-      [](const arche::ChunkHeader &header) {
-        const auto *aabb = reinterpret_cast<const TestAABB *>(
-            header.user_metadata
-        );
-        return aabb->max_x > 0.0f;
-      }
-  );
-
-  // Only the visible chunk should be emitted!
-  assert(count < chunks.size());
-  assert(count >= 1);
-  assert(cmd_buffer[0].instance_count == 1);
+  assert(visible_chunks >= 1);
+  assert(visible_chunks < chunks.size());
 
   std::cout << "PASSED\n";
 }
@@ -189,13 +176,13 @@ void test_draw_indirect_with_culling() {
 
 int main() {
   std::cout << "====================================================\n";
-  std::cout << "Running arche-ecs Module 016: Multithreading & Ring Tests\n";
+  std::cout << "Running arche-ecs Module 016: Multithreading & Chunk Tests\n";
   std::cout << "====================================================\n";
 
   test_parallel_query_parity();
   test_parallel_command_buffers();
-  test_triple_buffered_ring_streaming();
-  test_draw_indirect_with_culling();
+  test_chunk_views_and_streaming();
+  test_chunk_user_metadata_culling();
 
   std::cout << "====================================================\n";
   std::cout << "All Module 016 tests completed successfully!\n";

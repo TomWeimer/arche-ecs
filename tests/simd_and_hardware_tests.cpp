@@ -1,5 +1,5 @@
 #include "arche/arche.hpp"
-#include "arche/detail/chunk_pool.hpp"
+#include "arche/chunk/chunk_pool.hpp"
 
 #include <cassert>
 #include <cstdint>
@@ -96,11 +96,11 @@ void test_simd_tail_padded_execution() {
 
   // Create 1,603 entities (forces a non-multiple of 16)
   constexpr size_t COUNT = 1603;
-  std::vector<Entity> entities = world.spawn_batch(
-      COUNT, Position{1.0f, 1.0f}, Velocity{2.0f, 3.0f}
+  std::vector<Entity> entities = world.spawn(
+      {.count = COUNT}, Position{1.0f, 1.0f}, Velocity{2.0f, 3.0f}
   );
 
-  assert(world.entity_count() == COUNT);
+  assert(world.entities.count() == COUNT);
 
   // Execute branchless SIMD loop over padded_count
   auto q = world.query<Position, const Velocity>();
@@ -145,7 +145,7 @@ void test_lookahead_prefetching() {
 
   // Create 50,000 entities spanning ~30 chunks
   constexpr size_t COUNT = 50'000;
-  world.spawn_batch(COUNT, Position{0.0f, 0.0f}, Velocity{1.0f, 1.0f});
+  world.spawn({.count = COUNT}, Position{0.0f, 0.0f}, Velocity{1.0f, 1.0f});
 
   size_t total_processed = 0;
   auto q = world.query<Position, const Velocity>();

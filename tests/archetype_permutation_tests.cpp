@@ -1,4 +1,5 @@
 #include "arche/arche.hpp"
+#include "arche/world_access.hpp"
 
 #include <algorithm>
 #include <cassert>
@@ -8,10 +9,19 @@
 #include <numeric>
 #include <vector>
 
+namespace arche {
+struct WorldTestAccessor {
+  static void permute(World &w, Archetype *arch, std::span<const uint32_t> indices) {
+    arche::permute(w, arch, indices);
+  }
+};
+} // namespace arche
+
 namespace {
 using arche::Archetype;
 using arche::Entity;
 using arche::World;
+using arche::WorldTestAccessor;
 } // namespace
 
 // =============================================================================
@@ -55,13 +65,13 @@ void test_single_chunk_permutation() {
 
   // Reverse permutation: [4, 3, 2, 1, 0]
   std::vector<uint32_t> perm = {4, 3, 2, 1, 0};
-  Archetype *arch = world.get_record(entities[0]).archetype;
+  Archetype *arch = arche::internal::WorldAccess::slot_map(world).get_record(entities[0]).archetype;
 
-  world.permute(arch, perm);
+  WorldTestAccessor::permute(world, arch, perm);
 
   // Verify all entity handles remain alive and point to their permuted values
   for (size_t i = 0; i < COUNT; ++i) {
-    assert(world.is_valid(entities[i]));
+    assert(world.entities.contains(entities[i]));
     const auto &pos = world.get<Position>(entities[i]);
     const auto &vel = world.get<Velocity>(entities[i]);
     assert(pos.x == static_cast<float>(i));
@@ -116,16 +126,16 @@ void test_multi_chunk_permutation() {
     perm[i] = static_cast<uint32_t>(COUNT - 1 - i);
   }
 
-  Archetype *arch = world.get_record(entities[0]).archetype;
+  Archetype *arch = arche::internal::WorldAccess::slot_map(world).get_record(entities[0]).archetype;
 
   auto start = std::chrono::high_resolution_clock::now();
-  world.permute(arch, perm);
+  WorldTestAccessor::permute(world, arch, perm);
   auto end = std::chrono::high_resolution_clock::now();
   std::chrono::duration<double, std::milli> duration = end - start;
 
   // Verify bit-exact integrity for all 10,000 handles
   for (size_t i = 0; i < COUNT; ++i) {
-    assert(world.is_valid(entities[i]));
+    assert(world.entities.contains(entities[i]));
     const auto &pos = world.get<Position>(entities[i]);
     assert(pos.x == static_cast<float>(i));
     assert(pos.y == static_cast<float>(i * 2));
@@ -152,14 +162,10 @@ void test_comparator_sorting() {
   world.spawn(Position{2.0f, 2.0f}, ParticleKey{900});
   world.spawn(Position{3.0f, 3.0f}, ParticleKey{200});
 
-  Archetype *arch = world.graph().archetypes().back().get();
-
-  // Sort by ParticleKey::morton_code ascending
-  world.sort<ParticleKey>(
-      arch, [](const ParticleKey &a, const ParticleKey &b) {
-        return a.morton_code < b.morton_code;
-      }
-  );
+  // Sort by ParticleKey::morton_code ascending across all archetypes possessing ParticleKey
+  arche::sort<ParticleKey>(world, [](const ParticleKey &a, const ParticleKey &b) {
+    return a.morton_code < b.morton_code;
+  });
 
   // Verify chunk order is strictly ascending: 100, 200, 500, 900
   std::vector<uint32_t> keys;
@@ -206,7 +212,7 @@ void test_handle_stability_stress() {
     );
   }
 
-  Archetype *arch = world.get_record(entities[0]).archetype;
+  Archetype *arch = arche::internal::WorldAccess::slot_map(world).get_record(entities[0]).archetype;
 
   // Run 5 random permutations
   std::vector<uint32_t> perm(COUNT);
@@ -214,15 +220,47 @@ void test_handle_stability_stress() {
 
   for (int iter = 0; iter < 5; ++iter) {
     std::reverse(perm.begin(), perm.end());
-    world.permute(arch, perm);
+    WorldTestAccessor::permute(world, arch, perm);
 
     // Verify all 2,000 entities still resolve correctly
     for (size_t i = 0; i < COUNT; ++i) {
-      assert(world.is_valid(entities[i]));
+      assert(world.entities.contains(entities[i]));
       const auto &pos = world.get<Position>(entities[i]);
       assert(pos.x == static_cast<float>(i));
     }
   }
+
+  std::cout << "PASSED\n";
+}
+
+// =============================================================================
+// Unit Test 5: Linear O(N) Radix Key Sorting (Morton Curve)
+// =============================================================================
+
+void test_radix_key_sorting() {
+  std::cout << "[Test 5/5] Linear O(N) Radix Key Sorting (Morton Keys)... ";
+  World world;
+
+  world.spawn(Position{0.0f, 0.0f}, ParticleKey{5000});
+  world.spawn(Position{1.0f, 1.0f}, ParticleKey{1000});
+  world.spawn(Position{2.0f, 2.0f}, ParticleKey{9000});
+  world.spawn(Position{3.0f, 3.0f}, ParticleKey{2000});
+
+  // Sort by integer key extractor in O(N) Radix sort
+  arche::sort_by_key<ParticleKey>(world, [](const ParticleKey &k) {
+    return k.morton_code;
+  });
+
+  std::vector<uint32_t> keys;
+  world.query<ParticleKey>().for_each([&](const ParticleKey &k) {
+    keys.push_back(k.morton_code);
+  });
+
+  assert(keys.size() == 4);
+  assert(keys[0] == 1000);
+  assert(keys[1] == 2000);
+  assert(keys[2] == 5000);
+  assert(keys[3] == 9000);
 
   std::cout << "PASSED\n";
 }
@@ -233,13 +271,14 @@ void test_handle_stability_stress() {
 
 int main() {
   std::cout << "====================================================\n";
-  std::cout << "Running arche-ecs Module 014: Permutation Tests\n";
+  std::cout << "Running arche-ecs Module 014: Permutation & Sorting Tests\n";
   std::cout << "====================================================\n";
 
   test_single_chunk_permutation();
   test_multi_chunk_permutation();
   test_comparator_sorting();
   test_handle_stability_stress();
+  test_radix_key_sorting();
 
   std::cout << "====================================================\n";
   std::cout << "All Module 014 tests completed successfully!\n";

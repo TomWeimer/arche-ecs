@@ -173,10 +173,10 @@ void test_component_span_views() {
   }
 
   // 2. Verify total component count query
-  assert(world.count_components<GpuPosition>() == TOTAL_ENTITIES);
+  assert(world.archetypes.count_with<GpuPosition>() == TOTAL_ENTITIES);
 
   // 3. Extract non-owning component chunk views
-  auto views = world.view_component_chunks<GpuPosition>();
+  auto views = world.gpu.view_chunks<GpuPosition>();
   assert(!views.empty());
 
   // 4. Validate span pointers, byte dimensions, and data continuity across
@@ -266,7 +266,7 @@ void test_stream_component_to_mock_vram() {
   std::vector<uint8_t> mock_mapped_vram(vram_bytes, 0);
 
   // 3. Warm-up stream pass
-  const size_t initial_bytes = world.stream_component_to<GpuPosition>(
+  const size_t initial_bytes = world.gpu.stream_to<GpuPosition>(
       mock_mapped_vram.data()
   );
   assert(initial_bytes == vram_bytes);
@@ -277,7 +277,7 @@ void test_stream_component_to_mock_vram() {
 
   size_t bytes_written = 0;
   for (int it = 0; it < ITERATIONS; ++it) {
-    bytes_written = world.stream_component_to<GpuPosition>(
+    bytes_written = world.gpu.stream_to<GpuPosition>(
         mock_mapped_vram.data()
     );
   }

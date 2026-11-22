@@ -37,18 +37,18 @@ void test_bulk_creation_prototype() {
   constexpr size_t COUNT = 100'000;
   auto start = std::chrono::high_resolution_clock::now();
 
-  std::vector<Entity> entities = world.spawn_batch(
-      COUNT, Position{10.0f, 20.0f}, Velocity{1.0f, -1.0f}
+  std::vector<Entity> entities = world.spawn(
+      {.count = COUNT}, Position{10.0f, 20.0f}, Velocity{1.0f, -1.0f}
   );
 
   auto end = std::chrono::high_resolution_clock::now();
   std::chrono::duration<double, std::milli> duration = end - start;
 
   assert(entities.size() == COUNT);
-  assert(world.entity_count() == COUNT);
+  assert(world.entities.count() == COUNT);
 
   for (size_t i = 0; i < COUNT; i += 1337) {
-    assert(world.is_valid(entities[i]));
+    assert(world.entities.contains(entities[i]));
     const auto &pos = world.get<Position>(entities[i]);
     const auto &vel = world.get<Velocity>(entities[i]);
     assert(pos.x == 10.0f && pos.y == 20.0f);
@@ -82,17 +82,17 @@ void test_bulk_creation_soa_streaming() {
   std::vector<Entity> entities(COUNT);
   auto start = std::chrono::high_resolution_clock::now();
 
-  world.spawn_batch(
-      COUNT, std::span<Entity>(entities), positions.data(), velocities.data()
+  world.spawn(
+      {.count = COUNT}, std::span<Entity>(entities), positions.data(), velocities.data()
   );
 
   auto end = std::chrono::high_resolution_clock::now();
   std::chrono::duration<double, std::milli> duration = end - start;
 
-  assert(world.entity_count() == COUNT);
+  assert(world.entities.count() == COUNT);
 
   for (size_t i = 0; i < COUNT; i += 2048) {
-    assert(world.is_valid(entities[i]));
+    assert(world.entities.contains(entities[i]));
     const auto &pos = world.get<Position>(entities[i]);
     const auto &vel = world.get<Velocity>(entities[i]);
     assert(pos.x == static_cast<float>(i));
@@ -116,8 +116,8 @@ void test_batched_destruction() {
   World world;
 
   constexpr size_t COUNT = 100'000;
-  std::vector<Entity> entities = world.spawn_batch(
-      COUNT, Position{1.0f, 2.0f}, Velocity{3.0f, 4.0f}
+  std::vector<Entity> entities = world.spawn(
+      {.count = COUNT}, Position{1.0f, 2.0f}, Velocity{3.0f, 4.0f}
   );
 
   std::vector<Entity> to_destroy;
@@ -127,18 +127,18 @@ void test_batched_destruction() {
   }
 
   auto start = std::chrono::high_resolution_clock::now();
-  world.despawn_batch(to_destroy);
+  world.despawn(to_destroy);
   auto end = std::chrono::high_resolution_clock::now();
   std::chrono::duration<double, std::milli> duration = end - start;
 
-  assert(world.entity_count() == COUNT / 2);
+  assert(world.entities.count() == COUNT / 2);
 
   for (Entity e : to_destroy) {
-    assert(!world.is_valid(e));
+    assert(!world.entities.contains(e));
   }
 
   for (size_t i = 1; i < COUNT; i += 2) {
-    assert(world.is_valid(entities[i]));
+    assert(world.entities.contains(entities[i]));
     const auto &pos = world.get<Position>(entities[i]);
     assert(pos.x == 1.0f && pos.y == 2.0f);
   }
@@ -156,16 +156,16 @@ void test_command_buffer_batch_destruction() {
   CommandBuffer cmd;
 
   constexpr size_t COUNT = 10'000;
-  std::vector<Entity> entities = world.spawn_batch(
-      COUNT, Position{0.0f, 0.0f}
+  std::vector<Entity> entities = world.spawn(
+      {.count = COUNT}, Position{0.0f, 0.0f}
   );
 
   // Record batched deletion into command buffer
-  cmd.despawn_batch(std::span<const Entity>(entities.data(), 5000));
-  assert(world.entity_count() == COUNT); // Deferred until playback
+  cmd.despawn(std::span<const Entity>(entities.data(), 5000));
+  assert(world.entities.count() == COUNT); // Deferred until playback
 
   cmd.commit(world);
-  assert(world.entity_count() == 5000);
+  assert(world.entities.count() == 5000);
 
   std::cout << "PASSED\n";
 }
@@ -180,24 +180,24 @@ void test_bulk_generation_recycling() {
   World world;
 
   constexpr size_t COUNT = 10'000;
-  std::vector<Entity> batch1 = world.spawn_batch(
-      COUNT, Position{0.0f, 0.0f}
+  std::vector<Entity> batch1 = world.spawn(
+      {.count = COUNT}, Position{0.0f, 0.0f}
   );
 
-  world.despawn_batch(batch1);
-  assert(world.entity_count() == 0);
+  world.despawn(batch1);
+  assert(world.entities.count() == 0);
 
-  std::vector<Entity> batch2 = world.spawn_batch(
-      COUNT, Position{100.0f, 200.0f}
+  std::vector<Entity> batch2 = world.spawn(
+      {.count = COUNT}, Position{100.0f, 200.0f}
   );
-  assert(world.entity_count() == COUNT);
+  assert(world.entities.count() == COUNT);
 
   for (Entity e : batch1) {
-    assert(!world.is_valid(e));
+    assert(!world.entities.contains(e));
   }
 
   for (Entity e : batch2) {
-    assert(world.is_valid(e));
+    assert(world.entities.contains(e));
     assert(e.generation() >= 2);
   }
 

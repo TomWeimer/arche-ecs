@@ -8,6 +8,7 @@
 
 namespace {
 using arche::Access;
+using arche::CommandBuffer;
 using arche::Scheduler;
 using arche::SystemContext;
 using arche::SystemScale;
@@ -61,7 +62,7 @@ void test_empty_scheduler() {
 
   // Compiling and running an empty scheduler must not throw or crash
   scheduler.compile(world);
-  scheduler.run(world, pool, 0.016f);
+  scheduler.run(world, pool);
 
   std::cout << "PASSED\n";
 }
@@ -101,7 +102,7 @@ void test_narrow_parallel_batching() {
   );
 
   scheduler.compile(world);
-  scheduler.run(world, pool, 0.016f);
+  scheduler.run(world, pool);
 
   assert(system1_executed.load() == 1);
   assert(system2_executed.load() == 1);
@@ -140,7 +141,7 @@ void test_conflict_separation() {
   );
 
   scheduler.compile(world);
-  scheduler.run(world, pool, 0.016f);
+  scheduler.run(world, pool);
 
   assert(execution_order.size() == 2);
   assert(execution_order[0] == 1);
@@ -187,7 +188,7 @@ void test_wide_system_isolation() {
   );
 
   scheduler.compile(world);
-  scheduler.run(world, pool, 0.016f);
+  scheduler.run(world, pool);
 
   assert(log.size() == 3);
   std::cout << "PASSED\n";
@@ -234,10 +235,10 @@ void test_deterministic_deferred_mutations() {
   );
 
   scheduler.compile(world);
-  scheduler.run(world, pool, 0.016f);
+  scheduler.run(world, pool);
 
   assert(observed_entities.load() == 10);
-  assert(world.count_components<Position>() == 10);
+  assert(world.archetypes.count_with<Position>() == 10);
 
   std::cout << "PASSED\n";
 }
@@ -270,7 +271,7 @@ void test_missing_resource_validation() {
   assert(threw);
 
   // Once resource is registered, compile succeeds cleanly
-  world.insert_resource<MissingResource>();
+  world.resources.insert<MissingResource>();
   scheduler.compile(world);
 
   std::cout << "PASSED\n";
@@ -297,7 +298,7 @@ void test_dirty_recompilation() {
   );
 
   scheduler.compile(world);
-  scheduler.run(world, pool, 0.016f);
+  scheduler.run(world, pool);
   assert(counter.load() == 1);
 
   // Adding a new system marks scheduler dirty
@@ -309,7 +310,7 @@ void test_dirty_recompilation() {
   );
 
   // Next run must re-compile and execute both systems
-  scheduler.run(world, pool, 0.016f);
+  scheduler.run(world, pool);
   assert(counter.load() == 12); // 1 + 1 + 10
 
   std::cout << "PASSED\n";
@@ -337,13 +338,100 @@ void test_scheduler_copy_and_move() {
 
   // Move construction
   Scheduler moved_scheduler(std::move(original));
-  moved_scheduler.run(world, pool, 0.016f);
+  moved_scheduler.run(world, pool);
   assert(executions.load() == 1);
 
   // Copy construction
   Scheduler copied_scheduler(moved_scheduler);
-  copied_scheduler.run(world, pool, 0.016f);
+  copied_scheduler.run(world, pool);
   assert(executions.load() == 2);
+
+  std::cout << "PASSED\n";
+}
+
+// =============================================================================
+// Unit Test 9: Wide System Chunk Work-Stealing with Deferred Mutations
+// =============================================================================
+
+struct Marker {
+  uint32_t val;
+};
+
+void test_wide_system_chunk_work_stealing() {
+  std::cout << "Testing Wide System Chunk Work-Stealing (ctx.query_parallel)... ";
+
+  World world;
+  ThreadPool pool(4);
+
+  constexpr size_t COUNT = 10000;
+  for (size_t i = 0; i < COUNT; ++i) {
+    world.spawn(Position{float(i), 0.0f}, Velocity{1.0f, 2.0f});
+  }
+
+  Scheduler scheduler;
+  scheduler.add_system(
+      "WidePhysicsIntegrator",
+      Access{}.writes<Position>().reads<Velocity>().build(),
+      [](SystemContext &ctx) {
+        ctx.query_parallel<Position, const Velocity>(
+            [](uint32_t count, CommandBuffer &thread_cmd, Position *pos, const Velocity *vel) {
+              for (uint32_t i = 0; i < count; ++i) {
+                pos[i].x += vel[i].vx * 0.1f;
+                pos[i].y += vel[i].vy * 0.1f;
+                if (i == 0) {
+                  // Deferred spawn from worker thread
+                  thread_cmd.spawn(Marker{42});
+                }
+              }
+            }
+        );
+      },
+      SystemScale::Wide
+  );
+
+  scheduler.run(world, pool);
+
+  // Verify all entity positions updated
+  for (auto [pos, vel] : world.query<Position, Velocity>()) {
+    assert(pos.y == 0.2f);
+  }
+
+  // Verify deferred commands committed deterministically at the batch barrier
+  assert(world.archetypes.count_with<Marker>() > 0);
+
+  std::cout << "PASSED\n";
+}
+
+// =============================================================================
+// Unit Test 10: Single-Threaded Fallback for Wide System (No ThreadPool)
+// =============================================================================
+
+void test_wide_system_single_threaded_fallback() {
+  std::cout << "Testing Single-Threaded Fallback for ctx.query_parallel... ";
+
+  World world;
+  world.spawn(Position{10.0f, 20.0f}, Velocity{5.0f, 5.0f});
+
+  CommandBuffer cmd;
+  SystemContext ctx{world, cmd}; // No pool, no parallel_cmd
+
+  ctx.query_parallel<Position, const Velocity>(
+      [](uint32_t count, CommandBuffer &c, Position *pos, const Velocity *vel) {
+        for (uint32_t i = 0; i < count; ++i) {
+          pos[i].x += vel[i].vx;
+          c.spawn(Marker{99});
+        }
+      }
+  );
+
+  // Verify positions updated synchronously
+  for (auto [pos] : world.query<Position>()) {
+    assert(pos.x == 15.0f);
+  }
+
+  // Commit manual command buffer
+  cmd.commit(world);
+  assert(world.archetypes.count_with<Marker>() == 1);
 
   std::cout << "PASSED\n";
 }
@@ -365,6 +453,8 @@ int main() {
   test_missing_resource_validation();
   test_dirty_recompilation();
   test_scheduler_copy_and_move();
+  test_wide_system_chunk_work_stealing();
+  test_wide_system_single_threaded_fallback();
 
   std::cout << "\nAll Scheduler unit tests passed successfully!\n";
   return 0;

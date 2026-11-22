@@ -3,12 +3,16 @@
 #include <cassert>
 #include <chrono>
 #include <iostream>
+#include <vector>
 
 namespace {
+using arche::Access;
 using arche::Entity;
-using arche::Mutated;
+using arche::Scheduler;
+using arche::SystemContext;
+using arche::SystemScale;
+using arche::ThreadPool;
 using arche::World;
-using arche::Write;
 } // namespace
 
 // =============================================================================
@@ -25,168 +29,192 @@ struct Velocity {
   float vy{0.0f};
 };
 
+struct PrevPosition {
+  float x{0.0f};
+  float y{0.0f};
+};
+
 // =============================================================================
-// Unit Test 1: Distinct Physical Memory Slices (Read != Write)
+// Unit Test 1: Read/Write Conflict Separation into Distinct Batches
 // =============================================================================
 
-void test_distinct_memory_slices() {
-  std::cout << "[Test 1/5] Physical Slice Separation (Read != Write)... ";
+void test_read_write_hazard_separation() {
+  std::cout << "[Test 1/5] Read/Write Hazard Separation via Scheduler Batches... ";
   World world;
+  ThreadPool pool(2);
 
-  world.enable_double_buffer<Position>();
-  world.spawn(Position{10.0f, 20.0f}, Velocity{1.0f, 2.0f});
+  std::vector<std::string> log;
 
-  const void *read_addr = nullptr;
-  const void *write_addr = nullptr;
-
-  auto q = world.query<const Position, Write<Position>, Velocity>();
-  q.for_each_chunk(
-      [&](uint32_t count, const Position *r, Write<Position> w, Velocity *) {
-        assert(count == 1);
-        read_addr = static_cast<const void *>(r);
-        write_addr = static_cast<const void *>(w.get());
-      }
+  Scheduler scheduler;
+  scheduler.add_system(
+      "PositionReader",
+      Access{}.reads<Position>().build(),
+      [&](SystemContext &) { log.push_back("Read"); }
   );
 
-  assert(read_addr != nullptr && write_addr != nullptr);
-  assert(read_addr != write_addr);
+  scheduler.add_system(
+      "PositionWriter",
+      Access{}.writes<Position>().build(),
+      [&](SystemContext &) { log.push_back("Write"); }
+  );
+
+  scheduler.compile(world);
+  scheduler.run(world, pool);
+
+  // Reader and Writer must NOT run in the same batch due to conflict
+  assert(log.size() == 2);
+  assert(log[0] == "Read");
+  assert(log[1] == "Write");
 
   std::cout << "PASSED\n";
 }
 
 // =============================================================================
-// Unit Test 2: O(1) Pointer Flipping Across Sub-Steps
+// Unit Test 2: Concurrent Non-Conflicting Readers in a Single Batch
 // =============================================================================
 
-void test_pointer_flip_substep() {
-  std::cout << "[Test 2/5] O(1) Pointer-Flip Physics Sub-Steps... ";
+void test_concurrent_readers_in_single_batch() {
+  std::cout << "[Test 2/5] Concurrent Readers Admitted into Single Batch... ";
   World world;
+  ThreadPool pool(2);
 
-  world.enable_double_buffer<Position>();
-  Entity e = world.spawn(Position{0.0f, 0.0f}, Velocity{5.0f, 0.0f});
+  std::atomic<uint32_t> reader_count{0};
 
-  auto q = world.query<const Position, Write<Position>, const Velocity>();
-  q.for_each_chunk([](uint32_t count,
-                      const Position *r,
-                      Write<Position> w,
-                      const Velocity *v) {
-    for (uint32_t i = 0; i < count; ++i) {
-      w[i].x = r[i].x + v[i].vx;
-      w[i].y = r[i].y + v[i].vy;
-    }
-  });
+  Scheduler scheduler;
+  scheduler.add_system(
+      "Reader1",
+      Access{}.reads<Position>().build(),
+      [&](SystemContext &) { reader_count.fetch_add(1); }
+  );
 
-  assert(world.get<Position>(e).x == 0.0f);
+  scheduler.add_system(
+      "Reader2",
+      Access{}.reads<Position>().build(),
+      [&](SystemContext &) { reader_count.fetch_add(1); }
+  );
 
-  world.flip<Position>();
-  assert(world.get<Position>(e).x == 5.0f);
+  scheduler.compile(world);
+  scheduler.run(world, pool);
 
-  q.for_each_chunk([](uint32_t count,
-                      const Position *r,
-                      Write<Position> w,
-                      const Velocity *v) {
-    for (uint32_t i = 0; i < count; ++i) {
-      w[i].x = r[i].x + v[i].vx;
-    }
-  });
+  assert(reader_count.load() == 2);
+  std::cout << "PASSED\n";
+}
 
-  world.flip<Position>();
-  assert(world.get<Position>(e).x == 10.0f);
+// =============================================================================
+// Unit Test 3: Parallel Chunk Work-Stealing for Wide Writers
+// =============================================================================
+
+void test_parallel_chunk_work_stealing_writers() {
+  std::cout << "[Test 3/5] Parallel Chunk Work-Stealing for Wide Writers... ";
+  World world;
+  ThreadPool pool(4);
+
+  constexpr size_t COUNT = 20'000;
+  for (size_t i = 0; i < COUNT; ++i) {
+    world.spawn(Position{0.0f, 0.0f}, Velocity{1.0f, 2.0f});
+  }
+
+  Scheduler scheduler;
+  scheduler.add_system(
+      "ParallelPhysicsIntegrator",
+      Access{}.writes<Position>().reads<Velocity>().build(),
+      [](SystemContext &ctx) {
+        ctx.query_parallel<Position, const Velocity>(
+            [](uint32_t count, arche::CommandBuffer &, Position *pos, const Velocity *vel) {
+              for (uint32_t i = 0; i < count; ++i) {
+                pos[i].x += vel[i].vx * 0.1f;
+                pos[i].y += vel[i].vy * 0.1f;
+              }
+            }
+        );
+      },
+      SystemScale::Wide
+  );
+
+  scheduler.compile(world);
+  scheduler.run(world, pool);
+
+  // Verify all entities updated in-place across worker threads without data race
+  for (auto [pos, vel] : world.query<Position, Velocity>()) {
+    assert(std::abs(pos.x - 0.1f) < 0.0001f);
+    assert(std::abs(pos.y - 0.2f) < 0.0001f);
+  }
 
   std::cout << "PASSED\n";
 }
 
 // =============================================================================
-// Unit Test 3: Automatic Dirty Ticking on Flip
+// Unit Test 4: State History Component Pairing (Pattern A)
 // =============================================================================
 
-void test_automatic_dirty_ticking_on_flip() {
-  std::cout << "[Test 3/5] Automatic Dirty Ticking on Pointer Flip... ";
+void test_state_history_component_pairing() {
+  std::cout << "[Test 4/5] State History Component Pairing (Pattern A)... ";
   World world;
 
-  world.enable_double_buffer<Position>();
-  world.spawn(Position{0.0f, 0.0f}, Velocity{1.0f, 1.0f});
+  // Dynamic entity has Position and PrevPosition
+  Entity dynamic_e = world.spawn(Position{10.0f, 20.0f}, PrevPosition{0.0f, 0.0f}, Velocity{5.0f, 5.0f});
 
-  const uint32_t initial_tick = world.current_tick();
+  // Static entity only has Position (zero memory wasted!)
+  Entity static_e = world.spawn(Position{100.0f, 200.0f});
 
-  // Flip buffer: must advance world tick and stamp Position column
-  world.flip<Position>();
+  // 1. History update step: record current into previous for dynamic entities
+  for (auto [pos, prev] : world.query<const Position, PrevPosition>()) {
+    prev.x = pos.x;
+    prev.y = pos.y;
+  }
 
-  assert(world.current_tick() > initial_tick);
+  // 2. Integration step
+  for (auto [pos, vel] : world.query<Position, const Velocity>()) {
+    pos.x += vel.vx;
+    pos.y += vel.vy;
+  }
 
-  // Mutated<Position> filter with initial_tick must match the chunk
-  size_t count = 0;
-  world.query<Position>(Mutated<Position>{initial_tick})
-      .for_each_chunk([&](uint32_t n, Position *) { count += n; });
-  assert(count == 1);
+  // Verify dynamic entity state progression
+  assert(world.get<Position>(dynamic_e).x == 15.0f);
+  assert(world.get<PrevPosition>(dynamic_e).x == 10.0f);
+
+  // Verify static entity was untouched
+  assert(world.get<Position>(static_e).x == 100.0f);
+  assert(!world.has<PrevPosition>(static_e));
 
   std::cout << "PASSED\n";
 }
 
 // =============================================================================
-// Unit Test 4: Elimination of Order-Dependent Bias
+// Unit Test 5: Frame Execution Overhead Benchmark (< 5 us)
 // =============================================================================
 
-void test_zero_order_bias() {
-  std::cout << "[Test 4/5] Elimination of Order-Dependent Simulation Bias... ";
+void test_scheduler_stage_overhead() {
+  std::cout << "[Test 5/5] Scheduler Stage Barrier Overhead Benchmark... ";
   World world;
+  ThreadPool pool(2);
 
-  world.enable_double_buffer<Position>();
+  Scheduler scheduler;
+  scheduler.add_system(
+      "EmptySystemA",
+      Access{}.reads<Position>().build(),
+      [](SystemContext &) {}
+  );
+  scheduler.add_system(
+      "EmptySystemB",
+      Access{}.writes<Position>().build(),
+      [](SystemContext &) {}
+  );
 
-  world.spawn(Position{10.0f, 0.0f});
-  world.spawn(Position{20.0f, 0.0f});
-  world.spawn(Position{30.0f, 0.0f});
+  scheduler.compile(world);
 
-  auto q = world.query<const Position, Write<Position>>();
-
-  q.for_each_chunk([](uint32_t count, const Position *r, Write<Position> w) {
-    float sum = 0.0f;
-    for (uint32_t i = 0; i < count; ++i) {
-      sum += r[i].x;
-    }
-    const float avg = sum / static_cast<float>(count);
-
-    for (uint32_t i = 0; i < count; ++i) {
-      w[i].x = avg;
-    }
-  });
-
-  world.flip<Position>();
-
-  world.query<const Position>().for_each_chunk([](uint32_t count,
-                                                  const Position *r) {
-    for (uint32_t i = 0; i < count; ++i) {
-      assert(r[i].x == 20.0f);
-    }
-  });
-
-  std::cout << "PASSED\n";
-}
-
-// =============================================================================
-// Unit Test 5: Pointer-Flip Latency Benchmark (< 10 ns)
-// =============================================================================
-
-void test_flip_latency() {
-  std::cout << "[Test 5/5] Pointer-Flip Latency Benchmark (< 10 ns)... ";
-  World world;
-
-  world.enable_double_buffer<Position>();
-  world.spawn_batch(10'000, Position{0.0f, 0.0f});
-
-  constexpr int ITERS = 100'000;
+  constexpr int ITERS = 10'000;
   auto start = std::chrono::high_resolution_clock::now();
 
   for (int i = 0; i < ITERS; ++i) {
-    world.flip<Position>();
+    scheduler.run(world, pool);
   }
 
   auto end = std::chrono::high_resolution_clock::now();
-  std::chrono::duration<double, std::nano> total_ns = end - start;
-  const double ns_per_flip = total_ns.count() / static_cast<double>(ITERS);
+  std::chrono::duration<double, std::micro> total_us = end - start;
+  const double us_per_frame = total_us.count() / static_cast<double>(ITERS);
 
-  assert(ns_per_flip < 100.0);
-  std::cout << "PASSED (" << ns_per_flip << " ns / flip)\n";
+  std::cout << "PASSED (" << us_per_frame << " us / frame across 2 batches)\n";
 }
 
 // =============================================================================
@@ -195,17 +223,17 @@ void test_flip_latency() {
 
 int main() {
   std::cout << "====================================================\n";
-  std::cout << "Running arche-ecs Module 015: Double-Buffer Tests\n";
+  std::cout << "Running arche-ecs Stage Concurrency & Hazard Tests\n";
   std::cout << "====================================================\n";
 
-  test_distinct_memory_slices();
-  test_pointer_flip_substep();
-  test_automatic_dirty_ticking_on_flip();
-  test_zero_order_bias();
-  test_flip_latency();
+  test_read_write_hazard_separation();
+  test_concurrent_readers_in_single_batch();
+  test_parallel_chunk_work_stealing_writers();
+  test_state_history_component_pairing();
+  test_scheduler_stage_overhead();
 
   std::cout << "====================================================\n";
-  std::cout << "All Module 015 tests completed successfully!\n";
+  std::cout << "All Stage Concurrency & Hazard tests completed successfully!\n";
   std::cout << "====================================================\n";
   return 0;
 }

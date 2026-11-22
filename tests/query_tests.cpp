@@ -307,7 +307,7 @@ void test_query_entity_and_deferred_mutation() {
   }
 
   // 3. Verify that before playback, world state is untouched
-  assert(world.entity_count() == 10);
+  assert(world.entities.count() == 10);
 
   // 4. Playback deferred commands safely outside the query loop
   cmd.commit(world);
@@ -316,19 +316,19 @@ void test_query_entity_and_deferred_mutation() {
   // 5. Verify results:
   // pos.y was: 5, 4, 3, 2, 1, 0, -1, -2, -3, -4
   // Destroyed: -1, -2, -3, -4 (4 entities) -> 6 surviving entities
-  assert(world.entity_count() == 6);
+  assert(world.entities.count() == 6);
 
   // Entity with pos.y == 0 (index 5) must now possess TagDead
-  assert(world.is_alive(created[5]));
+  assert(world.entities.contains(created[5]));
   assert(world.has<TagDead>(created[5]));
 
   // 6. Also test deferred spawn via CommandBuffer
   cmd.spawn(Position{100.0f, 200.0f}, Velocity{10.0f, 20.0f});
   cmd.spawn(Position{300.0f, 400.0f}, Velocity{30.0f, 40.0f});
-  assert(world.entity_count() == 6); // Not yet created
+  assert(world.entities.count() == 6); // Not yet created
 
   cmd.commit(world);
-  assert(world.entity_count() == 8); // Now created!
+  assert(world.entities.count() == 8); // Now created!
 
   // Verify the newly created entities can be queried immediately
   size_t spawned_seen = 0;
@@ -414,6 +414,160 @@ void test_high_density_throughput_and_cycles() {
 }
 
 // =============================================================================
+// Unit Test 7: Optional Component Querying (const T*, T*)
+// =============================================================================
+
+struct Shield {
+  float defense{50.0f};
+};
+
+struct PlayerTag {};
+struct EnemyTag {};
+struct NpcTag {};
+
+void test_optional_components_query() {
+  std::cout << "[Test 7/9] Optional Component Querying (const T*, T*)... ";
+  World world;
+
+  // 10 entities with Position + Shield
+  for (int i = 0; i < 10; ++i) {
+    world.spawn(Position{static_cast<float>(i), 0.0f}, Shield{100.0f});
+  }
+  // 15 entities with Position only (no Shield)
+  for (int i = 0; i < 15; ++i) {
+    world.spawn(Position{static_cast<float>(100 + i), 0.0f});
+  }
+
+  size_t total = 0;
+  size_t with_shield = 0;
+  size_t without_shield = 0;
+
+  for (auto [pos, shield] : world.query<Position, const Shield *>()) {
+    ++total;
+    if (shield != nullptr) {
+      assert(shield->defense == 100.0f);
+      assert(pos.x < 100.0f);
+      ++with_shield;
+    } else {
+      assert(pos.x >= 100.0f);
+      ++without_shield;
+    }
+  }
+
+  assert(total == 25);
+  assert(with_shield == 10);
+  assert(without_shield == 15);
+
+  // Test mutable pointer T*
+  for (auto [pos, shield] : world.query<Position, Shield *>()) {
+    if (shield != nullptr) {
+      shield->defense += 25.0f;
+    }
+  }
+
+  for (auto [pos, shield] : world.query<Position, const Shield *>()) {
+    if (shield != nullptr) {
+      assert(shield->defense == 125.0f);
+    }
+  }
+
+  std::cout << "PASSED\n";
+}
+
+// =============================================================================
+// Unit Test 8: Has<T> Query Parameter
+// =============================================================================
+
+void test_has_query_parameter() {
+  std::cout << "[Test 8/9] Has<T> Query Parameter... ";
+  World world;
+
+  for (int i = 0; i < 8; ++i) {
+    world.spawn(Position{static_cast<float>(i), 0.0f}, Shield{50.0f});
+  }
+  for (int i = 0; i < 12; ++i) {
+    world.spawn(Position{static_cast<float>(100 + i), 0.0f});
+  }
+
+  size_t total = 0;
+  size_t true_count = 0;
+  size_t false_count = 0;
+
+  for (auto [pos, has_shield] : world.query<Position, arche::Has<Shield>>()) {
+    static_assert(std::is_same_v<decltype(has_shield), bool>);
+    ++total;
+    if (has_shield) {
+      assert(pos.x < 100.0f);
+      ++true_count;
+    } else {
+      assert(pos.x >= 100.0f);
+      ++false_count;
+    }
+  }
+
+  assert(total == 20);
+  assert(true_count == 8);
+  assert(false_count == 12);
+
+  std::cout << "PASSED\n";
+}
+
+// =============================================================================
+// Unit Test 9: Or<With<A>, With<B>> Query Filter
+// =============================================================================
+
+void test_or_query_filter() {
+  std::cout << "[Test 9/9] Or<With<A>, With<B>> Query Filter... ";
+  World world;
+
+  // 5 Players with Position
+  for (int i = 0; i < 5; ++i) {
+    world.spawn(Position{1.0f, 0.0f}, PlayerTag{});
+  }
+  // 7 Enemies with Position
+  for (int i = 0; i < 7; ++i) {
+    world.spawn(Position{2.0f, 0.0f}, EnemyTag{});
+  }
+  // 11 NPCs with Position (should NOT match)
+  for (int i = 0; i < 11; ++i) {
+    world.spawn(Position{3.0f, 0.0f}, NpcTag{});
+  }
+  // 3 Players with Position AND TagDead
+  for (int i = 0; i < 3; ++i) {
+    world.spawn(Position{1.0f, 0.0f}, PlayerTag{}, TagDead{});
+  }
+
+  // 1. Or<With<PlayerTag>, With<EnemyTag>>: matches (5 live players + 3 dead players + 7 enemies) = 15
+  size_t count_or = 0;
+  for (auto [pos] : world.query<Position>(arche::Or<arche::With<PlayerTag>, arche::With<EnemyTag>>{})) {
+    assert(pos.x == 1.0f || pos.x == 2.0f);
+    ++count_or;
+  }
+  assert(count_or == 15);
+
+  // 2. Or combined with Without<TagDead>: matches (5 live players + 7 enemies) = 12
+  size_t count_or_alive = 0;
+  for (auto [pos] : world.query<Position>(
+           arche::Or<arche::With<PlayerTag>, arche::With<EnemyTag>>{},
+           arche::Without<TagDead>{}
+       )) {
+    assert(pos.x == 1.0f || pos.x == 2.0f);
+    ++count_or_alive;
+  }
+  assert(count_or_alive == 12);
+
+  // 3. Bare types inside Or: Or<PlayerTag, EnemyTag>
+  size_t count_bare_or = 0;
+  for (auto [pos] : world.query<Position>(arche::Or<PlayerTag, EnemyTag>{}, arche::Without<TagDead>{})) {
+    (void)pos;
+    ++count_bare_or;
+  }
+  assert(count_bare_or == 12);
+
+  std::cout << "PASSED\n";
+}
+
+// =============================================================================
 // Main Test Runner
 // =============================================================================
 
@@ -428,6 +582,9 @@ int main() {
   test_query_filters_with_and_without();
   test_query_entity_and_deferred_mutation();
   test_high_density_throughput_and_cycles();
+  test_optional_components_query();
+  test_has_query_parameter();
+  test_or_query_filter();
 
   std::cout << "====================================================\n";
   std::cout << "All Query System tests completed successfully!\n";

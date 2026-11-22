@@ -144,7 +144,7 @@ void test_declarative_syntax() {
   World world;
 
   constexpr size_t COUNT = 10'000;
-  world.spawn_batch(COUNT, Position{0.0f, 0.0f}, Velocity{1.0f, 1.0f});
+  world.spawn({.count = COUNT}, Position{0.0f, 0.0f}, Velocity{1.0f, 1.0f});
 
   // Standard Colony boid query
   auto query = world.query<Position, const Velocity>();

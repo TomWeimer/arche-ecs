@@ -1,5 +1,5 @@
 #include "arche/arche.hpp"
-#include "arche/detail/archetype_graph.hpp"
+#include "arche/archetype/archetype_graph.hpp"
 
 #include <cassert>
 #include <chrono>
