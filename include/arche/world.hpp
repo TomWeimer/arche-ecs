@@ -1,19 +1,17 @@
 #pragma once
 
-#include "arche/entity/entity.hpp"
-#include "arche/entity/entity_view.hpp"
-#include "arche/world_facades.hpp"
-#include "arche/world_storage.hpp"
+#include "arche/entity.hpp"
+#include "world/world_facades.hpp"
 
 #include <cstddef>
 #include <cstdint>
 #include <span>
 #include <type_traits>
-#include <utility>
 #include <vector>
 
 namespace arche::internal {
 struct WorldAccess;
+struct WorldStorage;
 }
 
 namespace arche {
@@ -49,7 +47,7 @@ class World {
   friend struct internal::WorldAccess;
 
 private:
-  WorldStorage storage_;
+  internal::WorldStorage *storage_{nullptr};
 
 public:
   // --- Domain Sub-Facades ----------------------------------------------------
@@ -207,16 +205,7 @@ public:
 
   /// Monotonically increasing simulation version sequence, incremented on
   /// mutations.
-  [[nodiscard]] inline uint32_t version() const noexcept {
-    return storage_.current_version;
-  }
+  [[nodiscard]] inline uint32_t version() const noexcept;
 };
 
 } // namespace arche
-
-#include "arche/chunk/chunk_distributor.inl"
-#include "arche/component/component_access.inl"
-#include "arche/entity/entity_allocator.inl"
-#include "arche/entity/entity_view.inl"
-#include "arche/world_access.hpp"
-#include "arche/world_facades_impl.hpp"
