@@ -16,3 +16,8 @@ An archetype is a unique combination of component types. Every entity belonging 
 - Relocating component data from source chunk to destination chunk.
 - Compacting source chunk using Swap-and-Pop to maintain dense zero-hole memory.
 - Updating `SlotMap` records for both the moved entity and the swapped neighbor.
+
+## 4. Archetype Storage Introspection (ArchetypeFacade)
+- `world.archetypes.count()`: Total number of active archetype schemas in the graph.
+- `world.archetypes.chunks(arch)`: Direct access to allocated chunk buffer arrays.
+- `world.archetypes.count_with<T>()`: Fast query-less frequency counts of entities with component $T$.

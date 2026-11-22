@@ -18,6 +18,13 @@
 - Systems with read-write or write-write conflicts are sequenced into consecutive stages.
 - Topological stage sorting guarantees deterministic, race-free simulation frames.
 
-## 4. Execution Pipeline & Work-Stealing
-- Stage-by-stage parallel dispatching across worker threads.
+## 4. SystemScale: Computational Weight Classes
+- `SystemScale::Narrow`: Inter-system parallelism (multiple independent systems run concurrently across threads).
+- `SystemScale::Wide`: Intra-system parallelism (heavy systems get exclusive ThreadPool access for chunk-level `parallel_for`).
+- `SystemScale::Sequential`: Synchronous execution pinned to caller/main thread.
+
+## 5. SystemFacade & Pipeline Execution
+- `world.systems.add_system(...)`: Registers systems with name, access, callback, and scale.
+- `world.systems.compile()`: Compiles the conflict-free parallel DAG stages.
+- `world.systems.run(pool)`: Dispatches compiled stages across worker threads.
 - Thread-safe command buffers (`CommandBuffer`, `ParallelCommandBuffer`) for deferred structural mutations.

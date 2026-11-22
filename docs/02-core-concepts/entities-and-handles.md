@@ -15,3 +15,10 @@ An `Entity` is not a container, class, or pointer. It is an opaque 64-bit intege
 ## 3. SlotMap Architecture
 - Indirection table decoupling opaque entity handles from dynamic chunk memory locations.
 - How `SlotMap` updates row mappings during Swap-and-Pop without invalidating existing handles.
+
+## 4. Entity Table Introspection (EntityFacade)
+- `world.entities.contains(e)`: Direct alive & generation validation in $\mathcal{O}(1)$.
+- `world.entities.count()`: Total living entities across all archetypes.
+- `world.entities.capacity()`: Total allocated slot map capacity.
+- `world.entities.is_empty()`: True if zero entities currently exist.
+- `world.entities.resolve(slot_index)`: Reconstructs a valid handle from a slot index if alive.
