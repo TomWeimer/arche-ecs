@@ -3,41 +3,39 @@
 // IWYU pragma: begin_exports
 
 // Core Types & Identifiers
-#include "arche/hardware/hardware.hpp"
-#include "arche/component/component_mask.hpp"
-#include "arche/entity/entity.hpp"
-#include "arche/entity/entity_record.hpp"
-#include "arche/entity/entity_view.hpp"
-#include "arche/component/column_layout.hpp"
-#include "arche/resource/resource.hpp"
-#include "arche/persistence/snapshot.hpp"
-#include "arche/component/type_id.hpp"
+#include "arche/entity.hpp"
+#include "arche/resource.hpp"
+#include "component/column_layout.hpp"
+#include "component/component_mask.hpp"
+#include "component/type_id.hpp"
+#include "entity/entity_record.hpp"
+#include "hardware/hardware.hpp"
+#include "persistence/snapshot.hpp"
 
 // Memory Layout & Storage
-#include "arche/archetype/archetype.hpp"
-#include "arche/hardware/gpu_layout.hpp"
-#include "arche/chunk/chunk.hpp"
-#include "arche/entity/slot_map.hpp"
+#include "archetype/archetype.hpp"
+#include "chunk/chunk.hpp"
+#include "entity/slot_map.hpp"
+#include "hardware/gpu_layout.hpp"
 
 // Queries, Filters & Iteration
-#include "arche/query/filter.hpp"
-#include "arche/query/query.hpp"
-#include "arche/spatial/sort.hpp"
+#include "arche/query.hpp"
+#include "query/filter.hpp"
+#include "spatial/sort.hpp"
 
 // Concurrency & Commands
-#include "arche/command/command_buffer.hpp"
-#include "arche/system/system_context.hpp"
-#include "arche/concurrency/thread_pool.hpp"
+#include "arche/command.hpp"
+#include "concurrency/thread_pool.hpp"
 
 // Central World Facade
 #include "arche/world.hpp"
-#include "arche/world_facades.hpp"
-#include "arche/world_facades_impl.hpp"
+#include "world/world_facades_impl.hpp"
 
 // Scheduling, Access & Plugins
-#include "arche/system/access.hpp"
-#include "arche/system/plugin.hpp"
-#include "arche/system/scheduler.hpp"
+#include "system/system_context.hpp"
+#include "system/access.hpp"
+#include "system/plugin.hpp"
+#include "system/scheduler.hpp"
 
 // IWYU pragma: end_exports
 

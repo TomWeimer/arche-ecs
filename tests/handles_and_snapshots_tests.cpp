@@ -1,5 +1,5 @@
 #include "arche/arche.hpp"
-#include "arche/entity/slot_map.hpp"
+#include "entity/slot_map.hpp"
 
 #include <cassert>
 #include <chrono>

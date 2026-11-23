@@ -116,7 +116,7 @@ void run_trivial_movement_benchmark(size_t entity_count, int iterations) {
     );
   }
 
-  Query<Position, Velocity> query(world);
+  auto query = world.query<Position, Velocity>();
   constexpr float dt = 0.01666f;
 
   // 2. Warm-up loop (10 iterations) to populate instruction and data caches

@@ -27,7 +27,8 @@ struct Key {
 };
 
 void test_clean_lifecycle_api() {
-  std::cout << "Testing Clean Lifecycle API (spawn, despawn, get, has, add, remove)... ";
+  std::cout << "Testing Clean Lifecycle API (spawn, despawn, get, has, add, "
+               "remove)... ";
   World world;
 
   // Scalar spawn
@@ -46,7 +47,9 @@ void test_clean_lifecycle_api() {
   static_assert(std::is_same_v<decltype(world.get<Pos>(e1)), const Pos &>);
   static_assert(std::is_same_v<decltype(world.get_mut<Pos>(e1)), Pos &>);
 
-  const auto &rec = arche::internal::WorldAccess::slot_map(world).get_record(e1);
+  const auto &rec = arche::internal::WorldAccess::slot_map(world).get_record(
+      e1
+  );
   const int16_t pos_col = rec.archetype->column_index(arche::type_id<Pos>());
   assert(rec.chunk->column_version(pos_col) == 1);
 
@@ -62,7 +65,9 @@ void test_clean_lifecycle_api() {
 
   world.get_mut<Pos>(e1).x = 42.0f;
   assert(world.get<Pos>(e1).x == 42.0f);
-  assert(rec.chunk->column_version(pos_col) == 3); // Automatically stamped dirty!
+  assert(
+      rec.chunk->column_version(pos_col) == 3
+  ); // Automatically stamped dirty!
 
   // Add / remove
   world.add(e1, Vel{10.0f, 20.0f});
@@ -133,14 +138,17 @@ void test_clean_frame_loop_api() {
 }
 
 void test_sorting_and_snapshots_api() {
-  std::cout << "Testing Sorting, GPU & Snapshots API (sort, save_snapshot, load_snapshot)... ";
+  std::cout << "Testing Sorting, GPU & Snapshots API (sort, save_snapshot, "
+               "load_snapshot)... ";
   World world;
   world.spawn(Key{30});
   world.spawn(Key{10});
   world.spawn(Key{20});
 
   // In-place sort across all archetypes with Key
-  arche::sort<Key>(world, [](const Key &a, const Key &b) { return a.val < b.val; });
+  arche::sort<Key>(world, [](const Key &a, const Key &b) {
+    return a.val < b.val;
+  });
 
   std::vector<uint32_t> vals;
   world.query<Key>().for_each([&](const Key &k) { vals.push_back(k.val); });
@@ -162,14 +170,14 @@ void test_sorting_and_snapshots_api() {
 }
 
 void test_entity_view_api() {
-  std::cout << "Testing EntityView Handle API (world.entity(e), get, get_mut, has, add, remove, despawn)... ";
+  std::cout << "Testing EntityView Handle API (world.entity(e), get, get_mut, "
+               "has, add, remove, despawn)... ";
   World world;
 
   Entity e1 = world.spawn(Pos{10.0f, 20.0f});
-  
-  // Verify return type on mutable World is EntityMut (also aliased as EntityView)
+
   static_assert(std::is_same_v<decltype(world.entity(e1)), arche::EntityMut>);
-  static_assert(std::is_same_v<arche::EntityView, arche::EntityMut>);
+  static_assert(std::is_same_v<arche::EntityMut, arche::EntityMut>);
 
   auto view = world.entity(e1);
 
@@ -200,7 +208,9 @@ void test_entity_view_api() {
   view.get_mut<Pos>().x = 99.0f;
   assert(view.get<Pos>().x == 99.0f);
 
-  const auto &rec = arche::internal::WorldAccess::slot_map(world).get_record(e1);
+  const auto &rec = arche::internal::WorldAccess::slot_map(world).get_record(
+      e1
+  );
   const int16_t pos_col = rec.archetype->column_index(arche::type_id<Pos>());
   assert(rec.chunk->column_version(static_cast<uint16_t>(pos_col)) == v_before);
 

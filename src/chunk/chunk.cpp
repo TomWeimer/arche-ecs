@@ -1,8 +1,9 @@
-#include "arche/chunk/chunk.hpp"
-#include "arche/entity/slot_map.hpp"
+
+#include "chunk.hpp"
 
 #include <cassert>
 #include <cstring>
+#include <type_traits>
 
 namespace arche {
 
@@ -78,55 +79,46 @@ inline void relocate_row_components(
 }
 
 /**
- * @brief Transfers the entity handle and synchronizes the SlotMap record.
- *
- * @details
- * CRITICAL INVARIANT: The relocated entity's dense `(chunk_index, row)`
- * coordinate inside the central `SlotMap` must be updated immediately to
- * prevent dangling handles or memory corruption on subsequent entity lookups.
+ * @brief Transfers the entity handle from source row to destination row.
  *
  * @param chunk Pointer to the chunk being compacted.
  * @param dst_row Vacated destination row receiving the relocated entity handle.
  * @param src_row Source row index where the relocated entity previously
  * resided.
- * @param slot_map Central generational SlotMap to update with new row index.
+ * @return Entity The entity handle that was relocated.
  */
-inline void relocate_entity_handle(
+inline Entity relocate_entity_handle(
     Chunk *chunk,
     uint32_t dst_row,
-    uint32_t src_row,
-    SlotMap &slot_map
+    uint32_t src_row
 ) noexcept {
   Entity *entities = chunk->entity_slice();
   Entity moved_entity = entities[src_row];
 
   // Move Entity handle into destination slot
   entities[dst_row] = moved_entity;
-
-  // Synchronize SlotMap record with the entity's new row position
-  slot_map.update_row(moved_entity, dst_row);
+  return moved_entity;
 }
 
 /**
  * @brief Relocates both component data and entity handle from source row to
- * destination row, keeping the SlotMap synchronized.
+ * destination row.
  *
  * @param chunk Pointer to the chunk being compacted.
  * @param dst_row Vacated destination row receiving the relocated entity.
  * @param src_row Source row index where the relocated entity previously
  * resided.
- * @param slot_map Central SlotMap to synchronize with the new row index.
  * @param layouts Span of component column layouts.
+ * @return Entity The entity handle that was relocated.
  */
-inline void relocate_entity(
+inline Entity relocate_entity(
     Chunk *chunk,
     uint32_t dst_row,
     uint32_t src_row,
-    SlotMap &slot_map,
     std::span<const ComponentColumnLayout> layouts
 ) noexcept {
   relocate_row_components(chunk, dst_row, src_row, layouts);
-  relocate_entity_handle(chunk, dst_row, src_row, slot_map);
+  return relocate_entity_handle(chunk, dst_row, src_row);
 }
 
 /**
@@ -193,17 +185,19 @@ inline void advance_to_surviving_tail(
  * @param chunk Pointer to the chunk being compacted.
  * @param rows_to_delete Span of row indices marked for deletion.
  * @param final_count Final entity count after compaction (partition boundary).
- * @param slot_map Central SlotMap to synchronize.
  * @param layouts Span of component column layouts.
+ * @param out_relocations Span to receive entity relocation records.
+ * @return uint32_t Number of entities relocated.
  */
-inline void relocate_tail_entities(
+inline uint32_t relocate_tail_entities(
     Chunk *chunk,
     std::span<const uint32_t> rows_to_delete,
     uint32_t final_count,
-    SlotMap &slot_map,
-    std::span<const ComponentColumnLayout> layouts
+    std::span<const ComponentColumnLayout> layouts,
+    std::span<EntityRelocation> out_relocations
 ) noexcept {
   uint32_t tail_cursor = chunk->count() - 1;
+  uint32_t reloc_count = 0;
 
   for (uint32_t target_row : rows_to_delete) {
     // Only vacated rows in the surviving active range (< final_count) need to
@@ -217,9 +211,14 @@ inline void relocate_tail_entities(
         tail_cursor >= final_count && "Tail cursor underflow during compaction"
     );
 
-    relocate_entity(chunk, target_row, tail_cursor, slot_map, layouts);
+    Entity moved = relocate_entity(chunk, target_row, tail_cursor, layouts);
+    if (reloc_count < out_relocations.size()) {
+      out_relocations[reloc_count] = EntityRelocation{moved, target_row};
+      ++reloc_count;
+    }
     --tail_cursor;
   }
+  return reloc_count;
 }
 
 } // namespace
@@ -231,43 +230,14 @@ inline void relocate_tail_entities(
 /**
  * @brief Removes an entity from the chunk using the Swap-and-Pop technique.
  *
- * @details
- * ### Why Swap-and-Pop is Used:
- * In game simulations, entities are created and destroyed frequently. If an
- * entity is removed from the middle of a chunk, we have three choices:
- *
- * 1. **Shift all elements left (Slow):**
- *    Moving every entity after the removed one down by one slot takes O(N)
- * time. With thousands of entities, this causes heavy memory copying and slows
- * down the simulation.
- * 2. **Leave an empty gap (Fragmented):**
- *    Leaving holes in memory means our simulation loops would have to check if
- *    each slot is empty or alive. This wastes memory and hurts CPU cache
- *    performance.
- * 3. **Swap-and-Pop (Fast & Packed):**
- *    Instead of shifting everything, we take the very last entity in the chunk
- *    and move it directly into the empty slot, then decrease the entity count
- * by one.
- *    - Runs in instant O(1) constant time, no matter how many entities are in
- *      the chunk.
- *    - Keeps all entities packed together continuously with zero gaps.
- *
- * ### How it Works:
- * - **Edge Case (Last Entity):** If the entity being removed is already at the
- *   end of the chunk, we simply call its destructors and decrease the count.
- * - **General Case:** We move the last entity's components into `row`, update
- *   its Entity ID in the chunk, update the `SlotMap` so the moved entity's
- *   handle knows its new row position, and decrease the count.
- *
  * @param row The row index of the entity being removed.
- * @param slot_map The central SlotMap, updated so the relocated entity can
- *                 still be found.
  * @param layouts The component column layouts defining offsets, sizes, and
  *                type descriptors.
+ * @return ChunkRelocation Record containing the entity moved into `row`,
+ * or an invalid entity if no relocation occurred.
  */
-void Chunk::swap_and_pop(
+ChunkRelocation Chunk::swap_and_pop(
     uint32_t row,
-    SlotMap &slot_map,
     std::span<const ComponentColumnLayout> layouts
 ) {
   assert(row < header_.count && "Row index out of bounds during swap_and_pop");
@@ -278,14 +248,15 @@ void Chunk::swap_and_pop(
   if (row == last_row) {
     destruct_row_components(this, row, layouts);
     --header_.count;
-    return;
+    return ChunkRelocation{};
   }
 
   // General Case: Relocate last entity components and handle into vacated row
-  relocate_entity(this, row, last_row, slot_map, layouts);
+  Entity moved = relocate_entity(this, row, last_row, layouts);
 
   // Decrement active entity count
   --header_.count;
+  return ChunkRelocation{moved};
 }
 
 // =============================================================================
@@ -296,29 +267,18 @@ void Chunk::swap_and_pop(
  * @brief Compacts multiple vacated rows in a single pass without redundant
  * moves.
  *
- * @details
- * ### Batched Compaction Algorithm:
- * When deleting multiple entities at once:
- * 1. **Batch Destruction:** Destructs components for all rows in
- * `rows_to_delete`.
- * 2. **Tail Relocation:** Fills holes left in the surviving range (`<
- * final_count`) by relocating valid, surviving entities from the tail region
- * (`>= final_count`).
- * 3. **Batch Count Update:** Decrements the chunk active entity count in a
- * single operation.
- *
  * @param rows_to_delete Span of row indices marked for deletion.
- * @param slot_map Central generational SlotMap to update for relocated entity
- * handles.
  * @param layouts Component column layouts defining offsets and descriptors.
+ * @param out_relocations Span to receive entity relocation records.
+ * @return uint32_t Number of entities relocated.
  */
-void Chunk::batch_swap_and_pop(
+uint32_t Chunk::batch_swap_and_pop(
     std::span<const uint32_t> rows_to_delete,
-    SlotMap &slot_map,
-    std::span<const ComponentColumnLayout> layouts
+    std::span<const ComponentColumnLayout> layouts,
+    std::span<EntityRelocation> out_relocations
 ) {
   if (rows_to_delete.empty()) {
-    return;
+    return 0;
   }
 
   const uint32_t delete_count = static_cast<uint32_t>(rows_to_delete.size());
@@ -333,10 +293,13 @@ void Chunk::batch_swap_and_pop(
   destruct_rows(this, rows_to_delete, layouts);
 
   // 2. Relocate surviving tail entities into vacated rows < final_count
-  relocate_tail_entities(this, rows_to_delete, final_count, slot_map, layouts);
+  const uint32_t count = relocate_tail_entities(
+      this, rows_to_delete, final_count, layouts, out_relocations
+  );
 
   // 3. Update chunk entity count to compacted total
   header_.count = final_count;
+  return count;
 }
 
 } // namespace arche

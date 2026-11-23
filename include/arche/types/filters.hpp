@@ -76,76 +76,70 @@ template <typename T> struct Has {
 template <typename... Filters> struct Or {};
 
 // =============================================================================
-// Filter Type Traits
+// Global Constexpr Tag Variables
+// =============================================================================
+
+/// Global constexpr tag instance for With<Ts...>. Allows `world.query<Position>(with<Velocity>)`.
+template <typename... Ts> inline constexpr With<Ts...> with{};
+
+/// Global constexpr tag instance for Without<Ts...>. Allows `world.query<Position>(without<Dead>)`.
+template <typename... Ts> inline constexpr Without<Ts...> without{};
+
+// =============================================================================
+// Filter Type Traits (Modern C++20 Variable Templates)
 // =============================================================================
 
 /// Type trait detecting With<Ts...> filters.
-template <typename T> struct is_with_filter : std::false_type {};
-template <typename... Ts>
-struct is_with_filter<With<Ts...>> : std::true_type {};
-template <typename T>
-inline constexpr bool is_with_filter_v = is_with_filter<T>::value;
+template <typename T> inline constexpr bool is_with_v = false;
+template <typename... Ts> inline constexpr bool is_with_v<With<Ts...>> = true;
+template <typename T> inline constexpr bool is_with_filter_v = is_with_v<std::decay_t<T>>;
 
 /// Type trait detecting Without<Ts...> filters.
-template <typename T> struct is_without_filter : std::false_type {};
-template <typename... Ts>
-struct is_without_filter<Without<Ts...>> : std::true_type {};
-template <typename T>
-inline constexpr bool is_without_filter_v = is_without_filter<T>::value;
+template <typename T> inline constexpr bool is_without_v = false;
+template <typename... Ts> inline constexpr bool is_without_v<Without<Ts...>> = true;
+template <typename T> inline constexpr bool is_without_filter_v = is_without_v<std::decay_t<T>>;
 
 /// Type trait detecting Has<T> query terms.
-template <typename T> struct is_has : std::false_type {};
-template <typename T> struct is_has<Has<T>> : std::true_type {
-  using type = T;
+template <typename T> inline constexpr bool is_has_v = false;
+template <typename T> inline constexpr bool is_has_v<Has<T>> = true;
+
+template <typename T> struct has_inner { using type = void; };
+template <typename T> struct has_inner<Has<T>> { using type = T; };
+template <typename T> using has_inner_t = typename has_inner<std::decay_t<T>>::type;
+
+template <typename T> struct is_has : std::bool_constant<is_has_v<std::decay_t<T>>> {
+  using type = has_inner_t<T>;
 };
-template <typename T>
-inline constexpr bool is_has_v = is_has<std::decay_t<T>>::value;
 
 /// Type trait detecting Or<Filters...> filters.
-template <typename T> struct is_or_filter : std::false_type {};
-template <typename... Filters>
-struct is_or_filter<Or<Filters...>> : std::true_type {};
+template <typename T> inline constexpr bool is_or_v = false;
+template <typename... Filters> inline constexpr bool is_or_v<Or<Filters...>> = true;
+template <typename T> inline constexpr bool is_or_filter_v = is_or_v<std::decay_t<T>>;
+
+// =============================================================================
+// Query Element & Column Storage Traits (Modern std::conditional_t)
+// =============================================================================
+
+/// Resolves the argument reference/pointer type unpacked in query callback loops.
 template <typename T>
-inline constexpr bool is_or_filter_v = is_or_filter<std::decay_t<T>>::value;
+using query_element_t = std::conditional_t<
+    is_has_v<std::decay_t<T>>, bool,
+    std::conditional_t<std::is_pointer_v<std::decay_t<T>>, std::decay_t<T>, T &>
+>;
 
-// =============================================================================
-// Query Element & Column Storage Traits
-// =============================================================================
-
-/// Resolves the argument reference/pointer type unpacked in query callback
-/// loops.
 template <typename T> struct query_element {
-  using type = T &;
+  using type = query_element_t<T>;
 };
-
-template <typename T>
-  requires(std::is_pointer_v<T>)
-struct query_element<T> {
-  using type = T;
-};
-
-template <typename T> struct query_element<Has<T>> {
-  using type = bool;
-};
-
-template <typename T> using query_element_t = typename query_element<T>::type;
 
 /// Resolves the raw column pointer type stored in QueryIterator.
+template <typename T>
+using column_pointer_type_t = std::conditional_t<
+    is_has_v<std::decay_t<T>>, bool,
+    std::conditional_t<std::is_pointer_v<std::decay_t<T>>, std::decay_t<T>, T *>
+>;
+
 template <typename T> struct column_pointer_type {
-  using type = T *;
+  using type = column_pointer_type_t<T>;
 };
-
-template <typename T>
-  requires(std::is_pointer_v<T>)
-struct column_pointer_type<T> {
-  using type = T;
-};
-
-template <typename T> struct column_pointer_type<Has<T>> {
-  using type = bool;
-};
-
-template <typename T>
-using column_pointer_type_t = typename column_pointer_type<T>::type;
 
 } // namespace arche

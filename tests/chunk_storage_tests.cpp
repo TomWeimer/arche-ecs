@@ -1,6 +1,6 @@
 #include "arche/arche.hpp"
-#include "arche/chunk/chunk_pool.hpp"
-#include "arche/entity/slot_map.hpp"
+#include "chunk/chunk_pool.hpp"
+#include "entity/slot_map.hpp"
 
 #include <cassert>
 #include <cstdint>
@@ -111,7 +111,7 @@ void test_chunk_allocation_and_alignment() {
   ChunkPool pool(chunk_size, 1);
   void *buffer = pool.acquire_buffer();
   Chunk *chunk = Chunk::create(
-      buffer, &arch, arch.chunk_capacity(), chunk_size
+      buffer, arch.chunk_capacity(), chunk_size
   );
   assert(chunk != nullptr);
 
@@ -175,7 +175,7 @@ void test_swap_and_pop_compaction() {
   ChunkPool pool(chunk_size, 1);
   void *buffer = pool.acquire_buffer();
   Chunk *chunk = Chunk::create(
-      buffer, &arch, arch.chunk_capacity(), chunk_size
+      buffer, arch.chunk_capacity(), chunk_size
   );
 
   const auto *pos_layout = arch.column_layout_for(pos_t);
@@ -208,7 +208,10 @@ void test_swap_and_pop_compaction() {
   const Entity moved_entity = entities[3];
 
   std::vector<ComponentColumnLayout> layouts = {*pos_layout, *hp_layout};
-  chunk->swap_and_pop(1, slot_map, layouts);
+  const auto reloc = chunk->swap_and_pop(1, layouts);
+  if (reloc.has_relocation()) {
+    slot_map.update_row(reloc.moved_entity, 1);
+  }
 
   assert(chunk->count() == 3);
   assert(chunk->entity_slice()[1] == moved_entity);

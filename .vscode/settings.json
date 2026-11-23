@@ -23,6 +23,9 @@
         "--clang-tidy",
         "--header-insertion=never"
     ],
+    "files.associations": {
+        "*.inl": "cpp"
+    },
     "editor.fontFamily": "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace",
     "editor.fontLigatures": true,
     "editor.fontSize": 14,

@@ -1,4 +1,4 @@
-#include "arche/arche.hpp"
+#include "entity/slot_map.hpp"
 
 #include <cassert>
 #include <iostream>
@@ -7,6 +7,7 @@
 namespace {
 using arche::Entity;
 using arche::null_entity;
+using arche::Internal::advance_nonzero;
 namespace Internal = arche::Internal;
 } // namespace
 

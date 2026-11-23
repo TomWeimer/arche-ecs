@@ -1,7 +1,14 @@
 #pragma once
 
-#include "arche/entity.hpp"
-#include "world/world_facades.hpp"
+#include "arche/types/entity.hpp"
+#include "arche/types/entity_ref.hpp"
+
+#include "arche/contracts/archetype.hpp"
+#include "arche/contracts/entity.hpp"
+#include "arche/contracts/gpu.hpp"
+#include "arche/contracts/resource.hpp"
+#include "arche/contracts/snapshot.hpp"
+#include "arche/contracts/system.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -205,7 +212,17 @@ public:
 
   /// Monotonically increasing simulation version sequence, incremented on
   /// mutations.
-  [[nodiscard]] inline uint32_t version() const noexcept;
+  [[nodiscard]] uint32_t version() const noexcept;
 };
 
 } // namespace arche
+
+#include "world/world_access.hpp"
+#include "arche/command.hpp"
+#include "component/component_access.hpp"
+#include "entity/entity_allocator.hpp"
+#include "component/component_access.inl"
+#include "entity/entity_allocator.inl"
+#include "entity/entity_view.inl"
+#include "world/world_facades_impl.hpp"
+#include "command/command_buffer.inl"

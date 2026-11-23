@@ -1,9 +1,7 @@
-#include "arche/world.hpp"
-#include "arche/world_access.hpp"
-#include "arche/spatial/sort.hpp"
-#include "arche/archetype/archetype.hpp"
-#include "arche/chunk/chunk.hpp"
-#include "arche/entity/slot_map.hpp"
+#include "spatial/permute.hpp"
+#include "archetype/archetype.hpp"
+#include "chunk/chunk.hpp"
+#include "entity/slot_map.hpp"
 
 #include <algorithm>
 #include <cassert>
@@ -17,7 +15,7 @@ namespace {
 
 inline Entity *resolve_entity_ptr(
     const Archetype *arch,
-    const std::vector<Chunk *> &chunks,
+    std::span<Chunk *const> chunks,
     uint32_t global_idx
 ) noexcept {
   const Archetype::ChunkCoord coord = arch->decompose_index(global_idx);
@@ -26,7 +24,7 @@ inline Entity *resolve_entity_ptr(
 
 inline void *resolve_component_ptr(
     const Archetype *arch,
-    const std::vector<Chunk *> &chunks,
+    std::span<Chunk *const> chunks,
     const ComponentColumnLayout &layout,
     uint32_t global_idx
 ) noexcept {
@@ -34,22 +32,9 @@ inline void *resolve_component_ptr(
   return chunks[coord.chunk_index]->component_element(layout, coord.local_row);
 }
 
-inline void sync_entity_slot(
-    const Archetype *arch,
-    const std::vector<Chunk *> &chunks,
-    SlotMap &slot_map,
-    Entity entity,
-    uint32_t global_idx
-) noexcept {
-  const Archetype::ChunkCoord coord = arch->decompose_index(global_idx);
-  slot_map.update_location(
-      entity, const_cast<Archetype *>(arch), chunks[coord.chunk_index], coord.local_row
-  );
-}
-
 void permute_single_column(
     const Archetype *arch,
-    const std::vector<Chunk *> &chunks,
+    std::span<Chunk *const> chunks,
     const ComponentColumnLayout &layout,
     std::span<const uint32_t> target_indices,
     std::vector<bool> &visited
@@ -89,7 +74,7 @@ void permute_single_column(
 
 void permute_all_component_columns(
     const Archetype *arch,
-    const std::vector<Chunk *> &chunks,
+    std::span<Chunk *const> chunks,
     std::span<const ComponentColumnLayout> layouts,
     std::span<const uint32_t> target_indices,
     std::vector<bool> &visited
@@ -99,11 +84,10 @@ void permute_all_component_columns(
   }
 }
 
-void permute_entities_and_sync_slots(
+void permute_entity_column(
     const Archetype *arch,
-    const std::vector<Chunk *> &chunks,
+    std::span<Chunk *const> chunks,
     std::span<const uint32_t> target_indices,
-    SlotMap &slot_map,
     std::vector<bool> &visited
 ) {
   const size_t total = target_indices.size();
@@ -124,14 +108,12 @@ void permute_entities_and_sync_slots(
       uint32_t next = target_indices[cur];
       if (next == start) {
         *cur_ptr = temp_entity;
-        sync_entity_slot(arch, chunks, slot_map, temp_entity, cur);
         break;
       }
 
       Entity *next_ptr = resolve_entity_ptr(arch, chunks, next);
       Entity moved = *next_ptr;
       *cur_ptr = moved;
-      sync_entity_slot(arch, chunks, slot_map, moved, cur);
 
       cur = next;
       cur_ptr = resolve_entity_ptr(arch, chunks, cur);
@@ -139,9 +121,32 @@ void permute_entities_and_sync_slots(
   }
 }
 
+inline void sync_all_entity_slots(
+    const Archetype *arch,
+    std::span<Chunk *const> chunks,
+    SlotMap &slot_map
+) noexcept {
+  for (uint32_t c = 0; c < chunks.size(); ++c) {
+    Chunk *chunk = chunks[c];
+    const uint32_t count = chunk->count();
+    const Entity *entities = chunk->entity_slice();
+    for (uint32_t r = 0; r < count; ++r) {
+      slot_map.update_location(
+          entities[r], const_cast<Archetype *>(arch), chunk, r
+      );
+    }
+  }
+}
+
 } // namespace
 
-void permute(World &world, Archetype *arch, std::span<const uint32_t> target_indices) {
+void permute(
+    Archetype *arch,
+    std::span<Chunk *const> chunks,
+    SlotMap &slot_map,
+    uint32_t version,
+    std::span<const uint32_t> target_indices
+) {
   assert(arch != nullptr);
   const size_t total = arch->entity_count();
   assert(target_indices.size() == total && "Permutation size must match entity count");
@@ -150,17 +155,15 @@ void permute(World &world, Archetype *arch, std::span<const uint32_t> target_ind
     return;
   }
 
-  const auto &chunks = world.archetypes.chunks(arch);
   const auto layouts = arch->column_layouts();
-
   std::vector<bool> visited(total, false);
 
   permute_all_component_columns(arch, chunks, layouts, target_indices, visited);
-  permute_entities_and_sync_slots(arch, chunks, target_indices, internal::WorldAccess::slot_map(world), visited);
+  permute_entity_column(arch, chunks, target_indices, visited);
+  sync_all_entity_slots(arch, chunks, slot_map);
 
-  internal::WorldAccess::advance_version(world);
   for (Chunk *chunk : chunks) {
-    chunk->set_structure_version(world.version());
+    chunk->set_structure_version(version);
   }
 }
 

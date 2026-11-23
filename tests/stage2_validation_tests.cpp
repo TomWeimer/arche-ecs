@@ -1,5 +1,5 @@
 #include "arche/arche.hpp"
-#include "arche/world_access.hpp"
+#include "world/world_access.hpp"
 #include "test_components.hpp"
 
 #include <cassert>

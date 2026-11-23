@@ -44,64 +44,32 @@ struct AccessDescriptor {
   /// Bitmask of world resource types written by the system.
   ResourceMask write_resources{};
 
-  /// Checks if this access footprint conflicts with another (read-write or
-  /// write-write race).
-  /// Checks if this access footprint conflicts with another (read-write or
-  /// write-write race).
-  [[nodiscard]] inline bool conflicts_with(
+  [[nodiscard]] constexpr bool conflicts_with(
       const AccessDescriptor &other
-  ) const noexcept;
+  ) const noexcept {
+    if (write_components.contains_any(
+            other.read_components | other.write_components
+        )) {
+      return true;
+    }
+    if (other.write_components.contains_any(read_components | write_components)) {
+      return true;
+    }
+    if (write_resources.contains_any(
+            other.read_resources | other.write_resources
+        )) {
+      return true;
+    }
+    if (other.write_resources.contains_any(read_resources | write_resources)) {
+      return true;
+    }
+    return false;
+  }
 
-  /// Checks if the descriptor specifies zero component and resource access.
-  [[nodiscard]] inline bool is_empty() const noexcept;
+  [[nodiscard]] constexpr bool is_empty() const noexcept {
+    return read_components.empty() && write_components.empty() &&
+        read_resources.empty() && write_resources.empty();
+  }
 };
-
-// =============================================================================
-// AccessBuilder: Fluent Builder for AccessDescriptor
-// =============================================================================
-
-/**
- * @class AccessBuilder
- * @brief Fluent builder interface for constructing an AccessDescriptor.
- *
- * Provides a type-safe, compile-time mechanism for declaring component and
- * resource dependencies without manual TypeID tracking.
- *
- * ```cpp
- * // Example:
- * auto access = Access{}
- *     .reads<Position, Mass>()
- *     .writes<Velocity>()
- *     .writes_resource<PhysicsConfig>();
- * ```
- */
-class AccessBuilder {
-public:
-  /// Declares read-only access (`const Comps&...`) to entity components.
-  template <typename... Comps> AccessBuilder &reads() noexcept;
-
-  /// Declares mutable write access (`Comps&...`) to entity components.
-  template <typename... Comps> AccessBuilder &writes() noexcept;
-
-  /// Declares read-only access (`const Res&...`) to World resources.
-  template <typename... Res> AccessBuilder &reads_resource() noexcept;
-
-  /// Declares mutable write access (`Res&...`) to World resources.
-  template <typename... Res> AccessBuilder &writes_resource() noexcept;
-
-  /// Constructs and returns the final immutable AccessDescriptor.
-  [[nodiscard]] AccessDescriptor build() const noexcept;
-
-private:
-  ComponentMask read_components_{};
-  ComponentMask write_components_{};
-  ResourceMask read_resources_{};
-  ResourceMask write_resources_{};
-};
-
-/// Type alias for concise syntax matching engine conventions.
-using Access = AccessBuilder;
 
 } // namespace arche
-
-#include "system/access.inl"

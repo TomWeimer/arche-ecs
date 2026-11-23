@@ -1,7 +1,6 @@
-#include "arche/archetype/component_migration.hpp"
-#include "arche/chunk/chunk_distributor.hpp"
-#include "arche/world.hpp"
-#include "arche/world_access.hpp"
+#include "archetype/component_migration.hpp"
+#include "chunk/chunk_pool.hpp"
+#include "entity/slot_map.hpp"
 
 #include <cassert>
 #include <cstring>
@@ -44,7 +43,8 @@ inline void copy_shared_components(
 } // namespace
 
 void ComponentMigration::migrate(
-    World &world,
+    ChunkPool &chunk_pool,
+    SlotMap &slot_map,
     Entity entity,
     const EntityRecord &old_record,
     Archetype *src_arch,
@@ -52,7 +52,9 @@ void ComponentMigration::migrate(
     TypeID mutated_type,
     const void *added_component_data
 ) {
-  auto [dst_chunk, dst_row] = ChunkDistributor::allocate_slot(world, dst_arch, entity);
+  auto [dst_chunk, dst_row] = dst_arch->allocate_slot(
+      chunk_pool, entity
+  );
   Chunk *src_chunk = old_record.chunk;
   assert(src_chunk != nullptr);
 
@@ -69,12 +71,15 @@ void ComponentMigration::migrate(
 
   dst_arch->increment_entity_count();
 
-  src_chunk->swap_and_pop(
-      old_record.row, internal::WorldAccess::slot_map(world), src_arch->column_layouts()
+  const auto reloc = src_chunk->swap_and_pop(
+      old_record.row, src_arch->column_layouts()
   );
+  if (reloc.has_relocation()) {
+    slot_map.update_row(reloc.moved_entity, old_record.row);
+  }
   src_arch->decrement_entity_count();
 
-  internal::WorldAccess::slot_map(world).update_location(entity, dst_arch, dst_chunk, dst_row);
+  slot_map.update_location(entity, dst_arch, dst_chunk, dst_row);
 }
 
 } // namespace arche

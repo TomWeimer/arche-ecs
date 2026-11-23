@@ -1,5 +1,5 @@
 #include "arche/arche.hpp"
-#include "arche/chunk/chunk_pool.hpp"
+#include "chunk/chunk_pool.hpp"
 
 #include <cassert>
 #include <cstdint>
