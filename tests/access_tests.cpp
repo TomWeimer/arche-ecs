@@ -1,4 +1,4 @@
-#include "arche/arche.hpp"
+import arche;
 
 #include <cassert>
 #include <iostream>
@@ -58,8 +58,8 @@ struct CollisionConfig {
 // =============================================================================
 
 /**
- * @brief Verifies that default-constructed AccessDescriptor has all bits cleared
- * and correctly reports is_empty().
+ * @brief Verifies that default-constructed AccessDescriptor has all bits
+ * cleared and correctly reports is_empty().
  */
 void test_empty_descriptors() {
   std::cout << "Testing Empty Descriptors & Default State... ";
@@ -82,10 +82,12 @@ void test_empty_descriptors() {
   AccessDescriptor write_only = AccessBuilder{}.writes<Velocity>().build();
   assert(!write_only.is_empty());
 
-  AccessDescriptor res_read = AccessBuilder{}.reads_resource<TimeStep>().build();
+  AccessDescriptor
+      res_read = AccessBuilder{}.reads_resource<TimeStep>().build();
   assert(!res_read.is_empty());
 
-  AccessDescriptor res_write = AccessBuilder{}.writes_resource<Gravity>().build();
+  AccessDescriptor
+      res_write = AccessBuilder{}.writes_resource<Gravity>().build();
   assert(!res_write.is_empty());
 
   // Two empty descriptors never conflict
@@ -126,7 +128,10 @@ void test_component_conflict_matrix() {
   AccessDescriptor sys_c_write = AccessBuilder{}.writes<Position>().build();
 
   // System D: reads Velocity (completely disjoint)
-  AccessDescriptor sys_d_disjoint = AccessBuilder{}.reads<Velocity>().writes<Acceleration>().build();
+  AccessDescriptor sys_d_disjoint = AccessBuilder{}
+                                        .reads<Velocity>()
+                                        .writes<Acceleration>()
+                                        .build();
 
   // 1. RAR: Read-After-Read -> SAFE (both read Position simultaneously)
   assert(!sys_a_read.conflicts_with(sys_b_read));
@@ -165,16 +170,22 @@ void test_resource_conflict_matrix() {
   std::cout << "Testing Resource Conflict Matrix (RAR, RAW, WAR, WAW)... ";
 
   // System A: reads Gravity
-  AccessDescriptor sys_a_read = AccessBuilder{}.reads_resource<Gravity>().build();
+  AccessDescriptor
+      sys_a_read = AccessBuilder{}.reads_resource<Gravity>().build();
 
   // System B: reads Gravity
-  AccessDescriptor sys_b_read = AccessBuilder{}.reads_resource<Gravity>().build();
+  AccessDescriptor
+      sys_b_read = AccessBuilder{}.reads_resource<Gravity>().build();
 
   // System C: writes Gravity
-  AccessDescriptor sys_c_write = AccessBuilder{}.writes_resource<Gravity>().build();
+  AccessDescriptor
+      sys_c_write = AccessBuilder{}.writes_resource<Gravity>().build();
 
   // System D: disjoint resource TimeStep
-  AccessDescriptor sys_d_disjoint = AccessBuilder{}.reads_resource<TimeStep>().writes_resource<CollisionConfig>().build();
+  AccessDescriptor sys_d_disjoint = AccessBuilder{}
+                                        .reads_resource<TimeStep>()
+                                        .writes_resource<CollisionConfig>()
+                                        .build();
 
   // 1. RAR: SAFE
   assert(!sys_a_read.conflicts_with(sys_b_read));
@@ -189,7 +200,8 @@ void test_resource_conflict_matrix() {
   assert(sys_c_write.conflicts_with(sys_a_read));
 
   // 4. WAW: CONFLICT
-  AccessDescriptor sys_e_write = AccessBuilder{}.writes_resource<Gravity>().build();
+  AccessDescriptor
+      sys_e_write = AccessBuilder{}.writes_resource<Gravity>().build();
   assert(sys_c_write.conflicts_with(sys_e_write));
   assert(sys_e_write.conflicts_with(sys_c_write));
 
@@ -217,17 +229,21 @@ void test_cross_domain_isolation() {
   AccessDescriptor sys1 = AccessBuilder{}.writes<Position>().build();
 
   // System 2 only reads or writes resource TimeStep
-  AccessDescriptor sys2 = AccessBuilder{}.reads_resource<TimeStep>().writes_resource<Gravity>().build();
+  AccessDescriptor sys2 = AccessBuilder{}
+                              .reads_resource<TimeStep>()
+                              .writes_resource<Gravity>()
+                              .build();
 
-  // Even if type_id<Position>() == resource_id<TimeStep>(), they must not conflict!
+  // Even if type_id<Position>() == resource_id<TimeStep>(), they must not
+  // conflict!
   assert(!sys1.conflicts_with(sys2));
   assert(!sys2.conflicts_with(sys1));
 
   // Mixed system with component and resource overlap
   AccessDescriptor sys3 = AccessBuilder{}
-      .reads<Position>()
-      .writes_resource<TimeStep>()
-      .build();
+                              .reads<Position>()
+                              .writes_resource<TimeStep>()
+                              .build();
 
   // sys1 writes Position, sys3 reads Position -> conflict on component
   assert(sys1.conflicts_with(sys3));
@@ -252,11 +268,11 @@ void test_variadic_pack_registration() {
   std::cout << "Testing Variadic Pack Registration & Bit Verification... ";
 
   AccessDescriptor desc = AccessBuilder{}
-      .reads<Position, Velocity, Mass>()
-      .writes<Acceleration, Health>()
-      .reads_resource<TimeStep, Gravity>()
-      .writes_resource<CollisionConfig>()
-      .build();
+                              .reads<Position, Velocity, Mass>()
+                              .writes<Acceleration, Health>()
+                              .reads_resource<TimeStep, Gravity>()
+                              .writes_resource<CollisionConfig>()
+                              .build();
 
   // Check read components
   assert(desc.read_components.test(type_id<Position>()));
@@ -299,19 +315,19 @@ void test_fluent_builder_chaining_and_alias() {
 
   // Order A
   AccessDescriptor descA = Access{}
-      .reads<Position>()
-      .writes<Velocity>()
-      .reads_resource<Gravity>()
-      .writes_resource<TimeStep>()
-      .build();
+                               .reads<Position>()
+                               .writes<Velocity>()
+                               .reads_resource<Gravity>()
+                               .writes_resource<TimeStep>()
+                               .build();
 
   // Order B (inverted chaining sequence)
   AccessDescriptor descB = AccessBuilder{}
-      .writes_resource<TimeStep>()
-      .reads_resource<Gravity>()
-      .writes<Velocity>()
-      .reads<Position>()
-      .build();
+                               .writes_resource<TimeStep>()
+                               .reads_resource<Gravity>()
+                               .writes<Velocity>()
+                               .reads<Position>()
+                               .build();
 
   assert(descA.read_components == descB.read_components);
   assert(descA.write_components == descB.write_components);

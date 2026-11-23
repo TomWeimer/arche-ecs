@@ -1,5 +1,4 @@
-#include "arche/arche.hpp"
-#include "chunk/chunk_pool.hpp"
+import arche;
 
 #include <cassert>
 #include <cstdint>

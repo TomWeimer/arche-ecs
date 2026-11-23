@@ -1,5 +1,4 @@
-#include "arche/arche.hpp"
-#include "world/world_access.hpp"
+import arche;
 
 #include <cassert>
 #include <iostream>
@@ -144,7 +143,10 @@ void test_chunk_user_metadata_culling() {
   constexpr size_t COUNT = 5000;
   world.spawn({.count = COUNT}, Position{1.0f, 1.0f});
 
-  Archetype *arch = arche::internal::WorldAccess::graph(world).archetypes().back().get();
+  Archetype *arch = arche::internal::WorldAccess::graph(world)
+                        .archetypes()
+                        .back()
+                        .get();
   auto &chunks = world.archetypes.chunks(arch);
   assert(chunks.size() >= 2);
 
@@ -155,7 +157,8 @@ void test_chunk_user_metadata_culling() {
   // Filter chunks using user metadata predicate
   size_t visible_chunks = 0;
   for (arche::Chunk *chunk : chunks) {
-    if (chunk->is_empty()) continue;
+    if (chunk->is_empty())
+      continue;
     const auto *aabb = reinterpret_cast<const TestAABB *>(
         chunk->header().user_metadata
     );

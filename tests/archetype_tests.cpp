@@ -1,5 +1,4 @@
-#include "arche/arche.hpp"
-#include "archetype/archetype_graph.hpp"
+import arche;
 
 #include <cassert>
 #include <chrono>

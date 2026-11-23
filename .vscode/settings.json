@@ -17,14 +17,16 @@
         "panel.border": "#27272a",
         "terminal.background": "#131314"
     },
+    "clangd.path": "/opt/homebrew/opt/llvm/bin/clangd",
     "clangd.arguments": [
         "--compile-commands-dir=${workspaceFolder}/build",
         "--background-index",
         "--clang-tidy",
-        "--header-insertion=never"
+        "--header-insertion=never",
+        "--experimental-modules-support"
     ],
     "files.associations": {
-        "*.inl": "cpp"
+        "*.cppm": "cpp"
     },
     "editor.fontFamily": "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace",
     "editor.fontLigatures": true,

@@ -1,4 +1,4 @@
-#include "arche/arche.hpp"
+import arche;
 
 #include <cassert>
 #include <iostream>

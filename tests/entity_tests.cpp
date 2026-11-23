@@ -1,4 +1,4 @@
-#include "entity/slot_map.hpp"
+import arche;
 
 #include <cassert>
 #include <iostream>

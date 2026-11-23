@@ -1,4 +1,4 @@
-#include "arche/arche.hpp"
+import arche;
 
 #include <cassert>
 #include <iostream>
@@ -310,7 +310,8 @@ void test_resource_move_semantics() {
 
 /**
  * @brief Verifies that arche::World correctly embeds ResourceContainer and
- * exposes clean facade methods (insert_resource, resource, has_resource, remove_resource).
+ * exposes clean facade methods (insert_resource, resource, has_resource,
+ * remove_resource).
  */
 void test_world_resource_facade() {
   std::cout << "Testing World Resource Facade Integration... ";

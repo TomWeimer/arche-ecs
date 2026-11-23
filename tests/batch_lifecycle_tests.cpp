@@ -1,4 +1,4 @@
-#include "arche/arche.hpp"
+import arche;
 
 #include <cassert>
 #include <chrono>
@@ -83,7 +83,10 @@ void test_bulk_creation_soa_streaming() {
   auto start = std::chrono::high_resolution_clock::now();
 
   world.spawn(
-      {.count = COUNT}, std::span<Entity>(entities), positions.data(), velocities.data()
+      {.count = COUNT},
+      std::span<Entity>(entities),
+      positions.data(),
+      velocities.data()
   );
 
   auto end = std::chrono::high_resolution_clock::now();

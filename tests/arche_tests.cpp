@@ -1,6 +1,4 @@
-#include "arche/arche.hpp"
-#include "archetype/archetype_graph.hpp"
-#include "entity/slot_map.hpp"
+import arche;
 
 #include <cassert>
 #include <cstdint>

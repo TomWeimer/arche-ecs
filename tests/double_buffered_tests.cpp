@@ -1,4 +1,6 @@
-#include "arche/arche.hpp"
+import arche;
+
+#include <atomic>
 
 #include <cassert>
 #include <chrono>
@@ -39,7 +41,8 @@ struct PrevPosition {
 // =============================================================================
 
 void test_read_write_hazard_separation() {
-  std::cout << "[Test 1/5] Read/Write Hazard Separation via Scheduler Batches... ";
+  std::cout
+      << "[Test 1/5] Read/Write Hazard Separation via Scheduler Batches... ";
   World world;
   ThreadPool pool(2);
 
@@ -82,15 +85,15 @@ void test_concurrent_readers_in_single_batch() {
 
   Scheduler scheduler;
   scheduler.add_system(
-      "Reader1",
-      Access{}.reads<Position>().build(),
-      [&](SystemContext &) { reader_count.fetch_add(1); }
+      "Reader1", Access{}.reads<Position>().build(), [&](SystemContext &) {
+        reader_count.fetch_add(1);
+      }
   );
 
   scheduler.add_system(
-      "Reader2",
-      Access{}.reads<Position>().build(),
-      [&](SystemContext &) { reader_count.fetch_add(1); }
+      "Reader2", Access{}.reads<Position>().build(), [&](SystemContext &) {
+        reader_count.fetch_add(1);
+      }
   );
 
   scheduler.compile(world);
@@ -119,14 +122,15 @@ void test_parallel_chunk_work_stealing_writers() {
       "ParallelPhysicsIntegrator",
       Access{}.writes<Position>().reads<Velocity>().build(),
       [](SystemContext &ctx) {
-        ctx.query_parallel<Position, const Velocity>(
-            [](uint32_t count, arche::CommandBuffer &, Position *pos, const Velocity *vel) {
-              for (uint32_t i = 0; i < count; ++i) {
-                pos[i].x += vel[i].vx * 0.1f;
-                pos[i].y += vel[i].vy * 0.1f;
-              }
-            }
-        );
+        ctx.query_parallel<Position, const Velocity>([](uint32_t count,
+                                                        arche::CommandBuffer &,
+                                                        Position *pos,
+                                                        const Velocity *vel) {
+          for (uint32_t i = 0; i < count; ++i) {
+            pos[i].x += vel[i].vx * 0.1f;
+            pos[i].y += vel[i].vy * 0.1f;
+          }
+        });
       },
       SystemScale::Wide
   );
@@ -134,7 +138,8 @@ void test_parallel_chunk_work_stealing_writers() {
   scheduler.compile(world);
   scheduler.run(world, pool);
 
-  // Verify all entities updated in-place across worker threads without data race
+  // Verify all entities updated in-place across worker threads without data
+  // race
   for (auto [pos, vel] : world.query<Position, Velocity>()) {
     assert(std::abs(pos.x - 0.1f) < 0.0001f);
     assert(std::abs(pos.y - 0.2f) < 0.0001f);
@@ -152,7 +157,9 @@ void test_state_history_component_pairing() {
   World world;
 
   // Dynamic entity has Position and PrevPosition
-  Entity dynamic_e = world.spawn(Position{10.0f, 20.0f}, PrevPosition{0.0f, 0.0f}, Velocity{5.0f, 5.0f});
+  Entity dynamic_e = world.spawn(
+      Position{10.0f, 20.0f}, PrevPosition{0.0f, 0.0f}, Velocity{5.0f, 5.0f}
+  );
 
   // Static entity only has Position (zero memory wasted!)
   Entity static_e = world.spawn(Position{100.0f, 200.0f});
@@ -191,14 +198,11 @@ void test_scheduler_stage_overhead() {
 
   Scheduler scheduler;
   scheduler.add_system(
-      "EmptySystemA",
-      Access{}.reads<Position>().build(),
-      [](SystemContext &) {}
+      "EmptySystemA", Access{}.reads<Position>().build(), [](SystemContext &) {}
   );
   scheduler.add_system(
-      "EmptySystemB",
-      Access{}.writes<Position>().build(),
-      [](SystemContext &) {}
+      "EmptySystemB", Access{}.writes<Position>().build(), [](SystemContext &) {
+      }
   );
 
   scheduler.compile(world);

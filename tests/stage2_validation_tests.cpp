@@ -1,5 +1,4 @@
-#include "arche/arche.hpp"
-#include "world/world_access.hpp"
+import arche;
 #include "test_components.hpp"
 
 #include <cassert>
@@ -9,7 +8,11 @@
 
 namespace arche {
 struct WorldTestAccessor {
-  static void permute(World &w, arche::Archetype *arch, std::span<const uint32_t> indices) {
+  static void permute(
+      World &w,
+      arche::Archetype *arch,
+      std::span<const uint32_t> indices
+  ) {
     arche::permute(w, arch, indices);
   }
 };
@@ -50,10 +53,7 @@ void test_full_parallel_physics_pipeline() {
   for (int frame = 0; frame < 5; ++frame) {
     // Parallel integration with chunk work-stealing across worker threads
     world.query<Position, const Velocity>().each_parallel(
-        pool,
-        [](uint32_t count,
-           Position *pos,
-           const Velocity *v) {
+        pool, [](uint32_t count, Position *pos, const Velocity *v) {
           for (uint32_t i = 0; i < count; ++i) {
             pos[i].x += v[i].vx * dt;
             pos[i].y += v[i].vy * dt;
@@ -94,7 +94,9 @@ void test_permutation_and_reactive_cache() {
       {.count = COUNT}, Position{0.0f, 0.0f}, Velocity{1.0f, 1.0f}
   );
 
-  arche::Archetype *arch = arche::internal::WorldAccess::slot_map(world).get_record(entities[0]).archetype;
+  arche::Archetype *arch = arche::internal::WorldAccess::slot_map(world)
+                               .get_record(entities[0])
+                               .archetype;
 
   // Permute entities in reverse
   std::vector<uint32_t> perm(COUNT);

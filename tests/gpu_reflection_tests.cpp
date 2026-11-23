@@ -1,4 +1,4 @@
-#include "arche/arche.hpp"
+import arche;
 
 #include <cassert>
 #include <chrono>
@@ -167,9 +167,7 @@ void test_component_span_views() {
 
   // 1. Populate world across chunks with deterministic coordinate data
   for (int i = 0; i < TOTAL_ENTITIES; ++i) {
-    world.spawn(
-        GpuPosition{static_cast<float>(i), static_cast<float>(i * 2)}
-    );
+    world.spawn(GpuPosition{static_cast<float>(i), static_cast<float>(i * 2)});
   }
 
   // 2. Verify total component count query
@@ -256,9 +254,7 @@ void test_stream_component_to_mock_vram() {
 
   // 1. Populate 50,000 entities across multiple 64 KB chunks
   for (int i = 0; i < NUM_ENTITIES; ++i) {
-    world.spawn(
-        GpuPosition{static_cast<float>(i), static_cast<float>(i * 3)}
-    );
+    world.spawn(GpuPosition{static_cast<float>(i), static_cast<float>(i * 3)});
   }
 
   // 2. Allocate mock GPU mapped VRAM buffer (50,000 * 8B = 400 KB)
@@ -277,9 +273,7 @@ void test_stream_component_to_mock_vram() {
 
   size_t bytes_written = 0;
   for (int it = 0; it < ITERATIONS; ++it) {
-    bytes_written = world.gpu.stream_to<GpuPosition>(
-        mock_mapped_vram.data()
-    );
+    bytes_written = world.gpu.stream_to<GpuPosition>(mock_mapped_vram.data());
   }
 
   auto end = std::chrono::high_resolution_clock::now();

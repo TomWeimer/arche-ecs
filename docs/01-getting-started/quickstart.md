@@ -12,7 +12,7 @@ struct Health   { int current{100}, max{100}; };
 
 ## 2. Initializing the World & Spawning Entities
 ```cpp
-#include "arche/arche.hpp"
+import arche;
 
 arche::World world;
 

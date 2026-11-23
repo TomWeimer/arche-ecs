@@ -1,5 +1,4 @@
-#include "arche/arche.hpp"
-#include "world/world_access.hpp"
+import arche;
 
 #include <cassert>
 #include <chrono>
@@ -33,7 +32,8 @@ struct Velocity {
 // =============================================================================
 
 /**
- * @brief Validates world tick advancement, SystemContext::tick(), and automatic column version stamping.
+ * @brief Validates world tick advancement, SystemContext::tick(), and automatic
+ * column version stamping.
  */
 void test_world_ticking_and_stamping() {
   std::cout << "[Test 1/4] Monotonic World Ticking & Version Stamping... ";
@@ -41,7 +41,8 @@ void test_world_ticking_and_stamping() {
 
   assert(world.version() == 1);
 
-  // Spawning an entity at version 1 stamps chunk structure and columns with version 1
+  // Spawning an entity at version 1 stamps chunk structure and columns with
+  // version 1
   Entity e = world.spawn(Position{1.0f, 2.0f}, Velocity{3.0f, 4.0f});
   assert(world.entities.contains(e));
 
@@ -69,13 +70,15 @@ void test_world_ticking_and_stamping() {
   assert(world.version() == 5);
   assert(observed_tick == 5);
 
-  // Querying with Mutated<Position>{4} should match the chunk (stamped at 5 > 4)
+  // Querying with Mutated<Position>{4} should match the chunk (stamped at 5 >
+  // 4)
   size_t matches = 0;
   world.query<Position>(Mutated<Position>{4})
       .for_each_chunk([&](uint32_t count, Position *) { matches += count; });
   assert(matches == 1);
 
-  // Querying with Mutated<Position>{5} should NOT match (modified at 5, not > 5)
+  // Querying with Mutated<Position>{5} should NOT match (modified at 5, not >
+  // 5)
   matches = 0;
   world.query<Position>(Mutated<Position>{5})
       .for_each_chunk([&](uint32_t count, Position *) { matches += count; });
@@ -108,7 +111,8 @@ void test_skip_dormant_chunks() {
   }
   assert(world.version() == 100);
 
-  // Mutate ONLY the first entity's chunk at tick 100 via get_mut (automatically stamps column version!)
+  // Mutate ONLY the first entity's chunk at tick 100 via get_mut (automatically
+  // stamps column version!)
   world.get_mut<Position>(entities[0]).x = 999.0f;
 
   // Query entities where Position mutated since tick 50

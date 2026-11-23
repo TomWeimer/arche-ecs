@@ -1,5 +1,4 @@
-#include "arche/arche.hpp"
-#include "world/world_access.hpp"
+import arche;
 
 #include <algorithm>
 #include <cassert>
@@ -11,7 +10,11 @@
 
 namespace arche {
 struct WorldTestAccessor {
-  static void permute(World &w, Archetype *arch, std::span<const uint32_t> indices) {
+  static void permute(
+      World &w,
+      Archetype *arch,
+      std::span<const uint32_t> indices
+  ) {
     arche::permute(w, arch, indices);
   }
 };
@@ -65,7 +68,9 @@ void test_single_chunk_permutation() {
 
   // Reverse permutation: [4, 3, 2, 1, 0]
   std::vector<uint32_t> perm = {4, 3, 2, 1, 0};
-  Archetype *arch = arche::internal::WorldAccess::slot_map(world).get_record(entities[0]).archetype;
+  Archetype *arch = arche::internal::WorldAccess::slot_map(world)
+                        .get_record(entities[0])
+                        .archetype;
 
   WorldTestAccessor::permute(world, arch, perm);
 
@@ -126,7 +131,9 @@ void test_multi_chunk_permutation() {
     perm[i] = static_cast<uint32_t>(COUNT - 1 - i);
   }
 
-  Archetype *arch = arche::internal::WorldAccess::slot_map(world).get_record(entities[0]).archetype;
+  Archetype *arch = arche::internal::WorldAccess::slot_map(world)
+                        .get_record(entities[0])
+                        .archetype;
 
   auto start = std::chrono::high_resolution_clock::now();
   WorldTestAccessor::permute(world, arch, perm);
@@ -162,10 +169,13 @@ void test_comparator_sorting() {
   world.spawn(Position{2.0f, 2.0f}, ParticleKey{900});
   world.spawn(Position{3.0f, 3.0f}, ParticleKey{200});
 
-  // Sort by ParticleKey::morton_code ascending across all archetypes possessing ParticleKey
-  arche::sort<ParticleKey>(world, [](const ParticleKey &a, const ParticleKey &b) {
-    return a.morton_code < b.morton_code;
-  });
+  // Sort by ParticleKey::morton_code ascending across all archetypes possessing
+  // ParticleKey
+  arche::sort<ParticleKey>(
+      world, [](const ParticleKey &a, const ParticleKey &b) {
+        return a.morton_code < b.morton_code;
+      }
+  );
 
   // Verify chunk order is strictly ascending: 100, 200, 500, 900
   std::vector<uint32_t> keys;
@@ -207,12 +217,12 @@ void test_handle_stability_stress() {
   entities.reserve(COUNT);
 
   for (size_t i = 0; i < COUNT; ++i) {
-    entities.push_back(
-        world.spawn(Position{static_cast<float>(i), 0.0f})
-    );
+    entities.push_back(world.spawn(Position{static_cast<float>(i), 0.0f}));
   }
 
-  Archetype *arch = arche::internal::WorldAccess::slot_map(world).get_record(entities[0]).archetype;
+  Archetype *arch = arche::internal::WorldAccess::slot_map(world)
+                        .get_record(entities[0])
+                        .archetype;
 
   // Run 5 random permutations
   std::vector<uint32_t> perm(COUNT);

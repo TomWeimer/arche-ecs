@@ -647,11 +647,12 @@ arche-ecs/
 │   ├── multithreaded_query_tests.cpp   # Multi-threaded query dispatch
 │   ├── stage2_validation_tests.cpp     # Stage 2 validation integration
 │   └── public_api_tests.cpp            # Modern clean API test suite
-├── examples/
-│   └── colony_simulation_loop.cpp      # 100k boid 120 Hz lockstep frame example
-└── benchmarks/
-    ├── arche_benchmarks.cpp            # Cycle-accurate TSC hardware profiler
-    └── comparative_benchmarks.cpp      # 2M scale head-to-head vs Flecs & EnTT
+└── scripts/
+    ├── benchmarks/
+    │   ├── arche_benchmarks.cpp        # Cycle-accurate TSC hardware profiler
+    │   └── comparative_benchmarks.cpp  # 2M scale head-to-head vs Flecs & EnTT
+    ├── check_architecture.py           # Architecture-as-Code boundary validator
+    └── lint.py                         # AST and semantic module linter
 ```
 
 ---

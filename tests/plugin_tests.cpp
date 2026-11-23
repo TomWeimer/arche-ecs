@@ -1,4 +1,4 @@
-#include "arche/arche.hpp"
+import arche;
 
 #include <cassert>
 #include <iostream>
@@ -42,7 +42,9 @@ struct PhysicsSettings {
 
 // 1. Valid Stateless Plugin
 struct ValidClockPlugin {
-  static constexpr std::string_view name() noexcept { return "ValidClockPlugin"; }
+  static constexpr std::string_view name() noexcept {
+    return "ValidClockPlugin";
+  }
 
   void build(World &world, Scheduler &scheduler) const {
     world.resources.insert<SimulationClock>();
@@ -64,7 +66,9 @@ struct ValidClockPlugin {
 struct ConfigurablePhysicsPlugin {
   float custom_gravity{-9.81f};
 
-  static constexpr std::string_view name() noexcept { return "ConfigurablePhysicsPlugin"; }
+  static constexpr std::string_view name() noexcept {
+    return "ConfigurablePhysicsPlugin";
+  }
 
   void build(World &world, Scheduler &scheduler) const {
     world.resources.insert<PhysicsSettings>(custom_gravity);
@@ -103,7 +107,9 @@ struct MissingNamePlugin {
 
 // 5. Invalid Candidate: Invalid build() signature
 struct InvalidBuildPlugin {
-  static constexpr std::string_view name() noexcept { return "InvalidBuildPlugin"; }
+  static constexpr std::string_view name() noexcept {
+    return "InvalidBuildPlugin";
+  }
   int build(World &, Scheduler &) const { return 42; }
 };
 
@@ -115,13 +121,26 @@ void test_static_concept_verification() {
   std::cout << "Testing Static Concept Verification (static_assert)... ";
 
   // Valid plugins satisfy the concept
-  static_assert(Plugin<ValidClockPlugin>, "ValidClockPlugin must satisfy Plugin concept");
-  static_assert(Plugin<ConfigurablePhysicsPlugin>, "ConfigurablePhysicsPlugin must satisfy Plugin concept");
-  static_assert(Plugin<RenderPlugin>, "RenderPlugin must satisfy Plugin concept");
+  static_assert(
+      Plugin<ValidClockPlugin>, "ValidClockPlugin must satisfy Plugin concept"
+  );
+  static_assert(
+      Plugin<ConfigurablePhysicsPlugin>,
+      "ConfigurablePhysicsPlugin must satisfy Plugin concept"
+  );
+  static_assert(
+      Plugin<RenderPlugin>, "RenderPlugin must satisfy Plugin concept"
+  );
 
   // Invalid plugins fail the concept
-  static_assert(!Plugin<MissingNamePlugin>, "MissingNamePlugin must NOT satisfy Plugin concept");
-  static_assert(!Plugin<InvalidBuildPlugin>, "InvalidBuildPlugin must NOT satisfy Plugin concept");
+  static_assert(
+      !Plugin<MissingNamePlugin>,
+      "MissingNamePlugin must NOT satisfy Plugin concept"
+  );
+  static_assert(
+      !Plugin<InvalidBuildPlugin>,
+      "InvalidBuildPlugin must NOT satisfy Plugin concept"
+  );
   static_assert(!Plugin<int>, "int must NOT satisfy Plugin concept");
 
   std::cout << "PASSED\n";
@@ -165,7 +184,9 @@ void test_stateful_plugin_installation() {
   ThreadPool pool(2);
 
   // Install configured instance
-  world.systems.add_plugin(ConfigurablePhysicsPlugin{.custom_gravity = -19.62f});
+  world.systems.add_plugin(
+      ConfigurablePhysicsPlugin{.custom_gravity = -19.62f}
+  );
 
   // Resource was inserted with custom parameter
   assert(world.resources.has<PhysicsSettings>());
@@ -193,7 +214,9 @@ void test_external_scheduler_overloads() {
   assert(world.resources.has<SimulationClock>());
 
   // 2. Stateful plugin targeting external scheduler
-  world.systems.add_plugin(ConfigurablePhysicsPlugin{.custom_gravity = -25.0f}, ext_scheduler);
+  world.systems.add_plugin(
+      ConfigurablePhysicsPlugin{.custom_gravity = -25.0f}, ext_scheduler
+  );
   assert(world.resources.get<PhysicsSettings>().gravity_y == -25.0f);
 
   // Run via external scheduler
@@ -230,7 +253,9 @@ void test_duplicate_plugin_prevention() {
   world.systems.add_plugin(ConfigurablePhysicsPlugin{});
   threw = false;
   try {
-    world.systems.add_plugin(ConfigurablePhysicsPlugin{.custom_gravity = -5.0f});
+    world.systems.add_plugin(
+        ConfigurablePhysicsPlugin{.custom_gravity = -5.0f}
+    );
   } catch (const std::runtime_error &e) {
     threw = true;
   }

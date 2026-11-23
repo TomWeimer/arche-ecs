@@ -1,8 +1,9 @@
-#include "arche/arche.hpp"
+import arche;
 
 #include <cassert>
 #include <filesystem>
 #include <iostream>
+#include <optional>
 #include <vector>
 
 namespace {
@@ -26,7 +27,8 @@ struct GameConfig {
 
 int main() {
   std::cout << "====================================================\n";
-  std::cout << "Testing Dedicated World Sub-Facades (Snapshots, Resources, Archetypes, GPU)\n";
+  std::cout << "Testing Dedicated World Sub-Facades (Snapshots, Resources, "
+               "Archetypes, GPU)\n";
   std::cout << "====================================================\n";
 
   arche::World world;
@@ -47,7 +49,9 @@ int main() {
   // 2. Test Resources Facade
   std::cout << "[Test 2/4] Resources Facade... ";
   assert(!world.resources.has<GameConfig>());
-  world.resources.insert<GameConfig>(GameConfig{.gravity = -19.62f, .max_players = 32});
+  world.resources.insert<GameConfig>(
+      GameConfig{.gravity = -19.62f, .max_players = 32}
+  );
   assert(world.resources.has<GameConfig>());
   assert(world.resources.get<GameConfig>().gravity == -19.62f);
   assert(world.resources.get<GameConfig>().max_players == 32);

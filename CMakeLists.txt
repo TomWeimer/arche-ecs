@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.20)
+cmake_minimum_required(VERSION 3.28)
 project(arche-ecs CXX)
 
 set(CMAKE_CXX_STANDARD 20)
@@ -10,202 +10,91 @@ set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O3 -g -fno-omit-frame-pointer")
 add_compile_options(-Wall -Wextra -Wpedantic -fdiagnostics-absolute-paths)
 
 # ==============================================================================
-# Architecture-as-Code: Modular Staged Header Trees (Physical Boundary Enforcement)
+# Master Unified C++20 Modular Target
 # ==============================================================================
-# Stages only permitted subsystem directories into a target's private shadow root.
-# Preserves canonical include syntax (#include "<subsystem>/<header>.hpp")
-# while physically preventing the compiler from discovering unauthorized folders.
-function(stage_target_headers target_name)
-    cmake_parse_arguments(STAGE "" "" "INTERNAL;PUBLIC" ${ARGN})
-    set(shadow_root "${CMAKE_CURRENT_BINARY_DIR}/staged_headers/${target_name}")
 
-    # 1. Stage internal subsystems from src/<subsystem>
-    foreach(sub ${STAGE_INTERNAL})
-        set(src_dir "${CMAKE_CURRENT_SOURCE_DIR}/src/${sub}")
-        set(dest_dir "${shadow_root}/${sub}")
-        if(EXISTS "${src_dir}" AND NOT EXISTS "${dest_dir}")
-            file(MAKE_DIRECTORY "${shadow_root}")
-            file(CREATE_LINK "${src_dir}" "${dest_dir}" SYMBOLIC COPY_ON_ERROR)
-        endif()
-    endforeach()
+add_library(arche STATIC)
 
-    # 2. Stage public API components from include/arche/<component>
-    foreach(pub ${STAGE_PUBLIC})
-        set(src_path "${CMAKE_CURRENT_SOURCE_DIR}/include/arche/${pub}")
-        set(dest_path "${shadow_root}/arche/${pub}")
-        if(EXISTS "${src_path}" AND NOT EXISTS "${dest_path}")
-            file(MAKE_DIRECTORY "${shadow_root}/arche")
-            file(CREATE_LINK "${src_path}" "${dest_path}" SYMBOLIC COPY_ON_ERROR)
-        endif()
-    endforeach()
-
-    # Assign shadow root as include directory
-    get_target_property(target_type ${target_name} TYPE)
-    if(target_type STREQUAL "INTERFACE_LIBRARY")
-        target_include_directories(${target_name} INTERFACE "${shadow_root}")
-    else()
-        target_include_directories(${target_name} PRIVATE "${shadow_root}")
-    endif()
-endfunction()
-
-# --- Layer 0: Primitives, Hardware Intrinsics & Core Component Layout ---------
-add_library(arche_types INTERFACE)
-stage_target_headers(arche_types PUBLIC types)
-
-add_library(arche_hardware INTERFACE)
-stage_target_headers(arche_hardware INTERNAL hardware PUBLIC types)
-target_link_libraries(arche_hardware INTERFACE arche_types)
-
-add_library(arche_core_component INTERFACE)
-stage_target_headers(arche_core_component INTERNAL component hardware PUBLIC types)
-target_link_libraries(arche_core_component INTERFACE arche_hardware arche_types)
-
-add_library(arche_core INTERFACE)
-target_link_libraries(arche_core INTERFACE arche_core_component arche_hardware arche_types)
-
-# --- Layer 1: Memory Chunks & Generational Sparse Maps ------------------------
-add_library(arche_chunk OBJECT src/chunk/chunk.cpp)
-stage_target_headers(arche_chunk 
-    INTERNAL chunk component hardware 
-    PUBLIC types
-)
-target_link_libraries(arche_chunk PUBLIC arche_core)
-
-add_library(arche_sparse_entity INTERFACE)
-stage_target_headers(arche_sparse_entity 
-    INTERNAL entity component hardware 
-    PUBLIC types
-)
-target_link_libraries(arche_sparse_entity INTERFACE arche_core)
-
-add_library(arche_public_entities INTERFACE)
-stage_target_headers(arche_public_entities 
-    PUBLIC types entity.hpp resource.hpp
-)
-target_link_libraries(arche_public_entities INTERFACE arche_types)
-
-# --- Layer 2: Archetypes, Tables & Transition Graph ---------------------------
-add_library(arche_query_cache INTERFACE)
-stage_target_headers(arche_query_cache 
-    INTERNAL query component 
-    PUBLIC types
-)
-target_link_libraries(arche_query_cache INTERFACE arche_core)
-
-add_library(arche_archetype OBJECT src/archetype/component_migration.cpp)
-stage_target_headers(arche_archetype 
-    INTERNAL archetype chunk entity component hardware query
-    PUBLIC types
-)
-target_link_libraries(arche_archetype PUBLIC 
-    arche_chunk 
-    arche_sparse_entity 
-    arche_query_cache
+target_sources(arche
+  PUBLIC
+    FILE_SET CXX_MODULES FILES
+      src/arche.cppm
+      # Layer 0: Foundation Types & Hardware
+      src/types/entity.cppm
+      src/types/access.cppm
+      src/types/filters.cppm
+      src/types/types.cppm
+      src/types/detail/snapshot_header.cppm
+      src/types/detail/system_types.cppm
+      src/types/detail/plugin_concept.cppm
+      src/types/detail/resource_id.cppm
+      src/component/component_mask.cppm
+      src/component/type_id.cppm
+      src/component/component_access.cppm
+      src/component/detail/column_layout.cppm
+      src/hardware/hardware.cppm
+      src/hardware/gpu_layout.cppm
+      src/hardware/detail/math_utils.cppm
+      src/hardware/detail/gpu_span.cppm
+      # Layer 1: Memory & State Representation
+      src/chunk/chunk.cppm
+      src/chunk/chunk_pool.cppm
+      src/chunk/detail/chunk_header.cppm
+      src/chunk/detail/chunk_geometry.cppm
+      src/entity/entity.cppm
+      src/entity/entity_view.cppm
+      src/entity/slot_map.cppm
+      src/entity/detail/entity_record.cppm
+      src/entity/detail/entity_allocator.cppm
+      src/resource/resource.cppm
+      src/persistence/snapshot.cppm
+      # Layer 2: Archetypes & Query Cache
+      src/archetype/archetype.cppm
+      src/archetype/archetype_graph.cppm
+      src/archetype/detail/component_migration.cppm
+      src/query/query_cache.cppm
+      # Layer 3: Deferred Operations & In-Place Access
+      src/command/command.cppm
+      src/command/detail/command_playback.cppm
+      # Layer 4: Execution Engine (Concurrency, Query, System, Spatial)
+      src/concurrency/thread_pool.cppm
+      src/concurrency/detail/chunk_dispatcher.cppm
+      src/query/query.cppm
+      src/query/detail/query_rules.cppm
+      src/query/detail/filter.cppm
+      src/query/detail/query_iterator.cppm
+      src/query/detail/query_impl.cppm
+      src/system/scheduler.cppm
+      src/system/system_context.cppm
+      src/system/access_builder.cppm
+      src/system/plugin.cppm
+      src/spatial/sort.cppm
+      src/spatial/detail/permute.cppm
+      # Layer 5: Contracts & World Assembly Coordinator
+      src/contracts/archetype.cppm
+      src/contracts/entity.cppm
+      src/contracts/gpu.cppm
+      src/contracts/resource.cppm
+      src/contracts/snapshot.cppm
+      src/contracts/system.cppm
+      src/world/world.cppm
+      src/world/detail/world_storage.cppm
+      src/world/detail/world_access.cppm
+      src/world/detail/world_access_impl.cppm
+      src/world/detail/world_facades.cppm
+      src/world/detail/world_impl.cppm
+  PRIVATE
+    src/chunk/detail/chunk.cpp
+    src/archetype/detail/component_migration.cpp
+    src/command/detail/command_playback.cpp
+    src/command/detail/command_buffer.cpp
+    src/system/detail/scheduler.cpp
+    src/spatial/detail/sort.cpp
+    src/world/detail/world_facades.cpp
+    src/world/detail/world.cpp
 )
 
-# --- Layer 3: Lifecycle, Deferred Commands & In-Place Component Access ---------
-add_library(arche_entity_lifecycle INTERFACE)
-stage_target_headers(arche_entity_lifecycle 
-    INTERNAL entity archetype chunk component hardware 
-    PUBLIC types
-)
-target_link_libraries(arche_entity_lifecycle INTERFACE arche_archetype)
-
-add_library(arche_command OBJECT
-    src/command/command_buffer.cpp
-    src/command/command_playback.cpp
-)
-stage_target_headers(arche_command 
-    INTERNAL command archetype chunk entity component hardware 
-    PUBLIC types command.hpp
-)
-target_link_libraries(arche_command PUBLIC 
-    arche_archetype 
-    arche_entity_lifecycle
-)
-
-add_library(arche_component_access INTERFACE)
-stage_target_headers(arche_component_access 
-    INTERNAL component archetype chunk 
-    PUBLIC types
-)
-target_link_libraries(arche_component_access INTERFACE arche_archetype)
-
-# --- Layer 4: Execution Engine (Query, DAG Scheduler, Spatial Permutation) ----
-add_library(arche_concurrency INTERFACE)
-stage_target_headers(arche_concurrency 
-    INTERNAL concurrency hardware 
-    PUBLIC types
-)
-target_link_libraries(arche_concurrency INTERFACE arche_core)
-
-add_library(arche_query INTERFACE)
-stage_target_headers(arche_query 
-    INTERNAL query archetype chunk component hardware concurrency 
-    PUBLIC types query.hpp
-)
-target_link_libraries(arche_query INTERFACE 
-    arche_archetype 
-    arche_query_cache 
-    arche_concurrency
-)
-
-add_library(arche_system OBJECT src/system/scheduler.cpp)
-stage_target_headers(arche_system 
-    INTERNAL system command query concurrency archetype chunk entity component hardware 
-    PUBLIC types
-)
-target_link_libraries(arche_system PUBLIC 
-    arche_command 
-    arche_query 
-    arche_concurrency
-)
-
-add_library(arche_spatial OBJECT src/spatial/sort.cpp)
-stage_target_headers(arche_spatial 
-    INTERNAL spatial query archetype chunk component hardware 
-    PUBLIC types
-)
-target_link_libraries(arche_spatial PUBLIC 
-    arche_query 
-    arche_archetype
-)
-
-# --- Layer 5: World Coordinator & Assembly Facades ----------------------------
-add_library(arche_world OBJECT
-    src/world/world.cpp
-    src/world/world_facades.cpp
-)
-# Assembly coordinator can access the complete project tree
-target_include_directories(arche_world 
-    PUBLIC
-        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>
-)
-target_link_libraries(arche_world PUBLIC
-    arche_system
-    arche_spatial
-    arche_command
-    arche_query
-    arche_component_access
-    arche_entity_lifecycle
-    arche_archetype
-    arche_chunk
-    arche_public_entities
-)
-
-# --- Layer 6: Master Unified Library Archive & Alias --------------------------
-add_library(arche STATIC
-    $<TARGET_OBJECTS:arche_chunk>
-    $<TARGET_OBJECTS:arche_archetype>
-    $<TARGET_OBJECTS:arche_command>
-    $<TARGET_OBJECTS:arche_system>
-    $<TARGET_OBJECTS:arche_spatial>
-    $<TARGET_OBJECTS:arche_world>
-)
-target_link_libraries(arche PUBLIC arche_world)
 target_include_directories(arche PUBLIC
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>
 )
 
@@ -256,7 +145,7 @@ target_link_libraries(arche_tests PRIVATE arche::arche)
 add_test(NAME arche_tests COMMAND arche_tests)
 
 # Module 008: Cycle-Accurate Hardware Performance Benchmarks
-add_executable(arche_benchmarks benchmarks/arche_benchmarks.cpp)
+add_executable(arche_benchmarks scripts/benchmarks/arche_benchmarks.cpp)
 target_link_libraries(arche_benchmarks PRIVATE arche::arche)
 add_test(NAME arche_benchmarks COMMAND arche_benchmarks)
 
@@ -342,10 +231,6 @@ add_test(
     COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_architecture.py
 )
 
-# Module 018 Example: Colony 120 Hz Swarm Simulation Loop
-add_executable(colony_simulation_loop examples/colony_simulation_loop.cpp)
-target_link_libraries(colony_simulation_loop PRIVATE arche::arche)
-
 # Custom Target: run all unit tests
 add_custom_target(run_tests
     COMMAND entity_tests
@@ -406,7 +291,6 @@ add_custom_target(fclean
         $<TARGET_FILE:scheduler_tests>
         $<TARGET_FILE:plugin_tests>
         $<TARGET_FILE:world_facade_tests>
-        $<TARGET_FILE:colony_simulation_loop>
     COMMENT "Full clean: removing intermediate objects and binaries..."
 )
 
@@ -447,8 +331,7 @@ if(ARCHE_BUILD_COMPARISON_BENCHMARKS)
     )
     FetchContent_MakeAvailable(flecs)
 
-    add_executable(comparative_ecs_benchmarks benchmarks/comparative_benchmarks.cpp)
+    add_executable(comparative_ecs_benchmarks scripts/benchmarks/comparative_benchmarks.cpp)
     target_compile_options(comparative_ecs_benchmarks PRIVATE -Wno-deprecated-literal-operator)
     target_link_libraries(comparative_ecs_benchmarks PRIVATE arche::arche nanobench EnTT::EnTT flecs_static)
 endif()
-

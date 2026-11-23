@@ -1,4 +1,4 @@
-#include "arche/arche.hpp"
+import arche;
 
 #include <cassert>
 #include <iostream>
@@ -88,9 +88,7 @@ void test_reactive_cache_update() {
   assert(count == 1);
 
   // 3. Spawn entity in Archetype B: [Position, Velocity, Mass] (new graph node)
-  world.spawn(
-      Position{30.0f, 40.0f}, Velocity{3.0f, 4.0f}, Mass{100.0f}
-  );
+  world.spawn(Position{30.0f, 40.0f}, Velocity{3.0f, 4.0f}, Mass{100.0f});
 
   // Query must automatically see the new archetype without re-construction
   count = 0;

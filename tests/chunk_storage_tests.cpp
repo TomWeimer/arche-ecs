@@ -1,6 +1,4 @@
-#include "arche/arche.hpp"
-#include "chunk/chunk_pool.hpp"
-#include "entity/slot_map.hpp"
+import arche;
 
 #include <cassert>
 #include <cstdint>
@@ -110,9 +108,7 @@ void test_chunk_allocation_and_alignment() {
 
   ChunkPool pool(chunk_size, 1);
   void *buffer = pool.acquire_buffer();
-  Chunk *chunk = Chunk::create(
-      buffer, arch.chunk_capacity(), chunk_size
-  );
+  Chunk *chunk = Chunk::create(buffer, arch.chunk_capacity(), chunk_size);
   assert(chunk != nullptr);
 
   // Verify chunk buffer base address is aligned to cache line boundary
@@ -174,9 +170,7 @@ void test_swap_and_pop_compaction() {
   Archetype arch(1, mask, std::move(types), registry, chunk_size);
   ChunkPool pool(chunk_size, 1);
   void *buffer = pool.acquire_buffer();
-  Chunk *chunk = Chunk::create(
-      buffer, arch.chunk_capacity(), chunk_size
-  );
+  Chunk *chunk = Chunk::create(buffer, arch.chunk_capacity(), chunk_size);
 
   const auto *pos_layout = arch.column_layout_for(pos_t);
   const auto *hp_layout = arch.column_layout_for(hp_t);

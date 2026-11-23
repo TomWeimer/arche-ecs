@@ -1,4 +1,4 @@
-#include "arche/arche.hpp"
+import arche;
 
 #include <cassert>
 #include <chrono>
@@ -155,9 +155,7 @@ void test_chunk_visitor_vectorization() {
 
   constexpr int ENTITY_COUNT = 1000;
   for (int i = 0; i < ENTITY_COUNT; ++i) {
-    world.spawn(
-        Position{static_cast<float>(i), 0.0f}, Velocity{1.0f, 2.0f}
-    );
+    world.spawn(Position{static_cast<float>(i), 0.0f}, Velocity{1.0f, 2.0f});
   }
 
   auto query = world.query<Position, Velocity>();
@@ -202,9 +200,7 @@ void test_query_filters_with_and_without() {
   World world;
 
   // Entity A: Normal live entity [Position, Velocity]
-  Entity e_live = world.spawn(
-      Position{1.0f, 1.0f}, Velocity{1.0f, 0.0f}
-  );
+  Entity e_live = world.spawn(Position{1.0f, 1.0f}, Velocity{1.0f, 0.0f});
 
   // Entity B: Dead entity [Position, Velocity, TagDead]
   Entity e_dead = world.spawn(
@@ -537,15 +533,19 @@ void test_or_query_filter() {
     world.spawn(Position{1.0f, 0.0f}, PlayerTag{}, TagDead{});
   }
 
-  // 1. Or<With<PlayerTag>, With<EnemyTag>>: matches (5 live players + 3 dead players + 7 enemies) = 15
+  // 1. Or<With<PlayerTag>, With<EnemyTag>>: matches (5 live players + 3 dead
+  // players + 7 enemies) = 15
   size_t count_or = 0;
-  for (auto [pos] : world.query<Position>(arche::Or<arche::With<PlayerTag>, arche::With<EnemyTag>>{})) {
+  for (auto [pos] : world.query<Position>(
+           arche::Or<arche::With<PlayerTag>, arche::With<EnemyTag>>{}
+       )) {
     assert(pos.x == 1.0f || pos.x == 2.0f);
     ++count_or;
   }
   assert(count_or == 15);
 
-  // 2. Or combined with Without<TagDead>: matches (5 live players + 7 enemies) = 12
+  // 2. Or combined with Without<TagDead>: matches (5 live players + 7 enemies)
+  // = 12
   size_t count_or_alive = 0;
   for (auto [pos] : world.query<Position>(
            arche::Or<arche::With<PlayerTag>, arche::With<EnemyTag>>{},
@@ -558,7 +558,9 @@ void test_or_query_filter() {
 
   // 3. Bare types inside Or: Or<PlayerTag, EnemyTag>
   size_t count_bare_or = 0;
-  for (auto [pos] : world.query<Position>(arche::Or<PlayerTag, EnemyTag>{}, arche::Without<TagDead>{})) {
+  for (auto [pos] : world.query<Position>(
+           arche::Or<PlayerTag, EnemyTag>{}, arche::Without<TagDead>{}
+       )) {
     (void)pos;
     ++count_bare_or;
   }

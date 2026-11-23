@@ -1,4 +1,4 @@
-#include "arche/arche.hpp"
+import arche;
 
 #include <cassert>
 #include <iostream>
@@ -58,9 +58,7 @@ void test_spawning_and_reading() {
   World world;
 
   // 1. Spawn entity with Position and Velocity
-  Entity e1 = world.spawn(
-      Position{10.0f, 20.0f}, Velocity{1.0f, -2.0f}
-  );
+  Entity e1 = world.spawn(Position{10.0f, 20.0f}, Velocity{1.0f, -2.0f});
 
   // 2. Verify handle validity and component presence
   assert(world.entities.contains(e1));
@@ -220,9 +218,9 @@ void test_deferred_command_buffer() {
   // 1. Spawn test entities
   std::vector<Entity> entities;
   for (int i = 0; i < 5; ++i) {
-    entities.push_back(world.spawn(
-        Position{static_cast<float>(i), static_cast<float>(i * 2)}
-    ));
+    entities.push_back(
+        world.spawn(Position{static_cast<float>(i), static_cast<float>(i * 2)})
+    );
   }
 
   // 2. Simulate loop recording: queue destruction of even entities

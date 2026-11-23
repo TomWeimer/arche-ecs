@@ -9,7 +9,7 @@
 
 ## 2. Implementing the Plugin Interface
 ```cpp
-#include "arche/arche.hpp"
+import arche;
 
 struct PhysicsPlugin {
     // 1. Mandatory unique name identifier for diagnostics

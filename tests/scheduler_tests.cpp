@@ -1,4 +1,4 @@
-#include "arche/arche.hpp"
+import arche;
 
 #include <atomic>
 #include <cassert>
@@ -358,7 +358,8 @@ struct Marker {
 };
 
 void test_wide_system_chunk_work_stealing() {
-  std::cout << "Testing Wide System Chunk Work-Stealing (ctx.query_parallel)... ";
+  std::cout
+      << "Testing Wide System Chunk Work-Stealing (ctx.query_parallel)... ";
 
   World world;
   ThreadPool pool(4);
@@ -374,7 +375,10 @@ void test_wide_system_chunk_work_stealing() {
       Access{}.writes<Position>().reads<Velocity>().build(),
       [](SystemContext &ctx) {
         ctx.query_parallel<Position, const Velocity>(
-            [](uint32_t count, CommandBuffer &thread_cmd, Position *pos, const Velocity *vel) {
+            [](uint32_t count,
+               CommandBuffer &thread_cmd,
+               Position *pos,
+               const Velocity *vel) {
               for (uint32_t i = 0; i < count; ++i) {
                 pos[i].x += vel[i].vx * 0.1f;
                 pos[i].y += vel[i].vy * 0.1f;
