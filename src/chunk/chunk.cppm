@@ -200,21 +200,11 @@ public:
    */
   void set_column_version(uint16_t col, uint32_t version) noexcept;
 
-  /**
-   * @brief Marks a component column as dirty by updating its version tick.
-   * @param col Zero-based column index.
-   * @param version Monotonically advancing simulation version tick.
-   */
-  void mark_column_dirty(uint16_t col, uint32_t version) noexcept;
-
   /// Retrieves the structural modification version of this chunk.
   [[nodiscard]] uint32_t structure_version() const noexcept;
 
   /// Sets the structural modification version of this chunk.
   void set_structure_version(uint32_t version) noexcept;
-
-  /// Advances the structural modification version of this chunk.
-  void advance_structure_version(uint32_t version) noexcept;
 
   // --- Component Population & Blitting ---------------------------------------
 

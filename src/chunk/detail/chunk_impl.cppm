@@ -127,20 +127,12 @@ inline void Chunk::set_column_version(uint16_t col, uint32_t version) noexcept {
   header_.column_versions[col] = version;
 }
 
-inline void Chunk::mark_column_dirty(uint16_t col, uint32_t version) noexcept {
-  set_column_version(col, version);
-}
-
 inline uint32_t Chunk::structure_version() const noexcept {
   return header_.structure_version;
 }
 
 inline void Chunk::set_structure_version(uint32_t version) noexcept {
   header_.structure_version = version;
-}
-
-inline void Chunk::advance_structure_version(uint32_t version) noexcept {
-  set_structure_version(version);
 }
 
 // =============================================================================

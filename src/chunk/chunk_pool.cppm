@@ -97,15 +97,6 @@ public:
    */
   void release(void *ptr);
 
-  /// Compatibility alias for acquire().
-  [[nodiscard]] void *acquire_buffer();
-
-  /// Compatibility alias for release().
-  void release_buffer(void *ptr) noexcept;
-
-  /// Compatibility alias purging all cached free blocks.
-  void clear() noexcept;
-
   /**
    * @brief Preallocates a specified number of chunk blocks into the free list.
    * @param count Number of 64KB blocks to preallocate.
@@ -127,15 +118,9 @@ public:
   /// list.
   [[nodiscard]] size_t available() const noexcept;
 
-  /// Alias for available().
-  [[nodiscard]] size_t free_count() const noexcept;
-
   /// Returns the cumulative number of chunk blocks allocated over the pool's
   /// lifetime.
   [[nodiscard]] size_t allocated() const noexcept;
-
-  /// Alias for allocated().
-  [[nodiscard]] size_t total_allocated() const noexcept;
 
   /// Returns the number of chunk blocks currently active and checked out of the
   /// pool.

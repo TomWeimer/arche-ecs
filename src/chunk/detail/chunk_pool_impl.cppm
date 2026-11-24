@@ -93,12 +93,6 @@ inline void ChunkPool::release(void *ptr) {
   free_list_.push_back(ptr);
 }
 
-inline void *ChunkPool::acquire_buffer() { return acquire(); }
-
-inline void ChunkPool::release_buffer(void *ptr) noexcept { release(ptr); }
-
-inline void ChunkPool::clear() noexcept { purge(); }
-
 inline void ChunkPool::reserve(size_t count) {
   // 1. Reserve vector capacity to avoid reallocation during warm-up.
   free_list_.reserve(free_list_.size() + count);
@@ -127,9 +121,7 @@ inline void ChunkPool::purge() {
 
 inline size_t ChunkPool::chunk_size() const noexcept { return chunk_size_; }
 inline size_t ChunkPool::available() const noexcept { return free_list_.size(); }
-inline size_t ChunkPool::free_count() const noexcept { return free_list_.size(); }
 inline size_t ChunkPool::allocated() const noexcept { return total_allocated_; }
-inline size_t ChunkPool::total_allocated() const noexcept { return total_allocated_; }
 
 inline size_t ChunkPool::in_use() const noexcept {
   return total_allocated_ - free_list_.size();
