@@ -49,10 +49,10 @@ void test_query_cache_deduplication() {
 
   // Both queries must produce identical results with zero redundant allocations
   size_t count1 = 0;
-  q1.for_each_chunk([&](uint32_t n, Position *, Velocity *) { count1 += n; });
+  q1.each_chunk([&](uint32_t n, Position *, Velocity *) { count1 += n; });
 
   size_t count2 = 0;
-  q2.for_each_chunk([&](uint32_t n, Position *, Velocity *) { count2 += n; });
+  q2.each_chunk([&](uint32_t n, Position *, Velocity *) { count2 += n; });
 
   assert(count1 == 1);
   assert(count2 == 1);
@@ -76,7 +76,7 @@ void test_reactive_cache_update() {
   auto q = world.query<Position, Velocity>();
 
   size_t count = 0;
-  q.for_each_chunk([&](uint32_t n, Position *, Velocity *) { count += n; });
+  q.each_chunk([&](uint32_t n, Position *, Velocity *) { count += n; });
   assert(count == 0);
 
   // 2. Spawn entity in Archetype A: [Position, Velocity]
@@ -84,7 +84,7 @@ void test_reactive_cache_update() {
 
   // Existing query must immediately and reactively see the new entity!
   count = 0;
-  q.for_each_chunk([&](uint32_t n, Position *, Velocity *) { count += n; });
+  q.each_chunk([&](uint32_t n, Position *, Velocity *) { count += n; });
   assert(count == 1);
 
   // 3. Spawn entity in Archetype B: [Position, Velocity, Mass] (new graph node)
@@ -92,7 +92,7 @@ void test_reactive_cache_update() {
 
   // Query must automatically see the new archetype without re-construction
   count = 0;
-  q.for_each_chunk([&](uint32_t n, Position *, Velocity *) { count += n; });
+  q.each_chunk([&](uint32_t n, Position *, Velocity *) { count += n; });
   assert(count == 2);
 
   std::cout << "PASSED\n";
@@ -118,13 +118,13 @@ void test_exclusion_caching() {
   auto q = world.query<Position, Velocity>(Without<DeadTag>{});
 
   size_t count = 0;
-  q.for_each_chunk([&](uint32_t n, Position *, Velocity *) { count += n; });
+  q.each_chunk([&](uint32_t n, Position *, Velocity *) { count += n; });
   assert(count == 1);
 
   // Spawn another dead entity (Archetype with DeadTag already exists)
   world.spawn(Position{3.0f, 3.0f}, Velocity{3.0f, 3.0f}, DeadTag{});
   count = 0;
-  q.for_each_chunk([&](uint32_t n, Position *, Velocity *) { count += n; });
+  q.each_chunk([&](uint32_t n, Position *, Velocity *) { count += n; });
   assert(count == 1);
 
   std::cout << "PASSED\n";
@@ -146,12 +146,66 @@ void test_declarative_syntax() {
 
   // Standard Colony boid query
   auto query = world.query<Position, const Velocity>();
-  query.for_each_chunk([](uint32_t count, Position *pos, const Velocity *vel) {
+  query.each_chunk([](uint32_t count, Position *pos, const Velocity *vel) {
     for (uint32_t i = 0; i < count; ++i) {
       pos[i].x += vel[i].vx;
       pos[i].y += vel[i].vy;
     }
   });
+
+  std::cout << "PASSED\n";
+}
+
+// =============================================================================
+// Unit Test 5: any_mask Caching and Reactive Updates
+// =============================================================================
+
+struct PlayerTag {};
+struct EnemyTag {};
+struct NpcTag {};
+
+void test_any_mask_caching_and_reactivity() {
+  std::cout << "[Test 5/5] any_mask Global Caching & Reactive Updates... ";
+  World world;
+
+  // 1. Construct query with Or filter before any entities/archetypes exist
+  auto q1 = world.query<Position>(
+      arche::Or<arche::With<PlayerTag>, arche::With<EnemyTag>>{}
+  );
+  assert(q1.empty());
+
+  // 2. Spawn an NPC (should not match the Or filter)
+  auto e_npc = world.spawn(Position{1.0f, 1.0f}, NpcTag{});
+  assert(q1.empty());
+
+  // 3. Spawn a Player (new archetype created after query was constructed)
+  auto e_player = world.spawn(Position{2.0f, 2.0f}, PlayerTag{});
+  // Query must reactively see the new player archetype!
+  assert(!q1.empty());
+
+  size_t count = 0;
+  q1.each_chunk([&](uint32_t n, Position *) { count += n; });
+  assert(count == 1);
+
+  // 4. Spawn an Enemy (another new archetype created after query was constructed)
+  auto e_enemy = world.spawn(Position{3.0f, 3.0f}, EnemyTag{});
+  count = 0;
+  q1.each_chunk([&](uint32_t n, Position *) { count += n; });
+  assert(count == 2);
+
+  // 5. Deduplication check: second query with identical Or signature must share the exact cache
+  auto q2 = world.query<Position>(
+      arche::Or<arche::With<PlayerTag>, arche::With<EnemyTag>>{}
+  );
+  assert(q1.matching_archetypes().data() == q2.matching_archetypes().data());
+  assert(q1.matching_archetypes().size() == 2);
+
+  // 6. Clean up
+  world.despawn(e_npc);
+  world.despawn(e_player);
+  world.despawn(e_enemy);
+  assert(q1.empty());
+  assert(q2.empty());
 
   std::cout << "PASSED\n";
 }
@@ -169,6 +223,7 @@ int main() {
   test_reactive_cache_update();
   test_exclusion_caching();
   test_declarative_syntax();
+  test_any_mask_caching_and_reactivity();
 
   std::cout << "====================================================\n";
   std::cout << "All Module 013 tests completed successfully!\n";

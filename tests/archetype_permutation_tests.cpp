@@ -68,7 +68,7 @@ void test_single_chunk_permutation() {
 
   // Reverse permutation: [4, 3, 2, 1, 0]
   std::vector<uint32_t> perm = {4, 3, 2, 1, 0};
-  Archetype *arch = arche::internal::WorldAccess::slot_map(world)
+  Archetype *arch = world.entities.slot_map()
                         .get_record(entities[0])
                         .archetype;
 
@@ -85,7 +85,7 @@ void test_single_chunk_permutation() {
 
   // Verify query traverses in permuted order
   std::vector<float> found_x;
-  world.query<Position>().for_each_chunk([&](uint32_t n, Position *p) {
+  world.query<Position>().each_chunk([&](uint32_t n, Position *p) {
     for (uint32_t i = 0; i < n; ++i) {
       found_x.push_back(p[i].x);
     }
@@ -131,7 +131,7 @@ void test_multi_chunk_permutation() {
     perm[i] = static_cast<uint32_t>(COUNT - 1 - i);
   }
 
-  Archetype *arch = arche::internal::WorldAccess::slot_map(world)
+  Archetype *arch = world.entities.slot_map()
                         .get_record(entities[0])
                         .archetype;
 
@@ -181,7 +181,7 @@ void test_comparator_sorting() {
   std::vector<uint32_t> keys;
   std::vector<float> x_coords;
 
-  world.query<Position, ParticleKey>().for_each_chunk(
+  world.query<Position, ParticleKey>().each_chunk(
       [&](uint32_t n, Position *p, ParticleKey *k) {
         for (uint32_t i = 0; i < n; ++i) {
           keys.push_back(k[i].morton_code);
@@ -220,7 +220,7 @@ void test_handle_stability_stress() {
     entities.push_back(world.spawn(Position{static_cast<float>(i), 0.0f}));
   }
 
-  Archetype *arch = arche::internal::WorldAccess::slot_map(world)
+  Archetype *arch = world.entities.slot_map()
                         .get_record(entities[0])
                         .archetype;
 
@@ -262,9 +262,9 @@ void test_radix_key_sorting() {
   });
 
   std::vector<uint32_t> keys;
-  world.query<ParticleKey>().for_each([&](const ParticleKey &k) {
+  for (auto [k] : world.query<ParticleKey>()) {
     keys.push_back(k.morton_code);
-  });
+  }
 
   assert(keys.size() == 4);
   assert(keys[0] == 1000);

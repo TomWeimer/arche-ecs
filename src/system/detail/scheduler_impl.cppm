@@ -1,0 +1,278 @@
+module;
+
+#include <algorithm>
+#include <atomic>
+#include <cassert>
+#include <cstddef>
+#include <cstdint>
+#include <stdexcept>
+#include <string>
+#include <utility>
+#include <vector>
+
+export module arche:system.detail.scheduler_impl;
+
+import :scheduler;
+import :system_context;
+import :component_access;
+import :thread_pool;
+import :command;
+import :resource;
+import :archetype;
+
+namespace arche::detail::scheduler {
+
+inline void merge_access(
+    AccessDescriptor &dst,
+    const AccessDescriptor &src
+) noexcept {
+  dst.read_components = dst.read_components | src.read_components;
+  dst.write_components = dst.write_components | src.write_components;
+  dst.read_resources = dst.read_resources | src.read_resources;
+  dst.write_resources = dst.write_resources | src.write_resources;
+}
+
+template <typename SystemList>
+inline void execute_parallel_narrow_nodes(
+    const std::vector<size_t> &system_indices,
+    const SystemList &systems,
+    const SystemExecutionTarget &target,
+    ThreadPool &pool,
+    ParallelCommandBuffer &parallel_cmd
+) {
+  std::atomic<size_t> next_system{0};
+  const size_t total_systems = system_indices.size();
+
+  pool.parallel_for([&](uint32_t thread_id) {
+    while (true) {
+      const size_t idx = next_system.fetch_add(1, std::memory_order_relaxed);
+      if (idx >= total_systems) {
+        break;
+      }
+      const size_t sys_idx = system_indices[idx];
+      CommandBuffer &cmd = parallel_cmd.get(thread_id);
+      SystemContext ctx(
+          cmd,
+          target.resources,
+          target.cache_ctx,
+          target.get_cache_fn,
+          target.current_version,
+          target.previous_version
+      );
+      systems[sys_idx].fn(ctx);
+    }
+  });
+}
+
+} // namespace arche::detail::scheduler
+
+export namespace arche {
+
+// =============================================================================
+// Scheduler Implementation
+// =============================================================================
+
+Scheduler &Scheduler::add_system(
+    std::string name,
+    AccessDescriptor access,
+    SystemFunction fn,
+    SystemScale scale
+) {
+  systems_.push_back(
+      SystemNode{std::move(name), access, std::move(fn), scale}
+  );
+  dirty_ = true;
+  return *this;
+}
+
+void Scheduler::validate_system_resources(
+    const ResourceContainer &resources
+) {
+  for (const auto &sys : systems_) {
+    const ResourceMask required = sys.access.read_resources |
+        sys.access.write_resources;
+    for (uint32_t id = 0; id < 128; ++id) {
+      if (required.test(id) &&
+          !resources.has(static_cast<ResourceID>(id))) {
+        throw std::runtime_error(
+            "arche::Scheduler: System '" + sys.name +
+            "' requires unregistered World Resource ID " + std::to_string(id)
+        );
+      }
+    }
+  }
+}
+
+void Scheduler::partition_batches() {
+  const size_t n = systems_.size();
+  std::vector<bool> scheduled(n, false);
+  size_t scheduled_count = 0;
+
+  while (scheduled_count < n) {
+    Batch current_batch;
+    AccessDescriptor batch_access{};
+
+    for (size_t i = 0; i < n; ++i) {
+      if (scheduled[i]) {
+        continue;
+      }
+
+      // Wide systems get dedicated exclusive-pool batches
+      if (systems_[i].scale == SystemScale::Wide) {
+        if (current_batch.system_indices.empty()) {
+          current_batch.system_indices.push_back(i);
+          current_batch.is_wide = true;
+          current_batch.access = systems_[i].access;
+          scheduled[i] = true;
+          scheduled_count++;
+        }
+        break;
+      }
+
+      // Check conflict against everything already admitted into current_batch
+      if (!batch_access.conflicts_with(systems_[i].access)) {
+        current_batch.system_indices.push_back(i);
+        detail::scheduler::merge_access(batch_access, systems_[i].access);
+
+        scheduled[i] = true;
+        scheduled_count++;
+      }
+    }
+
+    if (!current_batch.system_indices.empty()) {
+      if (!current_batch.is_wide) {
+        current_batch.access = batch_access;
+      }
+      batches_.push_back(std::move(current_batch));
+    }
+  }
+}
+
+void Scheduler::compile(const SystemExecutionTarget &target) {
+  compile(target.resources);
+}
+
+void Scheduler::compile(const ResourceContainer &resources) {
+  if (!dirty_) {
+    return;
+  }
+  batches_.clear();
+
+  if (systems_.empty()) {
+    dirty_ = false;
+    return;
+  }
+
+  validate_system_resources(resources);
+  partition_batches();
+  dirty_ = false;
+}
+
+void Scheduler::execute_batch(
+    const Batch &batch,
+    const SystemExecutionTarget &target,
+    ThreadPool &pool,
+    ParallelCommandBuffer &parallel_cmd
+) {
+  if (batch.is_wide) {
+    const size_t idx = batch.system_indices[0];
+    CommandBuffer &cmd = parallel_cmd.get(0);
+    SystemContext ctx(
+        cmd,
+        target.resources,
+        target.cache_ctx,
+        target.get_cache_fn,
+        target.current_version,
+        target.previous_version,
+        &pool,
+        &parallel_cmd
+    );
+    systems_[idx].fn(ctx);
+  } else if (batch.system_indices.size() == 1) {
+    const size_t idx = batch.system_indices[0];
+    CommandBuffer &cmd = parallel_cmd.get(0);
+    SystemContext ctx(
+        cmd,
+        target.resources,
+        target.cache_ctx,
+        target.get_cache_fn,
+        target.current_version,
+        target.previous_version
+    );
+    systems_[idx].fn(ctx);
+  } else {
+    detail::scheduler::execute_parallel_narrow_nodes(
+        batch.system_indices, systems_, target, pool, parallel_cmd
+    );
+  }
+
+  for (uint32_t id = 0; id < 128; ++id) {
+    if (batch.access.write_components.test(id)) {
+      ComponentAccess::stamp_component_version(
+          target.graph, static_cast<TypeID>(id), target.current_version
+      );
+    }
+  }
+
+  if (target.commit_parallel_cmd) {
+    target.commit_parallel_cmd(parallel_cmd, target.world_ptr);
+  }
+  parallel_cmd.clear();
+}
+
+void Scheduler::run(
+    const SystemExecutionTarget &target,
+    ThreadPool &pool
+) {
+  if (target.advance_version_fn) {
+    target.advance_version_fn(target.world_ptr);
+  }
+  if (dirty_) {
+    compile(target);
+  }
+
+  ParallelCommandBuffer parallel_cmd(pool.worker_count() + 1);
+  for (const auto &batch : batches_) {
+    execute_batch(batch, target, pool, parallel_cmd);
+  }
+}
+
+void Scheduler::run(const SystemExecutionTarget &target) {
+  if (target.advance_version_fn) {
+    target.advance_version_fn(target.world_ptr);
+  }
+  if (dirty_) {
+    compile(target);
+  }
+
+  ParallelCommandBuffer parallel_cmd(1);
+  for (const auto &batch : batches_) {
+    for (size_t sys_idx : batch.system_indices) {
+      CommandBuffer &cmd = parallel_cmd.get(0);
+      SystemContext ctx(
+          cmd,
+          target.resources,
+          target.cache_ctx,
+          target.get_cache_fn,
+          target.current_version,
+          target.previous_version
+      );
+      systems_[sys_idx].fn(ctx);
+    }
+
+    for (uint32_t id = 0; id < 128; ++id) {
+      if (batch.access.write_components.test(id)) {
+        ComponentAccess::stamp_component_version(
+            target.graph, static_cast<TypeID>(id), target.current_version
+        );
+      }
+    }
+
+    if (target.commit_parallel_cmd) {
+      target.commit_parallel_cmd(parallel_cmd, target.world_ptr);
+    }
+    parallel_cmd.clear();
+  }
+}
+
+} // namespace arche

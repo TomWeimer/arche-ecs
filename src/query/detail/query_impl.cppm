@@ -216,7 +216,7 @@ inline void Query<Components...>::each_chunk_padded(Func &&func) {
 
       // 4. Calculate active and 16-element SIMD tail-padded entity counts.
       const uint32_t active = chunk->count();
-      const uint32_t padded = arche::math::round_up_simd<16>(active);
+      const uint32_t padded = arche::math::round_up_simd(active);
 
       // 5. Unpack typed column pointers and invoke user callback via
       // std::apply.

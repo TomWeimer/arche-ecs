@@ -56,7 +56,7 @@ void test_chunk_user_metadata() {
   world.spawn(Position{1.0f, 2.0f}, Velocity{3.0f, 4.0f});
 
   // Query chunk to inspect user metadata slot
-  world.query<Position>().for_each_chunk([](uint32_t count, Position *pos) {
+  world.query<Position>().each_chunk([](uint32_t count, Position *pos) {
     assert(count == 1);
     [[maybe_unused]] Position *a = pos;
     // Find enclosing Chunk pointer from component column pointer
@@ -103,7 +103,7 @@ void test_simd_tail_padded_execution() {
 
   // Execute branchless SIMD loop over padded_count
   auto q = world.query<Position, const Velocity>();
-  q.for_each_chunk_padded(
+  q.each_chunk_padded(
       [](uint32_t active, uint32_t padded, Position *pos, const Velocity *vel) {
         assert(active == 1603);
         assert(padded == 1616); // (1603 + 15) & ~15
@@ -149,7 +149,7 @@ void test_lookahead_prefetching() {
   size_t total_processed = 0;
   auto q = world.query<Position, const Velocity>();
 
-  q.for_each_chunk([&](uint32_t count, Position *pos, const Velocity *vel) {
+  q.each_chunk([&](uint32_t count, Position *pos, const Velocity *vel) {
     for (uint32_t i = 0; i < count; ++i) {
       pos[i].x += vel[i].vx;
       pos[i].y += vel[i].vy;
@@ -191,18 +191,35 @@ void test_custom_chunk_allocator() {
   {
     ChunkPool pool(65536, 4, mock_vram_alloc, mock_vram_free);
     assert(g_custom_allocs == 4);
-    assert(pool.free_count() == 4);
+    assert(pool.available() == 4);
 
-    void *b1 = pool.acquire_buffer();
-    void *b2 = pool.acquire_buffer();
+    void *b1 = pool.acquire();
+    void *b2 = pool.acquire();
     assert(b1 != nullptr && b2 != nullptr);
 
-    pool.release_buffer(b1);
-    pool.release_buffer(b2);
+    pool.release(b1);
+    pool.release(b2);
   }
 
   assert(g_custom_frees == 4);
   std::cout << "PASSED\n";
+}
+
+/**
+ * @brief Validates host CPU core count detection and World thread pool configuration.
+ */
+void test_hardware_core_count() {
+  std::cout << "[Test 5/5] Hardware CPU Core Count & World ThreadPool... ";
+  const uint32_t cores = arche::Hardware::core_count();
+  assert(cores >= 1);
+
+  World world;
+  assert(world.thread_count() == cores);
+  assert(world.thread_pool().worker_count() == cores);
+
+  world.set_threads(2);
+  assert(world.thread_count() == 2);
+  std::cout << "PASSED (detected " << cores << " cores)\n";
 }
 
 // =============================================================================
@@ -218,6 +235,7 @@ int main() {
   test_simd_tail_padded_execution();
   test_lookahead_prefetching();
   test_custom_chunk_allocator();
+  test_hardware_core_count();
 
   std::cout << "====================================================\n";
   std::cout << "All Module 011 tests completed successfully!\n";

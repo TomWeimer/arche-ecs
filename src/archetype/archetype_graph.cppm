@@ -1,24 +1,40 @@
 module;
 
-#include <algorithm>
-#include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <span>
 #include <unordered_map>
-#include <utility>
 #include <vector>
 
 export module arche:archetype_graph;
 
-import :archetype;
-import :component_mask;
-import :type_id;
-import :query_cache;
+export import :archetype;
+export import :component_mask;
+export import :type_id;
+export import :query_cache;
 
 export namespace arche {
 
+// =============================================================================
+// ArchetypeGraph: Directional Graph & Archetype Factory
+// =============================================================================
+
+/**
+ * @class ArchetypeGraph
+ * @brief Directional transition graph and registry managing all live Archetype tables.
+ *
+ * `ArchetypeGraph` serves as the structural backbone of Arche ECS. It maintains the registry
+ * of unique archetype tables, maps component bitmasks to archetype nodes, and dynamically
+ * constructs and traverses directional transition edges (`traverse_add`, `traverse_remove`)
+ * during entity component additions and removals.
+ *
+ * ### Key Responsibilities:
+ * - **Node Factory:** Creates unique Archetype tables on demand for any combination of components.
+ * - **Graph Navigation:** Traverses and memoizes transition edges ($O(1)$ amortized component mutation).
+ * - **Query Cache Reaction:** Informs registered `QueryCache` instances when new matching archetypes
+ *   are introduced into the graph.
+ */
 class ArchetypeGraph {
 private:
   const TypeRegistry &registry_;
@@ -30,18 +46,17 @@ private:
   std::vector<QueryCache *> registered_caches_{};
 
 public:
+  // --- Lifecycle & Construction ----------------------------------------------
+
+  /**
+   * @brief Constructs an ArchetypeGraph, initializing the empty root archetype node.
+   * @param registry Component metadata registry.
+   * @param chunk_size Memory page size in bytes for chunk allocations (default: 64 KB).
+   */
   explicit ArchetypeGraph(
       const TypeRegistry &registry,
       uint32_t chunk_size = 65536
-  )
-      : registry_(registry), chunk_size_(chunk_size) {
-    auto root_node = std::make_unique<Archetype>(
-        0, ComponentMask{}, std::vector<TypeID>{}, registry_, chunk_size_
-    );
-    root_ = root_node.get();
-    mask_to_archetype_[ComponentMask{}] = root_;
-    archetypes_.push_back(std::move(root_node));
-  }
+  );
 
   ~ArchetypeGraph() = default;
 
@@ -50,123 +65,82 @@ public:
   ArchetypeGraph(ArchetypeGraph &&) noexcept = default;
   ArchetypeGraph &operator=(ArchetypeGraph &&) noexcept = delete;
 
-  [[nodiscard]] inline Archetype *root() const noexcept { return root_; }
+  // --- Graph Node Introspection ----------------------------------------------
 
-  [[nodiscard]] inline Archetype *get_archetype(
+  /// Returns a pointer to the empty root archetype (0 components).
+  [[nodiscard]] Archetype *root() const noexcept;
+
+  /**
+   * @brief Looks up an existing archetype by its exact component bitmask.
+   * @param mask Component bitmask.
+   * @return Pointer to matching archetype, or nullptr if not yet instantiated.
+   */
+  [[nodiscard]] Archetype *get_archetype(
       const ComponentMask &mask
-  ) const noexcept {
-    auto it = mask_to_archetype_.find(mask);
-    return it != mask_to_archetype_.end() ? it->second : nullptr;
-  }
+  ) const noexcept;
 
-  [[nodiscard]] inline std::span<const std::unique_ptr<Archetype>>
-  archetypes() const noexcept {
-    return archetypes_;
-  }
+  /// Returns a span over all unique archetypes currently managed by the graph.
+  [[nodiscard]] std::span<const std::unique_ptr<Archetype>>
+  archetypes() const noexcept;
 
-  [[nodiscard]] inline size_t archetype_count() const noexcept {
-    return archetypes_.size();
-  }
+  /// Returns the total number of unique archetype tables created so far.
+  [[nodiscard]] size_t archetype_count() const noexcept;
 
-  Archetype *get_or_create_archetype(const ComponentMask &mask) {
-    if (auto *existing = get_archetype(mask)) {
-      return existing;
-    }
+  // --- Dynamic Archetype Resolution & Creation -------------------------------
 
-    std::vector<TypeID> sorted_types;
-    for (size_t word_idx = 0; word_idx < ComponentMask::WORDS_COUNT;
-         ++word_idx) {
-      uint64_t w = mask.word(word_idx);
-      while (w != 0) {
-        const uint32_t bit = std::countr_zero(w);
-        const TypeID tid = static_cast<TypeID>((word_idx * 64) + bit);
-        sorted_types.push_back(tid);
-        w &= (w - 1);
-      }
-    }
-    std::sort(sorted_types.begin(), sorted_types.end());
+  /**
+   * @brief Retrieves an archetype matching the mask, constructing it if not found.
+   * @param mask Component bitmask describing the archetype composition.
+   * @return Active archetype pointer.
+   */
+  Archetype *get_or_create_archetype(const ComponentMask &mask);
 
-    const uint32_t new_id = static_cast<uint32_t>(archetypes_.size());
-    auto node = std::make_unique<Archetype>(
-        new_id, mask, std::move(sorted_types), registry_, chunk_size_
-    );
-    Archetype *ptr = node.get();
-    archetypes_.push_back(std::move(node));
-    mask_to_archetype_[mask] = ptr;
+  /**
+   * @brief Retrieves an archetype for a span of constituent TypeIDs.
+   * @param types Span of component TypeIDs.
+   * @return Active archetype pointer.
+   */
+  Archetype *get_or_create(std::span<const TypeID> types);
 
-    for (QueryCache *cache : registered_caches_) {
-      if (ptr->matches(cache->include_mask, cache->exclude_mask)) {
-        cache->matching_archetypes.push_back(ptr);
-      }
-    }
+  // --- Graph Transition Navigation -------------------------------------------
 
-    return ptr;
-  }
+  /**
+   * @brief Navigates the directional transition edge for adding a component type.
+   *
+   * Traverses the cached add edge if available; otherwise computes the target
+   * bitmask, resolves the target archetype node, and memoizes the bidirectional edge.
+   *
+   * @param from Source archetype node.
+   * @param type Component TypeID to attach.
+   * @return Destination archetype node.
+   */
+  Archetype *traverse_add(Archetype *from, TypeID type);
 
-  Archetype *get_or_create(std::span<const TypeID> types) {
-    ComponentMask mask{};
-    for (TypeID tid : types) {
-      mask.set(tid);
-    }
-    return get_or_create_archetype(mask);
-  }
+  /**
+   * @brief Navigates the directional transition edge for removing a component type.
+   *
+   * Traverses the cached remove edge if available; otherwise computes the target
+   * bitmask, resolves the target archetype node, and memoizes the bidirectional edge.
+   *
+   * @param from Source archetype node.
+   * @param type Component TypeID to detach.
+   * @return Destination archetype node.
+   */
+  Archetype *traverse_remove(Archetype *from, TypeID type);
 
-  Archetype *navigate_add(Archetype *from, TypeID type) {
-    assert(from != nullptr);
-    if (Archetype *cached = from->get_add_edge(type)) {
-      return cached;
-    }
+  // --- Query Cache Registration ----------------------------------------------
 
-    ComponentMask target_mask = from->mask();
-    target_mask.set(type);
+  /**
+   * @brief Registers a QueryCache for reactive archetype matching updates.
+   * @param cache Query cache to register and backfill with existing matching archetypes.
+   */
+  void register_query_cache(QueryCache &cache);
 
-    Archetype *target = get_or_create_archetype(target_mask);
-    from->set_add_edge(type, target);
-    target->set_remove_edge(type, from);
-    return target;
-  }
-
-  inline Archetype *traverse_add(Archetype *from, TypeID type) {
-    return navigate_add(from, type);
-  }
-
-  Archetype *navigate_remove(Archetype *from, TypeID type) {
-    assert(from != nullptr);
-    if (Archetype *cached = from->get_remove_edge(type)) {
-      return cached;
-    }
-
-    ComponentMask target_mask = from->mask();
-    target_mask.reset(type);
-
-    Archetype *target = get_or_create_archetype(target_mask);
-    from->set_remove_edge(type, target);
-    target->set_add_edge(type, from);
-    return target;
-  }
-
-  inline Archetype *traverse_remove(Archetype *from, TypeID type) {
-    return navigate_remove(from, type);
-  }
-
-  void register_query_cache(QueryCache &cache) {
-    cache.matching_archetypes.clear();
-    for (const auto &node : archetypes_) {
-      if (node->matches(cache.include_mask, cache.exclude_mask)) {
-        cache.matching_archetypes.push_back(node.get());
-      }
-    }
-    registered_caches_.push_back(&cache);
-  }
-
-  void unregister_query_cache(QueryCache &cache) {
-    auto it = std::find(
-        registered_caches_.begin(), registered_caches_.end(), &cache
-    );
-    if (it != registered_caches_.end()) {
-      registered_caches_.erase(it);
-    }
-  }
+  /**
+   * @brief Unregisters a QueryCache from receiving future archetype creation notifications.
+   * @param cache Query cache to remove.
+   */
+  void unregister_query_cache(QueryCache &cache);
 };
 
 } // namespace arche

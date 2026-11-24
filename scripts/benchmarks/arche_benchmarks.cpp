@@ -122,7 +122,7 @@ void run_trivial_movement_benchmark(size_t entity_count, int iterations) {
 
   // 2. Warm-up loop (10 iterations) to populate instruction and data caches
   for (int w = 0; w < 10; ++w) {
-    query.for_each_chunk([](uint32_t count, Position *p, Velocity *v) {
+    query.each_chunk([](uint32_t count, Position *p, Velocity *v) {
       for (uint32_t i = 0; i < count; ++i) {
         p[i].x += v[i].vx * dt;
         p[i].y += v[i].vy * dt;
@@ -135,7 +135,7 @@ void run_trivial_movement_benchmark(size_t entity_count, int iterations) {
   const auto start_time = std::chrono::high_resolution_clock::now();
 
   for (int it = 0; it < iterations; ++it) {
-    query.for_each_chunk([](uint32_t count, Position *p, Velocity *v) {
+    query.each_chunk([](uint32_t count, Position *p, Velocity *v) {
       for (uint32_t i = 0; i < count; ++i) {
         p[i].x += v[i].vx * dt;
         p[i].y += v[i].vy * dt;
@@ -302,7 +302,7 @@ void run_parallel_scaling_benchmark(
 
   // Warm-up
   world.query<Position, const Velocity>().each_parallel(
-      pool, [](uint32_t count, Position *pos, const Velocity *vel) {
+      [](uint32_t count, Position *pos, const Velocity *vel) {
         for (uint32_t i = 0; i < count; ++i) {
           pos[i].x += vel[i].vx * dt;
         }
@@ -314,7 +314,7 @@ void run_parallel_scaling_benchmark(
 
   for (int it = 0; it < iterations; ++it) {
     world.query<Position, const Velocity>().each_parallel(
-        pool, [](uint32_t count, Position *pos, const Velocity *vel) {
+        [](uint32_t count, Position *pos, const Velocity *vel) {
           for (uint32_t i = 0; i < count; ++i) {
             pos[i].x += vel[i].vx * dt;
           }

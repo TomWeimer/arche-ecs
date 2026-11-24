@@ -2,12 +2,8 @@ module;
 
 #include <cstddef>
 #include <cstdint>
-#include <cstring>
-#include <new>
-#include <stdexcept>
 #include <string_view>
 #include <type_traits>
-#include <utility>
 #include <vector>
 
 export module arche:type_id;
@@ -17,6 +13,10 @@ import :component_mask;
 import :filters;
 
 export namespace arche {
+
+// =============================================================================
+// Internal Reflection & Identifier Generation
+// =============================================================================
 
 namespace Internal {
 
@@ -36,8 +36,9 @@ template <typename T> constexpr std::string_view get_type_name() noexcept {
   constexpr std::string_view suffix = "]";
   constexpr std::string_view sig = __PRETTY_FUNCTION__;
   const size_t start = sig.find(prefix);
-  if (start == std::string_view::npos)
+  if (start == std::string_view::npos) {
     return "Unknown";
+  }
   const size_t end = sig.find(suffix, start);
   return sig.substr(start + prefix.size(), end - (start + prefix.size()));
 #elif defined(_MSC_VER)
@@ -45,8 +46,9 @@ template <typename T> constexpr std::string_view get_type_name() noexcept {
   constexpr std::string_view suffix = ">(";
   constexpr std::string_view sig = __FUNCSIG__;
   const size_t start = sig.find(prefix);
-  if (start == std::string_view::npos)
+  if (start == std::string_view::npos) {
     return "Unknown";
+  }
   const size_t end = sig.find(suffix, start);
   return sig.substr(start + prefix.size(), end - (start + prefix.size()));
 #else
@@ -56,105 +58,106 @@ template <typename T> constexpr std::string_view get_type_name() noexcept {
 
 } // namespace Internal
 
-template <typename T> [[nodiscard]] inline TypeID type_id() noexcept {
+// =============================================================================
+// Public Type Identification API
+// =============================================================================
+
+/**
+ * @brief Retrieves the unique 32-bit runtime identifier for component type `T`.
+ *
+ * @tparam T Component type to identify.
+ * @return Monotonically assigned 0-indexed dense TypeID.
+ */
+template <typename T>
+[[nodiscard]] inline TypeID type_id() noexcept {
   return Internal::get_or_allocate_type_id<std::decay_t<T>>();
 }
 
+/**
+ * @brief Retrieves the human-readable demangled name string for component type `T`.
+ *
+ * @tparam T Component type to inspect.
+ * @return String view representing the component type name.
+ */
 template <typename T>
 [[nodiscard]] constexpr std::string_view type_name() noexcept {
   return Internal::get_type_name<std::decay_t<T>>();
 }
 
+// =============================================================================
+// Component Descriptor (Type Erased VTable & Layout metadata)
+// =============================================================================
+
+/**
+ * @struct ComponentDescriptor
+ * @brief Runtime metadata and type-erased lifecycle function pointers for a component.
+ *
+ * Encapsulates size, alignment, triviality traits, and function pointers for
+ * in-place construction, destruction, and relocation across archetype chunk boundaries.
+ */
 struct ComponentDescriptor {
-  TypeID id{INVALID_TYPE_ID};
-  size_t size{0};
-  size_t alignment{0};
-  std::string_view name{"Unknown"};
-  bool is_trivially_copyable{false};
-  bool is_trivially_destructible{false};
+  TypeID id{INVALID_TYPE_ID};               ///< Dense runtime type identifier.
+  size_t size{0};                           ///< Size of the component in bytes (`sizeof(T)`).
+  size_t alignment{0};                      ///< Required byte alignment (`alignof(T)`).
+  std::string_view name{"Unknown"};         ///< Human-readable demangled type name.
+  bool is_trivially_copyable{false};        ///< True if memory relocation can use `std::memcpy`.
+  bool is_trivially_destructible{false};    ///< True if destructor invocation can be omitted.
 
-  void (*constructor)(void *target){nullptr};
-  void (*destructor)(void *target){nullptr};
-  void (*move_construct)(void *dest, void *src){nullptr};
-  void (*move_assign)(void *dest, void *src){nullptr};
+  void (*constructor)(void *target){nullptr};              ///< Default placement-new constructor.
+  void (*destructor)(void *target){nullptr};               ///< Explicit destructor invocation.
+  void (*move_construct)(void *dest, void *src){nullptr};  ///< Placement move constructor.
+  void (*move_assign)(void *dest, void *src){nullptr};     ///< Move assignment operator.
 
-  inline void destruct(void *ptr) const noexcept {
-    if (!is_trivially_destructible && destructor) {
-      destructor(ptr);
-    }
-  }
+  /**
+   * @brief Destructs an instance of this component if not trivially destructible.
+   *
+   * @param ptr Pointer to raw memory containing the constructed component.
+   */
+  void destruct(void *ptr) const noexcept;
 
-  inline void relocate(void *dst, void *src) const noexcept {
-    if (!is_trivially_copyable && move_assign) {
-      move_assign(dst, src);
-    } else {
-      std::memcpy(dst, src, size);
-    }
-  }
+  /**
+   * @brief Relocates a component from source to destination memory.
+   *
+   * Uses `std::memcpy` if trivially copyable, otherwise invokes move assignment.
+   *
+   * @param dst Pointer to destination memory buffer.
+   * @param src Pointer to source memory buffer.
+   */
+  void relocate(void *dst, void *src) const noexcept;
 
+  /**
+   * @brief Constructs a fully populated descriptor for component type `T`.
+   *
+   * @tparam T Component type to describe.
+   * @return Initialized ComponentDescriptor instance.
+   */
   template <typename T>
-  [[nodiscard]] static ComponentDescriptor create() noexcept {
-    using ComponentType = std::decay_t<T>;
-
-    ComponentDescriptor desc;
-    desc.id = type_id<ComponentType>();
-    desc.size = sizeof(ComponentType);
-    desc.alignment = alignof(ComponentType);
-    desc.name = type_name<ComponentType>();
-    desc.is_trivially_copyable = std::is_trivially_copyable_v<ComponentType>;
-    desc.is_trivially_destructible = std::is_trivially_destructible_v<
-        ComponentType>;
-
-    desc.constructor = make_constructor<ComponentType>();
-    desc.destructor = make_destructor<ComponentType>();
-    desc.move_construct = make_move_construct<ComponentType>();
-    desc.move_assign = make_move_assign<ComponentType>();
-
-    return desc;
-  }
+  [[nodiscard]] static ComponentDescriptor create() noexcept;
 
 private:
   template <typename C>
-  [[nodiscard]] static inline auto make_constructor() noexcept
-      -> void (*)(void *) {
-    return [](void *target) { new (target) C(); };
-  }
+  [[nodiscard]] static auto make_constructor() noexcept -> void (*)(void *);
 
   template <typename C>
-  [[nodiscard]] static inline auto make_destructor() noexcept
-      -> void (*)(void *) {
-    if constexpr (std::is_trivially_destructible_v<C>) {
-      return nullptr;
-    } else {
-      return [](void *target) { static_cast<C *>(target)->~C(); };
-    }
-  }
+  [[nodiscard]] static auto make_destructor() noexcept -> void (*)(void *);
 
   template <typename C>
-  [[nodiscard]] static inline auto make_move_construct() noexcept
-      -> void (*)(void *, void *) {
-    if constexpr (std::is_trivially_copyable_v<C>) {
-      return nullptr;
-    } else {
-      return [](void *dest, void *src) {
-        new (dest) C(std::move(*static_cast<C *>(src)));
-      };
-    }
-  }
+  [[nodiscard]] static auto make_move_construct() noexcept -> void (*)(void *, void *);
 
   template <typename C>
-  [[nodiscard]] static inline auto make_move_assign() noexcept
-      -> void (*)(void *, void *) {
-    if constexpr (std::is_trivially_copyable_v<C>) {
-      return nullptr;
-    } else {
-      return [](void *dest, void *src) {
-        *static_cast<C *>(dest) = std::move(*static_cast<C *>(src));
-      };
-    }
-  }
+  [[nodiscard]] static auto make_move_assign() noexcept -> void (*)(void *, void *);
 };
 
+// =============================================================================
+// TypeRegistry (Component Type Registry & Descriptor Lookup)
+// =============================================================================
+
+/**
+ * @class TypeRegistry
+ * @brief Dynamic registry maintaining ComponentDescriptor metadata indexed by TypeID.
+ *
+ * Guarantees zero memory overhead over an internal `std::vector<ComponentDescriptor>`.
+ */
 struct TypeRegistry {
 private:
   std::vector<ComponentDescriptor> descriptors;
@@ -162,55 +165,49 @@ private:
 public:
   static constexpr size_t MAX_TYPES = 128;
 
-  TypeRegistry() { descriptors.reserve(MAX_TYPES); }
+  TypeRegistry();
   ~TypeRegistry() = default;
 
-  TypeRegistry(const TypeRegistry &other) : descriptors(other.descriptors) {
-    descriptors.reserve(MAX_TYPES);
-  }
-  TypeRegistry &operator=(const TypeRegistry &other) {
-    if (this != &other) {
-      descriptors = other.descriptors;
-      descriptors.reserve(MAX_TYPES);
-    }
-    return *this;
-  }
+  TypeRegistry(const TypeRegistry &other);
+  TypeRegistry &operator=(const TypeRegistry &other);
   TypeRegistry(TypeRegistry &&) noexcept = default;
   TypeRegistry &operator=(TypeRegistry &&) noexcept = default;
 
-  template <typename T> const ComponentDescriptor &register_type() {
-    const TypeID id = type_id<T>();
-    if (id >= descriptors.size()) {
-      descriptors.resize(id + 1);
-    }
-    if (descriptors[id].id == INVALID_TYPE_ID) {
-      descriptors[id] = ComponentDescriptor::create<T>();
-    }
-    return descriptors[id];
-  }
-
+  /**
+   * @brief Registers component type `T` into the registry if not already registered.
+   *
+   * @tparam T Component type to register.
+   * @return Immutable reference to the stored descriptor.
+   */
   template <typename T>
-  [[nodiscard]] const ComponentDescriptor &get_descriptor() const {
-    const TypeID id = type_id<T>();
-    if (id >= descriptors.size() || descriptors[id].id == INVALID_TYPE_ID) {
-      throw std::runtime_error(
-          "arche::TypeRegistry: Unregistered component type requested"
-      );
-    }
-    return descriptors[id];
-  }
+  const ComponentDescriptor &register_type();
 
-  [[nodiscard]] const ComponentDescriptor &get_descriptor(TypeID id) const {
-    if (id >= descriptors.size() || descriptors[id].id == INVALID_TYPE_ID) {
-      throw std::runtime_error("arche::TypeRegistry: Invalid TypeID requested");
-    }
-    return descriptors[id];
-  }
+  /**
+   * @brief Retrieves the descriptor for component type `T`.
+   *
+   * @tparam T Component type.
+   * @return Immutable reference to the stored descriptor.
+   * @throws std::runtime_error If `T` has not been registered.
+   */
+  template <typename T>
+  [[nodiscard]] const ComponentDescriptor &get_descriptor() const;
 
-  [[nodiscard]] size_t registered_count() const noexcept {
-    return descriptors.size();
-  }
+  /**
+   * @brief Retrieves the descriptor for a runtime TypeID.
+   *
+   * @param id Type identifier.
+   * @return Immutable reference to the stored descriptor.
+   * @throws std::runtime_error If `id` is invalid or unregistered.
+   */
+  [[nodiscard]] const ComponentDescriptor &get_descriptor(TypeID id) const;
+
+  /**
+   * @brief Returns the total number of registered types in this registry.
+   */
+  [[nodiscard]] size_t registered_count() const noexcept;
 };
+
+// --- Invariant Guarantees ----------------------------------------------------
 
 static_assert(
     sizeof(TypeRegistry) == sizeof(std::vector<ComponentDescriptor>),

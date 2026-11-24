@@ -74,14 +74,14 @@ void test_world_ticking_and_stamping() {
   // 4)
   size_t matches = 0;
   world.query<Position>(Mutated<Position>{4})
-      .for_each_chunk([&](uint32_t count, Position *) { matches += count; });
+      .each_chunk([&](uint32_t count, Position *) { matches += count; });
   assert(matches == 1);
 
   // Querying with Mutated<Position>{5} should NOT match (modified at 5, not >
   // 5)
   matches = 0;
   world.query<Position>(Mutated<Position>{5})
-      .for_each_chunk([&](uint32_t count, Position *) { matches += count; });
+      .each_chunk([&](uint32_t count, Position *) { matches += count; });
   assert(matches == 0);
 
   std::cout << "PASSED\n";
@@ -122,7 +122,7 @@ void test_skip_dormant_chunks() {
   size_t executed_chunks = 0;
 
   world.query<Position>(Mutated<Position>{50})
-      .for_each_chunk([&](uint32_t count, Position *) {
+      .each_chunk([&](uint32_t count, Position *) {
         ++executed_chunks;
         processed_entities += count;
       });
@@ -161,7 +161,7 @@ void test_added_filter() {
 
   // Querying Added{5} matches 0 entities because nothing spawned after tick 5
   size_t count = 0;
-  world.query<Position>(Added{5}).for_each_chunk([&](uint32_t n, Position *) {
+  world.query<Position>(Added{5}).each_chunk([&](uint32_t n, Position *) {
     count += n;
   });
   assert(count == 0);
@@ -171,7 +171,7 @@ void test_added_filter() {
 
   // Now Added{5} matches the newly modified chunk
   count = 0;
-  world.query<Position>(Added{5}).for_each_chunk([&](uint32_t n, Position *) {
+  world.query<Position>(Added{5}).each_chunk([&](uint32_t n, Position *) {
     count += n;
   });
   assert(count > 0);
@@ -188,14 +188,104 @@ void test_added_filter() {
  * sentinel).
  */
 void test_tick_wraparound_protection() {
-  std::cout << "[Test 4/4] 32-Bit Tick Wrap-Around Protection (Skip 0)... ";
+  std::cout << "[Test 4/4] 32-Bit Tick Wrap-Around Protection (Modular Distance)... ";
   World world;
 
-  // Manually advance to wrap-around edge
-  for (int i = 0; i < 5; ++i) {
-    world.systems.run();
-  }
-  assert(world.version() > 0);
+  // Set version to right before wrap-around: UINT32_MAX - 2
+  world.set_version(UINT32_MAX - 2);
+
+  // Spawn entity at UINT32_MAX - 2 (in Position+Velocity archetype chunk)
+  Entity e1 = world.spawn(Position{1.0f, 2.0f}, Velocity{1.0f, 1.0f});
+
+  // Advance tick: UINT32_MAX - 2 -> UINT32_MAX - 1
+  world.advance_version();
+  assert(world.version() == UINT32_MAX - 1);
+  assert(world.previous_version() == UINT32_MAX - 2);
+
+  // Advance tick again: next is UINT32_MAX, so it wraps to 1!
+  world.advance_version();
+  assert(world.version() == 1);
+  assert(world.previous_version() == UINT32_MAX - 1);
+
+  // Spawn a new entity at version 1 (in standalone Position archetype chunk)
+  Entity e2 = world.spawn(Position{3.0f, 4.0f});
+  (void)e2;
+
+  // 1. Query with default Added{} (SINCE_LAST_FRAME):
+  // Should match e2 (spawned at version 1), but NOT e1 (spawned before the wrap)!
+  size_t added_count = 0;
+  world.query<Position>(Added{}).each_chunk([&](uint32_t n, Position *) {
+    added_count += n;
+  });
+  assert(added_count == 1);
+
+  // 2. Query with default Mutated<Position>{} (SINCE_LAST_FRAME):
+  // Advance version from 1 -> 2
+  world.advance_version();
+  assert(world.version() == 2);
+  assert(world.previous_version() == 1);
+
+  // Modify e1 at version 2
+  world.get_mut<Position>(e1).x += 10.0f;
+
+  // Only e1's chunk was mutated at version 2 (newer than version 1)
+  size_t mut_count = 0;
+  world.query<Position>(Mutated<Position>{}).each_chunk(
+      [&](uint32_t n, Position *) { mut_count += n; }
+  );
+  assert(mut_count == 1);
+
+  std::cout << "PASSED\n";
+}
+
+// =============================================================================
+// Unit Test 5: Auto-Defaulting Temporal Filters & Inline Capacity
+// =============================================================================
+
+void test_auto_default_and_inline_mutation_filters() {
+  std::cout << "[Test 5/5] Auto-Defaulting Mutated/Added & Inline Rules... ";
+  World world;
+
+  // 1. Spawn entity at version 1
+  Entity e = world.spawn(Position{1.0f, 2.0f}, Velocity{3.0f, 4.0f});
+
+  // Mutated<Position>{} with no arguments auto-defaults to current_version - 1 (1 - 1 = 0)
+  // Chunk was stamped at version 1 > 0, so it matches!
+  size_t count = 0;
+  world.query<Position>(Mutated<Position>{}).each_chunk(
+      [&](uint32_t n, Position *) { count += n; }
+  );
+  assert(count == 1);
+
+  // Added{} with no arguments auto-defaults to version 0 -> matches!
+  count = 0;
+  world.query<Position>(Added{}).each_chunk(
+      [&](uint32_t n, Position *) { count += n; }
+  );
+  assert(count == 1);
+
+  // 2. Advance world ticks without modifying Position
+  world.systems.run(); // tick 2
+  world.systems.run(); // tick 3
+
+  // Now current_version is >= 3. Auto-defaulting checks against version >= 2.
+  // Position was stamped at version 1 <= 2 -> dormant chunk skipped!
+  count = 0;
+  world.query<Position>(Mutated<Position>{}).each_chunk(
+      [&](uint32_t n, Position *) { count += n; }
+  );
+  assert(count == 0);
+
+  // 3. Test multi-component change filter using inline capacity (up to 2)
+  world.get_mut<Position>(e).x += 10.0f;
+  world.get_mut<Velocity>(e).vx += 10.0f;
+
+  // Both Position and Velocity were modified at the new tick
+  count = 0;
+  world.query<Position, Velocity>(
+           Mutated<Position>{}, Mutated<Velocity>{}
+  ).each_chunk([&](uint32_t n, Position *, Velocity *) { count += n; });
+  assert(count == 1);
 
   std::cout << "PASSED\n";
 }
@@ -213,6 +303,7 @@ int main() {
   test_skip_dormant_chunks();
   test_added_filter();
   test_tick_wraparound_protection();
+  test_auto_default_and_inline_mutation_filters();
 
   std::cout << "====================================================\n";
   std::cout << "All Module 012 tests completed successfully!\n";

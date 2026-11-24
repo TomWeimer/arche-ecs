@@ -119,9 +119,10 @@ inline void prefetch_next_chunk_with_offsets(
     return;
   }
   const auto *base = reinterpret_cast<const uint8_t *>(next_chunk);
-  // 1. Prefetch the first two cache lines (128 bytes) of the next chunk header
+  // 1. Prefetch the first two cache lines of the next chunk header
+  const size_t cache_line = Hardware::cache_line_size();
   Hardware::prefetch_read(base);
-  Hardware::prefetch_read(base + 64);
+  Hardware::prefetch_read(base + cache_line);
 
   // 2. Unpack column offsets and prefetch the first cache line of each active
   // component column

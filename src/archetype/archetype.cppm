@@ -1,33 +1,68 @@
 module;
 
-#include <algorithm>
 #include <array>
-#include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <span>
-#include <type_traits>
 #include <utility>
 #include <vector>
 
 export module arche:archetype;
 
-import :entity;
-import :component_mask;
-import :type_id;
-import :hardware;
-import :chunk;
-import :chunk_pool;
+export import :entity;
+export import :component_mask;
+export import :type_id;
+export import :hardware;
+export import :chunk;
+export import :chunk_pool;
 
 export namespace arche {
 
 class ArchetypeGraph;
 
+// =============================================================================
+// Archetype: Unique Component Type Combination Table
+// =============================================================================
+
+/**
+ * @class Archetype
+ * @brief Represents a unique structural permutation of component types and owns its chunk storage.
+ *
+ * An Archetype groups entities sharing the exact same component set into contiguous 64KB
+ * chunk pages. It establishes the physical Structure-of-Arrays (SoA) column layouts, byte
+ * offsets, and alignment paddings for all component columns within each chunk.
+ *
+ * ### Key Responsibilities:
+ * - **Column Layout Computation:** Calculates SIMD-aligned column offsets with tail padding.
+ * - **Chunk Page Allocation:** Maintains an array of 64KB `Chunk` pages, creating and recycling
+ *   them through a `ChunkPool`.
+ * - **Transition Graph Edges:** Caches fast-path directional transition pointers for adding
+ *   and removing components (`edges_add_`, `edges_remove_`).
+ * - **Introspection:** Provides constant-time component layout and offset lookups via
+ *   dense indexing (`column_index`, `column_layout`).
+ */
 class alignas(64) Archetype {
 public:
+  /// Maximum number of distinct component types supported by the component bitmask.
   static constexpr size_t MAX_COMPONENTS = ComponentMask::MAX_COMPONENTS;
+
+  /// Default SIMD vectorization lane width in elements (e.g. 16 floats for AVX-512 / NEON).
   static constexpr uint32_t SIMD_VECTOR_WIDTH = 16;
+
+  /// Tail padding allowance in elements to ensure safe over-read during SIMD vector loops.
   static constexpr uint32_t SIMD_TAIL_PADDING = 16;
+
+  /**
+   * @struct ChunkCoord
+   * @brief Decomposed two-dimensional coordinate identifying a row within a specific chunk page.
+   */
+  struct ChunkCoord {
+    /// Zero-based index of the chunk page in this archetype's chunk array.
+    uint32_t chunk_index{0};
+
+    /// Zero-based row slot within the identified chunk page.
+    uint32_t local_row{0};
+  };
 
 private:
   uint32_t archetype_id_{0};
@@ -43,18 +78,23 @@ private:
   std::vector<Archetype *> edges_remove_;
 
 public:
+  // --- Lifecycle & Construction ----------------------------------------------
+
+  /**
+   * @brief Constructs an Archetype with sorted component types and computes chunk layouts.
+   * @param id Unique numeric identifier assigned by ArchetypeGraph.
+   * @param mask Bitmask representing all constituent component types.
+   * @param sorted_types Ascending-ordered array of constituent TypeIDs.
+   * @param registry Component metadata registry for size and alignment resolution.
+   * @param chunk_size Page memory size in bytes (default: 64 KB).
+   */
   Archetype(
       uint32_t id,
       const ComponentMask &mask,
       std::vector<TypeID> sorted_types,
       const TypeRegistry &registry,
       uint32_t chunk_size = 65536
-  )
-      : archetype_id_(id), mask_(mask), types_(std::move(sorted_types)),
-        chunk_size_(chunk_size) {
-    type_to_column_.fill(-1);
-    compute_layout(registry);
-  }
+  );
 
   ~Archetype() = default;
 
@@ -63,260 +103,196 @@ public:
   Archetype(Archetype &&) = delete;
   Archetype &operator=(Archetype &&) = delete;
 
-  [[nodiscard]] inline bool matches(
+  // --- Filtering & Matching --------------------------------------------------
+
+  /**
+   * @brief Evaluates whether this archetype satisfies query include, exclude, and any masks.
+   * @param include Mask containing required components (must be a subset).
+   * @param exclude Mask containing forbidden components (must not intersect).
+   * @param any Mask containing optional components (must intersect if non-empty).
+   * @return true if all filter criteria are met; false otherwise.
+   */
+  [[nodiscard]] bool matches(
       const ComponentMask &include,
-      const ComponentMask &exclude
-  ) const noexcept {
-    return mask_.contains_all(include) &&
-        (exclude.empty() || !mask_.contains_any(exclude));
-  }
+      const ComponentMask &exclude,
+      const ComponentMask &any = {}
+  ) const noexcept;
 
-  [[nodiscard]] uint32_t id() const noexcept { return archetype_id_; }
-  [[nodiscard]] const ComponentMask &mask() const noexcept { return mask_; }
-  [[nodiscard]] std::span<const TypeID> types() const noexcept {
-    return types_;
-  }
-  [[nodiscard]] size_t component_count() const noexcept {
-    return types_.size();
-  }
-  [[nodiscard]] uint32_t chunk_capacity() const noexcept {
-    return chunk_capacity_;
-  }
-  [[nodiscard]] uint32_t entity_count() const noexcept {
-    return total_entities_;
-  }
-  [[nodiscard]] uint32_t chunk_size() const noexcept { return chunk_size_; }
+  // --- Property & Metadata Introspection -------------------------------------
 
-  [[nodiscard]] inline bool has_component(TypeID type) const noexcept {
-    return mask_.test(type);
-  }
+  /// Returns the dense numeric identifier of this archetype.
+  [[nodiscard]] uint32_t id() const noexcept;
 
-  [[nodiscard]] int16_t column_index(TypeID type) const noexcept {
-    if (type >= MAX_COMPONENTS)
-      return -1;
-    return type_to_column_[type];
-  }
+  /// Returns the component bitmask representing this archetype's component set.
+  [[nodiscard]] const ComponentMask &mask() const noexcept;
 
+  /// Returns a span over the sorted constituent TypeIDs.
+  [[nodiscard]] std::span<const TypeID> types() const noexcept;
+
+  /// Returns the total number of distinct component types in this archetype.
+  [[nodiscard]] size_t component_count() const noexcept;
+
+  /// Returns the maximum entity row capacity of each 64KB chunk page in this archetype.
+  [[nodiscard]] uint32_t chunk_capacity() const noexcept;
+
+  /// Returns the total number of active entities currently stored across all chunks.
+  [[nodiscard]] uint32_t entity_count() const noexcept;
+
+  /// Returns the configured chunk page size in bytes (e.g. 65536).
+  [[nodiscard]] uint32_t chunk_size() const noexcept;
+
+  /**
+   * @brief Checks if this archetype contains a specific component type.
+   * @param type Target component TypeID.
+   * @return true if present; false otherwise.
+   */
+  [[nodiscard]] bool has_component(TypeID type) const noexcept;
+
+  /**
+   * @brief Type-safe template check if this archetype contains a component.
+   * @tparam T Component type.
+   * @return true if present; false otherwise.
+   */
+  template <typename T> [[nodiscard]] bool has() const noexcept;
+
+  // --- Column Layout Lookups -------------------------------------------------
+
+  /**
+   * @brief Looks up the column index for a given component type.
+   * @param type Target component TypeID.
+   * @return Zero-based column index, or -1 if the component is not in this archetype.
+   */
+  [[nodiscard]] int16_t column_index(TypeID type) const noexcept;
+
+  /**
+   * @brief Retrieves the column layout descriptor at a specified column index.
+   * @param index Column index (must be < component_count()).
+   * @return ComponentColumnLayout containing byte offset, element size, and alignment.
+   */
   [[nodiscard]] const ComponentColumnLayout &column_layout(
       size_t index
-  ) const noexcept {
-    assert(index < columns_.size());
-    return columns_[index];
-  }
+  ) const noexcept;
 
+  /**
+   * @brief Looks up the column layout descriptor for a component TypeID.
+   * @param type Target component TypeID.
+   * @return Pointer to layout descriptor, or nullptr if not found.
+   */
   [[nodiscard]] const ComponentColumnLayout *column_layout_for(
       TypeID type
-  ) const noexcept {
-    const int16_t idx = column_index(type);
-    if (idx < 0)
-      return nullptr;
-    return &columns_[static_cast<size_t>(idx)];
-  }
+  ) const noexcept;
 
+  /// Returns a span over all component column layout descriptors.
   [[nodiscard]] std::span<const ComponentColumnLayout>
-  column_layouts() const noexcept {
-    return columns_;
-  }
+  column_layouts() const noexcept;
 
+  /**
+   * @brief Computes the chunk-relative byte offset for a component type.
+   * @tparam T Component type.
+   * @return Byte offset from the chunk base address, or UINT32_MAX if not present.
+   */
   template <typename T>
-  [[nodiscard]] inline uint32_t column_offset() const noexcept {
-    const auto *layout = column_layout_for(type_id<std::decay_t<T>>());
-    return layout != nullptr ? layout->chunk_byte_offset : UINT32_MAX;
-  }
+  [[nodiscard]] uint32_t column_offset() const noexcept;
 
-  template <typename T> [[nodiscard]] inline bool has() const noexcept {
-    return has_component(type_id<std::decay_t<T>>());
-  }
+  // --- Transition Graph Edges ------------------------------------------------
 
-  [[nodiscard]] Archetype *get_add_edge(TypeID type) const noexcept {
-    if (type >= edges_add_.size())
-      return nullptr;
-    return edges_add_[type];
-  }
+  /**
+   * @brief Retrieves the cached destination archetype when adding a component.
+   * @param type Component TypeID to add.
+   * @return Destination archetype pointer, or nullptr if edge not yet cached.
+   */
+  [[nodiscard]] Archetype *get_add_edge(TypeID type) const noexcept;
 
-  [[nodiscard]] Archetype *get_remove_edge(TypeID type) const noexcept {
-    if (type >= edges_remove_.size())
-      return nullptr;
-    return edges_remove_[type];
-  }
+  /**
+   * @brief Retrieves the cached destination archetype when removing a component.
+   * @param type Component TypeID to remove.
+   * @return Destination archetype pointer, or nullptr if edge not yet cached.
+   */
+  [[nodiscard]] Archetype *get_remove_edge(TypeID type) const noexcept;
 
-  void set_add_edge(TypeID type, Archetype *target) {
-    if (type >= edges_add_.size()) {
-      edges_add_.resize(
-          std::max<size_t>(type + 1, edges_add_.size() * 2), nullptr
-      );
-    }
-    edges_add_[type] = target;
-  }
+  /**
+   * @brief Caches the destination archetype edge for component addition.
+   * @param type Added component TypeID.
+   * @param target Destination archetype.
+   */
+  void set_add_edge(TypeID type, Archetype *target);
 
-  void set_remove_edge(TypeID type, Archetype *target) {
-    if (type >= edges_remove_.size()) {
-      edges_remove_.resize(
-          std::max<size_t>(type + 1, edges_remove_.size() * 2), nullptr
-      );
-    }
-    edges_remove_[type] = target;
-  }
+  /**
+   * @brief Caches the destination archetype edge for component removal.
+   * @param type Removed component TypeID.
+   * @param target Destination archetype.
+   */
+  void set_remove_edge(TypeID type, Archetype *target);
 
-  struct ChunkCoord {
-    uint32_t chunk_index{0};
-    uint32_t local_row{0};
-  };
+  // --- Chunk Page Management -------------------------------------------------
 
-  [[nodiscard]] inline ChunkCoord decompose_index(
+  /**
+   * @brief Decomposes a global linear entity index into chunk index and local row.
+   * @param global_index Linear index across all chunks.
+   * @return Decomposed ChunkCoord pair.
+   */
+  [[nodiscard]] ChunkCoord decompose_index(
       uint32_t global_index
-  ) const noexcept {
-    return {global_index / chunk_capacity_, global_index % chunk_capacity_};
-  }
+  ) const noexcept;
 
-  [[nodiscard]] inline std::span<Chunk *const> chunks() const noexcept {
-    return chunks_;
-  }
-  [[nodiscard]] inline std::vector<Chunk *> &chunks() noexcept {
-    return chunks_;
-  }
+  /// Returns a const span over all allocated chunk page pointers.
+  [[nodiscard]] std::span<Chunk *const> chunks() const noexcept;
 
-  inline Chunk *ensure_writable_chunk(ChunkPool &pool) {
-    if (chunks_.empty() || chunks_.back()->is_full()) {
-      void *raw = pool.acquire();
-      auto *chunk = Chunk::create(raw, chunk_capacity_, chunk_size_);
-      chunk->set_chunk_index(static_cast<uint32_t>(chunks_.size()));
-      chunks_.push_back(chunk);
-    }
-    return chunks_.back();
-  }
+  /// Returns a mutable reference to the chunk pointer storage vector.
+  [[nodiscard]] std::vector<Chunk *> &chunks() noexcept;
 
-  inline void recycle_chunk(ChunkPool &pool, Chunk *chunk) {
-    assert(chunk != nullptr);
-    auto it = std::find(chunks_.begin(), chunks_.end(), chunk);
-    if (it != chunks_.end()) {
-      pool.release(chunk);
-      chunks_.erase(it);
-      for (size_t i = 0; i < chunks_.size(); ++i) {
-        chunks_[i]->set_chunk_index(static_cast<uint32_t>(i));
-      }
-    }
-  }
+  /**
+   * @brief Ensures a writable chunk page exists with remaining capacity, allocating if needed.
+   * @param pool Chunk slab pool.
+   * @return Pointer to an active chunk capable of receiving entity allocations.
+   */
+  Chunk *ensure_writable_chunk(ChunkPool &pool);
 
-  inline std::pair<Chunk *, uint32_t> allocate_slot(
+  /**
+   * @brief Recycles an empty chunk page back into the pool and removes it from storage.
+   * @param pool Chunk slab pool.
+   * @param chunk Chunk page to recycle.
+   */
+  void recycle_chunk(ChunkPool &pool, Chunk *chunk);
+
+  /**
+   * @brief Allocates an entity row slot in an available chunk page.
+   * @param pool Chunk slab pool.
+   * @param entity Entity handle assigned to the slot.
+   * @return Pair of allocated Chunk pointer and local row index.
+   */
+  std::pair<Chunk *, uint32_t> allocate_slot(
       ChunkPool &pool,
       Entity entity
-  ) {
-    Chunk *active = ensure_writable_chunk(pool);
-    const uint32_t row = active->append_entity(entity);
-    return {active, row};
-  }
+  );
 
-  inline void clear_chunks(ChunkPool &pool) {
-    for (Chunk *c : chunks_) {
-      pool.release(c);
-    }
-    chunks_.clear();
-  }
+  /**
+   * @brief Releases all chunk pages back into the slab pool and clears the chunk vector.
+   * @param pool Chunk slab pool.
+   */
+  void clear_chunks(ChunkPool &pool);
 
-  void increment_entity_count(size_t n = 1) noexcept { total_entities_ += n; }
-  void decrement_entity_count(size_t n = 1) noexcept {
-    assert(total_entities_ > 0);
-    total_entities_ -= n;
-  }
-  void set_entity_count(size_t count) noexcept {
-    total_entities_ = static_cast<uint32_t>(count);
-  }
+  /// Increments the total entity count tracked in this archetype.
+  void increment_entity_count(size_t n = 1) noexcept;
+
+  /// Decrements the total entity count tracked in this archetype.
+  void decrement_entity_count(size_t n = 1) noexcept;
+
+  /// Directly overrides the total entity count in this archetype.
+  void set_entity_count(size_t count) noexcept;
 
 private:
-  [[nodiscard]] static constexpr uint32_t _align_up(
-      uint32_t offset,
-      uint32_t alignment
-  ) noexcept {
-    if (alignment <= 1)
-      return offset;
-    return arche::math::align_up(offset, alignment);
-  }
-
-  [[nodiscard]] inline uint32_t _calculate_entity_size_sum(
+  [[nodiscard]] uint32_t _calculate_entity_size_sum(
       const TypeRegistry &registry
-  ) const {
-    uint32_t total = static_cast<uint32_t>(sizeof(Entity));
-    for (TypeID t : types_) {
-      const auto &desc = registry.get_descriptor(t);
-      total += desc.size;
-    }
-    return total;
-  }
+  ) const;
 
-  [[nodiscard]] inline uint32_t _calculate_chunk_capacity(
+  [[nodiscard]] uint32_t _calculate_chunk_capacity(
       uint32_t entity_size_sum
-  ) const noexcept {
-    constexpr uint32_t CHUNK_HEADER_RESERVE = ChunkGeometry::HEADER_BYTES;
-    constexpr uint32_t MAX_ALIGN_PADDING_ALLOWANCE = 256;
+  ) const noexcept;
 
-    const uint32_t tail_padding_bytes = static_cast<uint32_t>(
-        (sizeof(Entity) + entity_size_sum) * SIMD_TAIL_PADDING
-    );
+  void _build_column_layouts(const TypeRegistry &registry);
 
-    const uint32_t total_overhead = CHUNK_HEADER_RESERVE +
-        MAX_ALIGN_PADDING_ALLOWANCE + tail_padding_bytes;
-
-    const uint32_t available_bytes = (chunk_size_ > total_overhead)
-        ? (chunk_size_ - total_overhead)
-        : 1;
-
-    const uint32_t raw_capacity = available_bytes / entity_size_sum;
-    const uint32_t aligned_capacity = (raw_capacity >= SIMD_VECTOR_WIDTH)
-        ? arche::math::round_down_simd<SIMD_VECTOR_WIDTH>(raw_capacity)
-        : raw_capacity;
-
-    return (aligned_capacity == 0) ? 1 : aligned_capacity;
-  }
-
-  inline void _build_column_layouts(const TypeRegistry &registry) {
-    constexpr uint32_t CHUNK_HEADER_RESERVE = ChunkGeometry::HEADER_BYTES;
-
-    uint32_t current_offset = CHUNK_HEADER_RESERVE;
-    current_offset = _align_up(current_offset, alignof(Entity));
-    current_offset += (chunk_capacity_ + SIMD_TAIL_PADDING) *
-        static_cast<uint32_t>(sizeof(Entity));
-
-    for (size_t i = 0; i < types_.size(); ++i) {
-      TypeID t = types_[i];
-      const auto &desc = registry.get_descriptor(t);
-
-      current_offset = _align_up(current_offset, desc.alignment);
-
-      ComponentColumnLayout layout;
-      layout.type_id = t;
-      layout.size = desc.size;
-      layout.alignment = desc.alignment;
-      layout.chunk_byte_offset = current_offset;
-      layout.descriptor = &desc;
-
-      const uint32_t column_span = (chunk_capacity_ + SIMD_TAIL_PADDING) *
-          desc.size;
-      current_offset += column_span;
-
-      columns_.push_back(layout);
-      type_to_column_[t] = static_cast<int16_t>(i);
-    }
-
-    assert(
-        current_offset <= chunk_size_ &&
-        "Chunk layout calculation exceeded chunk boundaries!"
-    );
-  }
-
-  void compute_layout(const TypeRegistry &registry) {
-    columns_.clear();
-    columns_.reserve(types_.size());
-
-    if (types_.empty()) {
-      chunk_capacity_ = 65536;
-      return;
-    }
-
-    const uint32_t entity_size_sum = _calculate_entity_size_sum(registry);
-    chunk_capacity_ = _calculate_chunk_capacity(entity_size_sum);
-    _build_column_layouts(registry);
-  }
+  void compute_layout(const TypeRegistry &registry);
 };
 
 } // namespace arche

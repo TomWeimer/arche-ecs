@@ -143,7 +143,7 @@ struct QueryExecutionContext {
  */
 template <QueryTerm... Components> class Query {
 public:
-  template <typename... Comps> friend class QueryIterator;
+  template <QueryTerm... Comps> friend class QueryIterator;
 
   using Iterator = QueryIterator<Components...>;
 

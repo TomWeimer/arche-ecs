@@ -19,13 +19,14 @@ Dependencies flow strictly **top-down**. Lower layers must NEVER depend on or in
 
 | Layer | Subsystem | Contents | Permitted Dependencies |
 | :---: | :--- | :--- | :--- |
-| **0** | `types`, `hardware`, `core_component` | POD types, bitmasks, CPU intrinsics, ColumnLayout | Only Layer 0 |
+| **0** | `types`, `common` (`hardware`, `math`, `gpu`), `core_component` | POD types, bitmasks, CPU intrinsics, ColumnLayout | Only Layer 0 |
 | **1** | `chunk`, `sparse_entity`, `public_entities` | 64KB chunk page memory, SlotMap, Entity handles | Layer 0 only |
 | **2** | `archetype`, `query_cache` | Archetype tables, transition graph, reactive cache | Layers 0 and 1 |
-| **3** | `command`, `entity_lifecycle`, `component_access` | Command buffer, EntityAllocator, EntityRef view | Layers 0, 1, and 2 |
-| **4** | `query`, `concurrency`, `system`, `spatial` | Query iterators, ThreadPool, Scheduler DAG, sort | Layers 0, 1, 2, and 3 (+ sibling concurrency) |
-| **5** | `world`, `contracts` | Central World assembly, sub-facades, storage | All lower layers (assembly coordinator) |
-| **6** | `arche_master` | Umbrella header (`include/arche/arche.hpp`) | All layers |
+| **3** | `command`, `mutation`, `snapshot`, `entity_lifecycle`, `component_access` | Command buffer, Mutation, Snapshot engine, EntityRef view | Layers 0, 1, and 2 |
+| **4** | `query`, `concurrency`, `system`, `sort` | Query iterators, ThreadPool, Scheduler DAG, sort | Layers 0, 1, 2, and 3 (+ sibling concurrency) |
+| **5** | `facade` | Domain facades (archetype, command, entity, gpu, resource, snapshot, system) | Layers 0, 1, 2, 3, and 4 |
+| **6** | `world` | Central World assembly, domain facades composition, storage | All lower layers (assembly coordinator) |
+| **7** | `arche_master` | Umbrella header (`include/arche/arche.hpp`) | All layers |
 
 ## Architecture Rules & Code Conventions
 1. **No Upward Dependencies:**
@@ -41,3 +42,10 @@ Dependencies flow strictly **top-down**. Lower layers must NEVER depend on or in
    - Never use relative directory traversing (`../`).
 4. **Stable Build Configuration:**
    - Do NOT modify `CMakeLists.txt` or tweak search paths to paper over architectural violations. Fix the code to conform to the architecture rules.
+
+## Execution & Workflow Directives
+1. **Error Detection & Linting:**
+   - To check for syntax, type, and compiler errors as well as architectural rules across the codebase, run `make lint` (which executes `python3 scripts/check_architecture.py` followed by `ninja -C build`).
+   - Do NOT run `scripts/lint.py`.
+2. **Formatter & Benchmarking:**
+   - Do NOT run the code formatter (`clang-format`) or benchmarks (`arche_benchmarks`, `comparative_benchmarks`, etc.) unless explicitly instructed by the user.

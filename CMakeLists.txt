@@ -19,7 +19,7 @@ target_sources(arche
   PUBLIC
     FILE_SET CXX_MODULES FILES
       src/arche.cppm
-      # Layer 0: Foundation Types & Hardware
+      # Layer 0: Foundation Types & Common Utilities
       src/types/entity.cppm
       src/types/access.cppm
       src/types/filters.cppm
@@ -30,67 +30,81 @@ target_sources(arche
       src/types/detail/resource_id.cppm
       src/component/component_mask.cppm
       src/component/type_id.cppm
+      src/component/detail/type_id_impl.cppm
       src/component/component_access.cppm
+      src/component/detail/component_access_impl.cppm
       src/component/detail/column_layout.cppm
-      src/hardware/hardware.cppm
-      src/hardware/gpu_layout.cppm
-      src/hardware/detail/math_utils.cppm
-      src/hardware/detail/gpu_span.cppm
+      src/common/hardware.cppm
+      src/common/math.cppm
+      src/common/gpu_layout.cppm
+      src/common/gpu_span.cppm
       # Layer 1: Memory & State Representation
       src/chunk/chunk.cppm
+      src/chunk/detail/chunk_impl.cppm
       src/chunk/chunk_pool.cppm
+      src/chunk/detail/chunk_pool_impl.cppm
       src/chunk/detail/chunk_header.cppm
-      src/chunk/detail/chunk_geometry.cppm
       src/entity/entity.cppm
       src/entity/entity_view.cppm
       src/entity/slot_map.cppm
+      src/entity/detail/slot_map_impl.cppm
       src/entity/detail/entity_record.cppm
-      src/entity/detail/entity_allocator.cppm
       src/resource/resource.cppm
-      src/persistence/snapshot.cppm
+      src/resource/detail/resource_impl.cppm
       # Layer 2: Archetypes & Query Cache
       src/archetype/archetype.cppm
+      src/archetype/detail/archetype_impl.cppm
       src/archetype/archetype_graph.cppm
-      src/archetype/detail/component_migration.cppm
+      src/archetype/detail/archetype_graph_impl.cppm
       src/query/query_cache.cppm
-      # Layer 3: Deferred Operations & In-Place Access
+      # Layer 3: Deferred Operations, Snapshot & In-Place Access
+      src/mutation/mutation.cppm
+      src/mutation/detail/mutation_impl.cppm
+      src/snapshot/snapshot.cppm
+      src/snapshot/detail/snapshot_impl.cppm
       src/command/command.cppm
-      src/command/detail/command_playback.cppm
-      # Layer 4: Execution Engine (Concurrency, Query, System, Spatial)
+      src/command/detail/command_impl.cppm
+      # Layer 4: Execution Engine (Concurrency, Query, System, Sort)
       src/concurrency/thread_pool.cppm
-      src/concurrency/detail/chunk_dispatcher.cppm
+      src/concurrency/detail/thread_pool_impl.cppm
       src/query/query.cppm
-      src/query/detail/query_rules.cppm
-      src/query/detail/filter.cppm
+      src/query/detail/query_masks.cppm
+      src/query/detail/query_offsets.cppm
+      src/query/detail/query_filter.cppm
       src/query/detail/query_iterator.cppm
       src/query/detail/query_impl.cppm
       src/system/scheduler.cppm
+      src/system/detail/scheduler_impl.cppm
       src/system/system_context.cppm
+      src/system/detail/system_context_impl.cppm
       src/system/access_builder.cppm
+      src/system/detail/access_builder_impl.cppm
       src/system/plugin.cppm
-      src/spatial/sort.cppm
-      src/spatial/detail/permute.cppm
-      # Layer 5: Contracts & World Assembly Coordinator
-      src/contracts/archetype.cppm
-      src/contracts/entity.cppm
-      src/contracts/gpu.cppm
-      src/contracts/resource.cppm
-      src/contracts/snapshot.cppm
-      src/contracts/system.cppm
+      src/system/detail/plugin_impl.cppm
+      src/sort/sort.cppm
+      src/sort/detail/permute.cppm
+      src/sort/detail/sort_impl.cppm
+      # Layer 5: Domain Sub-Facades
+      src/facade/archetype_facade/archetype_facade.cppm
+      src/facade/archetype_facade/archetype_facade_impl.cppm
+      src/facade/command_facade/command_facade.cppm
+      src/facade/command_facade/command_facade_impl.cppm
+      src/facade/entity_facade/entity_facade.cppm
+      src/facade/entity_facade/entity_facade_impl.cppm
+      src/facade/gpu_facade/gpu_facade.cppm
+      src/facade/gpu_facade/gpu_facade_impl.cppm
+      src/facade/resource_facade/resource_facade.cppm
+      src/facade/resource_facade/resource_facade_impl.cppm
+      src/facade/snapshot_facade/snapshot_facade.cppm
+      src/facade/snapshot_facade/snapshot_facade_impl.cppm
+      src/facade/system_facade/system_facade.cppm
+      src/facade/system_facade/system_facade_impl.cppm
+      # Layer 6: World Assembly Coordinator & Storage
       src/world/world.cppm
       src/world/detail/world_storage.cppm
-      src/world/detail/world_access.cppm
-      src/world/detail/world_access_impl.cppm
-      src/world/detail/world_facades.cppm
       src/world/detail/world_impl.cppm
   PRIVATE
-    src/chunk/detail/chunk.cpp
-    src/archetype/detail/component_migration.cpp
-    src/command/detail/command_playback.cpp
-    src/command/detail/command_buffer.cpp
-    src/system/detail/scheduler.cpp
-    src/spatial/detail/sort.cpp
-    src/world/detail/world_facades.cpp
+    src/sort/detail/sort.cpp
     src/world/detail/world.cpp
 )
 

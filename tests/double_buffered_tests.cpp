@@ -122,10 +122,10 @@ void test_parallel_chunk_work_stealing_writers() {
       "ParallelPhysicsIntegrator",
       Access{}.writes<Position>().reads<Velocity>().build(),
       [](SystemContext &ctx) {
-        ctx.query_parallel<Position, const Velocity>([](uint32_t count,
-                                                        arche::CommandBuffer &,
-                                                        Position *pos,
-                                                        const Velocity *vel) {
+        ctx.query<Position, const Velocity>().each_parallel([](uint32_t count,
+                                                               arche::CommandBuffer &,
+                                                               Position *pos,
+                                                               const Velocity *vel) {
           for (uint32_t i = 0; i < count; ++i) {
             pos[i].x += vel[i].vx * 0.1f;
             pos[i].y += vel[i].vy * 0.1f;

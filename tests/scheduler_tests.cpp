@@ -225,7 +225,7 @@ void test_deterministic_deferred_mutations() {
       Access{}.reads<Position>().build(),
       [&](SystemContext &ctx) {
         size_t count = 0;
-        for (auto [pos] : ctx.world.query<Position>()) {
+        for (auto [pos] : ctx.query<Position>()) {
           (void)pos;
           ++count;
         }
@@ -374,7 +374,7 @@ void test_wide_system_chunk_work_stealing() {
       "WidePhysicsIntegrator",
       Access{}.writes<Position>().reads<Velocity>().build(),
       [](SystemContext &ctx) {
-        ctx.query_parallel<Position, const Velocity>(
+        ctx.query<Position, const Velocity>().each_parallel(
             [](uint32_t count,
                CommandBuffer &thread_cmd,
                Position *pos,
@@ -407,23 +407,24 @@ void test_wide_system_chunk_work_stealing() {
 }
 
 // =============================================================================
-// Unit Test 10: Single-Threaded Fallback for Wide System (No ThreadPool)
+// Unit Test 10: Single-Threaded System Traversal via each_chunk
 // =============================================================================
 
 void test_wide_system_single_threaded_fallback() {
-  std::cout << "Testing Single-Threaded Fallback for ctx.query_parallel... ";
+  std::cout
+      << "Testing Single-Threaded System Traversal (ctx.query.each_chunk)... ";
 
   World world;
   world.spawn(Position{10.0f, 20.0f}, Velocity{5.0f, 5.0f});
 
   CommandBuffer cmd;
-  SystemContext ctx{world, cmd}; // No pool, no parallel_cmd
+  SystemContext ctx = world.create_system_context(cmd);
 
-  ctx.query_parallel<Position, const Velocity>(
-      [](uint32_t count, CommandBuffer &c, Position *pos, const Velocity *vel) {
+  ctx.query<Position, const Velocity>().each_chunk(
+      [&](uint32_t count, Position *pos, const Velocity *vel) {
         for (uint32_t i = 0; i < count; ++i) {
           pos[i].x += vel[i].vx;
-          c.spawn(Marker{99});
+          ctx.cmd.spawn(Marker{99});
         }
       }
   );
@@ -436,6 +437,39 @@ void test_wide_system_single_threaded_fallback() {
   // Commit manual command buffer
   cmd.commit(world);
   assert(world.archetypes.count_with<Marker>() == 1);
+
+  std::cout << "PASSED\n";
+}
+
+// =============================================================================
+// Unit Test 11: Narrow Systems Exceeding ThreadPool Worker Count
+// =============================================================================
+
+void test_narrow_systems_exceeding_worker_count() {
+  std::cout
+      << "Testing Narrow Systems Exceeding Worker Count (Dynamic Stealing)... ";
+
+  World world;
+  // Pool has only 2 worker threads:
+  ThreadPool pool(2);
+
+  Scheduler scheduler;
+  std::atomic<uint32_t> executed{0};
+
+  // Register 8 independent Narrow systems in a single non-conflicting batch:
+  for (int i = 0; i < 8; ++i) {
+    scheduler.add_system(
+        "Sys" + std::to_string(i),
+        Access{}.build(),
+        [&](SystemContext &) { executed.fetch_add(1, std::memory_order_relaxed); },
+        SystemScale::Narrow
+    );
+  }
+
+  scheduler.run(world, pool);
+
+  // All 8 systems must have executed, even though worker_count was only 2!
+  assert(executed.load() == 8);
 
   std::cout << "PASSED\n";
 }
@@ -459,6 +493,7 @@ int main() {
   test_scheduler_copy_and_move();
   test_wide_system_chunk_work_stealing();
   test_wide_system_single_threaded_fallback();
+  test_narrow_systems_exceeding_worker_count();
 
   std::cout << "\nAll Scheduler unit tests passed successfully!\n";
   return 0;

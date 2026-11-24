@@ -53,7 +53,7 @@ void test_full_parallel_physics_pipeline() {
   for (int frame = 0; frame < 5; ++frame) {
     // Parallel integration with chunk work-stealing across worker threads
     world.query<Position, const Velocity>().each_parallel(
-        pool, [](uint32_t count, Position *pos, const Velocity *v) {
+        [](uint32_t count, Position *pos, const Velocity *v) {
           for (uint32_t i = 0; i < count; ++i) {
             pos[i].x += v[i].vx * dt;
             pos[i].y += v[i].vy * dt;
@@ -63,8 +63,8 @@ void test_full_parallel_physics_pipeline() {
   }
 
   // Verify numerical accuracy across all 100k entities
-  world.query<const Position>().for_each_chunk([](uint32_t count,
-                                                  const Position *pos) {
+  world.query<const Position>().each_chunk([](uint32_t count,
+                                              const Position *pos) {
     for (uint32_t i = 0; i < count; ++i) {
       assert(std::abs(pos[i].x - (5.0f * 1.0f * 0.01666f)) < 0.001f);
       assert(std::abs(pos[i].y - (5.0f * 2.0f * 0.01666f)) < 0.001f);
@@ -94,7 +94,7 @@ void test_permutation_and_reactive_cache() {
       {.count = COUNT}, Position{0.0f, 0.0f}, Velocity{1.0f, 1.0f}
   );
 
-  arche::Archetype *arch = arche::internal::WorldAccess::slot_map(world)
+  arche::Archetype *arch = world.entities.slot_map()
                                .get_record(entities[0])
                                .archetype;
 
@@ -108,7 +108,7 @@ void test_permutation_and_reactive_cache() {
 
   // Existing query must read all permuted entities without failure
   size_t count = 0;
-  query.for_each_chunk([&](uint32_t n, Position *, Velocity *) { count += n; });
+  query.each_chunk([&](uint32_t n, Position *, Velocity *) { count += n; });
   assert(count == COUNT);
 
   std::cout << "PASSED\n";
@@ -126,15 +126,12 @@ void test_parallel_mutation_churn() {
   std::cout << "[Test 3/3] Parallel Mutation Stress under High Churn... ";
   World world;
   ThreadPool pool(4);
-  ParallelCommandBuffer cmd_buffers(pool.worker_count());
 
   constexpr size_t COUNT = 20'000;
   world.spawn({.count = COUNT}, Position{1.0f, 1.0f});
 
   // Parallel loop: destroy half the entities and spawn replacements
   world.query<Entity, const Position>().each_parallel(
-      pool,
-      cmd_buffers,
       [](uint32_t count,
          arche::CommandBuffer &cmd,
          Entity *ents,
@@ -147,8 +144,7 @@ void test_parallel_mutation_churn() {
         }
       }
   );
-
-  cmd_buffers.commit(world);
+  world.commands.commit();
 
   // Total entity count must remain exactly COUNT
   assert(world.entities.count() == COUNT);

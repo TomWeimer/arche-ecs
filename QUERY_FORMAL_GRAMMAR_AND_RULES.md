@@ -253,56 +253,43 @@ namespace arche {
 // --- 1. Base Component Traits -----------------------------------------------
 
 template <typename T>
-concept ComponentType = std::is_class_v<T> && 
-                        std::is_standard_layout_v<T> && 
-                        !is_with_v<T> && 
-                        !is_without_v<T> && 
-                        !is_has_v<T> && 
-                        !is_or_v<T>;
+concept Component = std::is_class_v<std::decay_t<T>> && 
+                    std::is_standard_layout_v<std::decay_t<T>> && 
+                    !std::is_polymorphic_v<std::decay_t<T>> && 
+                    !std::is_same_v<std::decay_t<T>, Entity> && 
+                    !is_query_filter_v<std::decay_t<T>>;
 
 // --- 2. Valid Data Terms (Template Pack) ------------------------------------
 
 template <typename T>
-concept ValidDataTerm = ComponentType<std::remove_pointer_t<std::decay_t<T>>> ||
-                        std::is_same_v<std::decay_t<T>, Entity> ||
-                        (is_has_v<T> && ComponentType<has_inner_t<T>>);
+concept QueryTerm = Component<std::remove_pointer_t<std::decay_t<T>>> ||
+                    std::is_same_v<std::decay_t<T>, Entity> ||
+                    (is_has_v<T> && Component<has_inner_t<T>>);
 
 // --- 3. Valid Filter Tags ---------------------------------------------------
 
 template <typename T>
-concept ValidOrBranch = is_with_v<T> || is_without_v<T>;
+concept ValidOrBranch = is_with_v<std::decay_t<T>> || is_without_v<std::decay_t<T>>;
 
 template <typename T>
-concept ValidFilterTag = is_with_v<T> || 
-                         is_without_v<T> || 
-                         is_mutated_v<T> || 
-                         std::is_same_v<T, Added> ||
-                         (is_or_v<T> && requires {
-                             // Enforces Rule 2: Every branch in Or must be With or Without
-                             typename T::all_branches_valid;
-                         });
+concept QueryFilter = is_with_filter_v<T> || 
+                      is_without_filter_v<T> || 
+                      is_has_filter_v<T> || 
+                      is_mutated_filter_v<T> || 
+                      is_added_filter_v<T> ||
+                      (is_or_filter_v<T> && are_valid_or_branches_v<std::decay_t<T>>);
 
 // --- 4. Query Class Template Concept Guard ----------------------------------
 
-template <typename... Components>
+template <QueryTerm... Components>
 class Query {
-    // Rule 1 & Rule 3: Enforce valid data terms
-    static_assert((ValidDataTerm<Components> && ...), 
-        "Arche ECS Error: Query template parameters must strictly be component types, "
-        "optional component pointers, Entity, or Has<Component>. Filter tags (With, Without, Or) "
-        "cannot appear in the component pack!");
-
     // Rule 5: No redundant Has<T>
     static_assert(!((is_has_v<Components> && (std::is_same_v<has_inner_t<Components>, std::decay_t<Components>> || ...))),
         "Arche ECS Error: Redundant Has<T> query term! Component T is already required as a mandatory term.");
 
 public:
-    template <typename... Filters>
+    template <QueryFilter... Filters>
     explicit Query(World &world, Filters... filters) {
-        // Enforce valid filter tags
-        static_assert((ValidFilterTag<Filters> && ...),
-            "Arche ECS Error: Invalid filter argument passed to query! "
-            "Raw components are forbidden in Or<...>. Use Or<With<A>, With<B>>.");
 
         // Rule 4: No Direct Contradictions
         static_assert((include_mask_ & exclude_mask_).empty(),

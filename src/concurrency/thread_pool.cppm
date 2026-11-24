@@ -9,8 +9,21 @@ module;
 
 export module arche:thread_pool;
 
+import :hardware;
+
 export namespace arche {
 
+// =============================================================================
+// ThreadPool (Lock-Free Barrier Worker Pool)
+// =============================================================================
+
+/**
+ * @class ThreadPool
+ * @brief High-performance barrier-synchronized thread pool for intra-query and batch parallelism.
+ *
+ * Employs dual `std::barrier` synchronizations to eliminate mutex contention,
+ * lock-free task dispatching, and zero allocation per dispatch cycle.
+ */
 class ThreadPool {
 private:
   std::vector<std::thread> workers_;
@@ -22,46 +35,36 @@ private:
   std::barrier<> finish_barrier_;
 
 public:
-  explicit ThreadPool(
-      uint32_t thread_count = std::thread::hardware_concurrency()
-  )
-      : worker_count_(thread_count > 0 ? thread_count : 1),
-        start_barrier_(worker_count_ + 1), finish_barrier_(worker_count_ + 1) {
-    workers_.reserve(worker_count_);
-    for (uint32_t i = 0; i < worker_count_; ++i) {
-      workers_.emplace_back([this, i]() {
-        while (true) {
-          start_barrier_.arrive_and_wait();
-          if (stop_.load(std::memory_order_relaxed)) {
-            break;
-          }
-          if (current_task_) {
-            current_task_(i);
-          }
-          finish_barrier_.arrive_and_wait();
-        }
-      });
-    }
-  }
+  /**
+   * @brief Constructs a thread pool with the specified number of worker threads.
+   *
+   * @param thread_count Number of persistent worker threads to spawn. Defaults to hardware core count.
+   */
+  explicit ThreadPool(uint32_t thread_count = Hardware::core_count());
 
-  ~ThreadPool() {
-    stop_.store(true, std::memory_order_relaxed);
-    start_barrier_.arrive_and_wait();
-    for (auto &w : workers_) {
-      if (w.joinable()) {
-        w.join();
-      }
-    }
-  }
+  /**
+   * @brief Destructor. Signals stop token and safely joins all worker threads.
+   */
+  ~ThreadPool();
 
   ThreadPool(const ThreadPool &) = delete;
   ThreadPool &operator=(const ThreadPool &) = delete;
+  ThreadPool(ThreadPool &&) = delete;
+  ThreadPool &operator=(ThreadPool &&) = delete;
 
-  [[nodiscard]] inline uint32_t worker_count() const noexcept {
-    return worker_count_;
-  }
+  /**
+   * @brief Returns the number of dedicated worker threads in this pool.
+   */
+  [[nodiscard]] uint32_t worker_count() const noexcept;
 
-  template <typename Task> inline void parallel_for(Task &&task) {
+  /**
+   * @brief Dispatches a callable across all worker threads and waits for completion.
+   *
+   * @tparam Task Invocable type accepting `uint32_t thread_id`: `void(uint32_t)`.
+   * @param task Callable executed concurrently by all worker threads.
+   */
+  template <typename Task>
+  void parallel_for(Task &&task) {
     current_task_ = task;
     start_barrier_.arrive_and_wait();
     finish_barrier_.arrive_and_wait();

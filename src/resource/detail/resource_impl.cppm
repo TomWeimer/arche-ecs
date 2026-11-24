@@ -17,14 +17,14 @@ export namespace arche {
 // ResourceContainer Lifecycle & Storage Implementations
 // =============================================================================
 
-inline ResourceContainer::~ResourceContainer() {
+ResourceContainer::~ResourceContainer() {
   clear();
 }
 
-inline ResourceContainer::ResourceContainer(ResourceContainer &&other) noexcept
+ResourceContainer::ResourceContainer(ResourceContainer &&other) noexcept
     : slots_(std::move(other.slots_)) {}
 
-inline ResourceContainer &ResourceContainer::operator=(
+ResourceContainer &ResourceContainer::operator=(
     ResourceContainer &&other
 ) noexcept {
   if (this != &other) {
@@ -34,7 +34,7 @@ inline ResourceContainer &ResourceContainer::operator=(
   return *this;
 }
 
-inline void ResourceContainer::clear() {
+void ResourceContainer::clear() {
   // 1. Iterate over all allocated slots and invoke registered destructors.
   for (auto &slot : slots_) {
     if (slot.ptr) {
@@ -93,7 +93,7 @@ template <typename T>
   return (id < slots_.size()) && (slots_[id].ptr != nullptr);
 }
 
-[[nodiscard]] inline bool ResourceContainer::has(ResourceID id) const noexcept {
+[[nodiscard]] bool ResourceContainer::has(ResourceID id) const noexcept {
   return (id < slots_.size()) && (slots_[id].ptr != nullptr);
 }
 

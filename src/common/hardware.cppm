@@ -126,7 +126,7 @@ struct Hardware {
     if (target_size <= page) {
       return page;
     }
-    return ((target_size + page - 1) / page) * page;
+    return math::align_up(target_size, page);
   }
 
   // --- Hardware Memory Prefetching -------------------------------------------

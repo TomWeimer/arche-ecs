@@ -6,7 +6,6 @@ import arche;
 
 namespace {
 using arche::Archetype;
-using arche::DrawIndirectCommand;
 using arche::Entity;
 using arche::ParallelCommandBuffer;
 using arche::ThreadPool;
@@ -39,13 +38,12 @@ struct TestAABB {
 void test_parallel_query_parity() {
   std::cout << "[Test 1/4] Chunk-Level Parallel Work-Stealing Parity (50k)... ";
   World world;
-  ThreadPool pool(4);
 
   constexpr size_t COUNT = 50'000;
   world.spawn({.count = COUNT}, Position{1.0f, 2.0f}, Velocity{3.0f, 4.0f});
 
   world.query<Position, const Velocity>().each_parallel(
-      pool, [](uint32_t count, Position *pos, const Velocity *vel) {
+      [](uint32_t count, Position *pos, const Velocity *vel) {
         for (uint32_t i = 0; i < count; ++i) {
           pos[i].x += vel[i].vx;
           pos[i].y += vel[i].vy;
@@ -54,8 +52,8 @@ void test_parallel_query_parity() {
   );
 
   size_t checked = 0;
-  world.query<const Position>().for_each_chunk([&](uint32_t count,
-                                                   const Position *pos) {
+  world.query<const Position>().each_chunk([&](uint32_t count,
+                                               const Position *pos) {
     for (uint32_t i = 0; i < count; ++i) {
       assert(pos[i].x == 4.0f);
       assert(pos[i].y == 6.0f);
@@ -74,8 +72,6 @@ void test_parallel_query_parity() {
 void test_parallel_command_buffers() {
   std::cout << "[Test 2/4] Lock-Free Thread-Local Command Buffers... ";
   World world;
-  ThreadPool pool(4);
-  ParallelCommandBuffer cmd_buffers(pool.worker_count());
 
   constexpr size_t COUNT = 10'000;
   std::vector<Entity> entities = world.spawn(
@@ -83,8 +79,6 @@ void test_parallel_command_buffers() {
   );
 
   world.query<Entity, const Position>().each_parallel(
-      pool,
-      cmd_buffers,
       [](uint32_t count,
          arche::CommandBuffer &cmd,
          Entity *ents,
@@ -96,8 +90,8 @@ void test_parallel_command_buffers() {
         }
       }
   );
+  world.commands.commit();
 
-  cmd_buffers.commit(world);
   assert(world.entities.count() == COUNT / 2);
 
   std::cout << "PASSED\n";
@@ -143,7 +137,7 @@ void test_chunk_user_metadata_culling() {
   constexpr size_t COUNT = 5000;
   world.spawn({.count = COUNT}, Position{1.0f, 1.0f});
 
-  Archetype *arch = arche::internal::WorldAccess::graph(world)
+  Archetype *arch = world.archetypes.graph()
                         .archetypes()
                         .back()
                         .get();

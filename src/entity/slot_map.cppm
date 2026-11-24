@@ -3,10 +3,8 @@ module;
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
-#include <cstring>
 #include <optional>
 #include <span>
-#include <stdexcept>
 #include <vector>
 
 export module arche:slot_map;
@@ -21,6 +19,11 @@ struct Chunk;
 
 namespace Internal {
 
+/**
+ * @brief Advances a 32-bit generation integer, skipping zero.
+ *
+ * Generation zero is reserved across arche-ecs as an unallocated or tombstone marker.
+ */
 [[nodiscard]] inline constexpr uint32_t advance_nonzero(uint32_t val) noexcept {
   const uint32_t next = val + 1;
   return (next == 0) ? 1 : next;
@@ -30,14 +33,24 @@ namespace Internal {
 
 /**
  * @class SlotMap
- * @brief 1-to-1 routing table mapping Entity handles to their chunk memory
- * locations.
+ * @brief Generational 1-to-1 routing table mapping Entity handles to chunk memory locations.
+ *
+ * Provides O(1) allocation, generational recycling, constant-time handle validation,
+ * and chunk coordinate lookup (archetype pointer, chunk pointer, row offset).
+ * Memory is backed by a contiguous array of 32-byte Slot records.
  */
 class SlotMap {
 public:
+  /// Sentinel value indicating the end of the embedded free list.
   static constexpr uint32_t INDEX_NONE_32 = 0xFFFFFFFFU;
+
+  /// Theoretical upper limit of entities manageable by a 32-bit slot index.
   static constexpr uint64_t MAX_ENTITIES = 0xFFFFFFFFULL;
 
+  /**
+   * @struct Slot
+   * @brief 32-byte generational slot record storing location or free-list linkage.
+   */
   struct Slot {
     uint32_t generation{1};
     uint32_t is_alive_flag{0};
@@ -58,35 +71,14 @@ private:
   uint32_t free_list_head{INDEX_NONE_32};
   size_t active_count{0};
 
-  [[nodiscard]] inline uint32_t pop_free_slot() noexcept {
-    const uint32_t index = free_list_head;
-    free_list_head = slots[index].next_free;
-    return index;
-  }
-
-  [[nodiscard]] inline uint32_t append_new_slot() {
-    if (slots.size() >= MAX_ENTITIES) {
-      throw std::runtime_error(
-          "arche::SlotMap: capacity limit reached (4.29B entities)"
-      );
-    }
-    const uint32_t index = static_cast<uint32_t>(slots.size());
-    slots.emplace_back();
-    slots[index].generation = 1;
-    return index;
-  }
+  [[nodiscard]] uint32_t pop_free_slot() noexcept;
+  [[nodiscard]] uint32_t append_new_slot();
+  void push_free_slot(uint32_t index) noexcept;
 
   [[nodiscard]] static constexpr uint32_t advance_generation(
       uint32_t gen
   ) noexcept {
     return Internal::advance_nonzero(gen);
-  }
-
-  inline void push_free_slot(uint32_t index) noexcept {
-    slots[index].generation = advance_generation(slots[index].generation);
-    slots[index].is_alive_flag = 0;
-    slots[index].next_free = free_list_head;
-    free_list_head = index;
   }
 
 public:
@@ -99,196 +91,162 @@ public:
   SlotMap(SlotMap &&) noexcept = default;
   SlotMap &operator=(SlotMap &&) noexcept = default;
 
-  [[nodiscard]] Entity allocate() {
-    const uint32_t index = (free_list_head != INDEX_NONE_32)
-        ? pop_free_slot()
-        : append_new_slot();
+  // --- Entity Allocation & Deallocation --------------------------------------
 
-    slots[index].record = EntityRecord{};
-    slots[index].is_alive_flag = 1;
-    ++active_count;
-    return Entity::from_parts(index, slots[index].generation);
-  }
+  /**
+   * @brief Allocates a new Entity handle, recycling from the free list or growing the table.
+   * @return A valid 64-bit Entity handle containing slot index and current generation.
+   */
+  [[nodiscard]] Entity allocate();
 
-  void free(Entity e) noexcept {
-    push_free_slot(e.index());
-    --active_count;
-  }
+  /**
+   * @brief Frees an Entity handle, advancing its generation and prepending to the free list.
+   * @param e Entity handle to deallocate.
+   */
+  void free(Entity e) noexcept;
 
-  void allocate_batch(size_t count, Entity *out_handles) {
-    assert(out_handles != nullptr && "Output handles pointer cannot be null");
-    if (count == 0) {
-      return;
-    }
+  /**
+   * @brief High-performance bulk allocation recycling free slots before appending new capacity.
+   * @param count Number of handles to allocate.
+   * @param out_handles Pre-allocated destination buffer receiving the handles.
+   */
+  void allocate_batch(size_t count, Entity *out_handles);
 
-    size_t allocated = 0;
+  /**
+   * @brief Bulk deallocates a batch of entity handles.
+   * @param handles Span of entities to recycle.
+   */
+  void free_batch(std::span<const Entity> handles) noexcept;
 
-    while (free_list_head != INDEX_NONE_32 && allocated < count) {
-      const uint32_t idx = pop_free_slot();
-      slots[idx].record = EntityRecord{};
-      slots[idx].is_alive_flag = 1;
-      out_handles[allocated++] = Entity::from_parts(idx, slots[idx].generation);
-    }
+  // --- Validation & Resolution -----------------------------------------------
 
-    if (allocated < count) {
-      const size_t remaining = count - allocated;
-      const size_t current_size = slots.size();
-      if (current_size + remaining > MAX_ENTITIES) {
-        throw std::runtime_error(
-            "arche::SlotMap: capacity limit reached (4.29B entities)"
-        );
-      }
+  /**
+   * @brief Reconstructs a valid Entity handle from a 32-bit slot index, or std::nullopt if dead.
+   */
+  [[nodiscard]] std::optional<Entity> resolve(uint32_t index) const noexcept;
 
-      slots.resize(current_size + remaining);
-      for (size_t i = 0; i < remaining; ++i) {
-        const uint32_t idx = static_cast<uint32_t>(current_size + i);
-        slots[idx].generation = 1;
-        slots[idx].is_alive_flag = 1;
-        slots[idx].record = EntityRecord{};
-        out_handles[allocated++] = Entity::from_parts(idx, 1);
-      }
-    }
+  /**
+   * @brief Returns true if the entity handle matches its slot's active generation.
+   */
+  [[nodiscard]] bool is_alive(Entity e) const noexcept;
 
-    active_count += count;
-  }
+  /**
+   * @brief Alias for is_alive. Returns true if the entity currently exists.
+   */
+  [[nodiscard]] bool contains(Entity e) const noexcept;
 
-  void free_batch(std::span<const Entity> handles) noexcept {
-    for (Entity e : handles) {
-      if (is_alive(e)) {
-        push_free_slot(e.index());
-        --active_count;
-      }
-    }
-  }
+  // --- Record Accessors ------------------------------------------------------
 
-  [[nodiscard]] inline std::optional<Entity> resolve(
-      uint32_t index
-  ) const noexcept {
-    if (index >= slots.size() || !slots[index].is_alive_flag) {
-      return std::nullopt;
-    }
-    return Entity::from_parts(index, slots[index].generation);
-  }
+  /**
+   * @brief Retrieves the read-only chunk coordinate record for an alive entity.
+   */
+  [[nodiscard]] const EntityRecord &get(Entity e) const;
 
-  [[nodiscard]] inline bool is_alive(Entity e) const noexcept {
-    const uint32_t index = e.index();
-    if (index >= slots.size())
-      return false;
-    return slots[index].is_alive_flag == 1 &&
-        slots[index].generation == e.generation();
-  }
+  /**
+   * @brief Read-only accessor for entity coordinate record.
+   */
+  [[nodiscard]] const EntityRecord &get_record(Entity e) const;
 
-  [[nodiscard]] inline const EntityRecord &get(Entity e) const {
-    assert(
-        is_alive(e) &&
-        "arche::SlotMap: attempt to access dead or unallocated entity"
-    );
-    return slots[e.index()].record;
-  }
+  /**
+   * @brief Mutable accessor for entity coordinate record.
+   */
+  [[nodiscard]] EntityRecord &get_record(Entity e);
 
-  [[nodiscard]] inline const EntityRecord &get_record(Entity e) const {
-    return get(e);
-  }
+  /**
+   * @brief Safely finds an entity record, returning nullptr if dead or out of bounds.
+   */
+  [[nodiscard]] const EntityRecord *find_record(Entity e) const noexcept;
 
-  [[nodiscard]] inline EntityRecord &get_record(Entity e) {
-    assert(
-        is_alive(e) &&
-        "arche::SlotMap: attempt to access dead or unallocated entity"
-    );
-    return slots[e.index()].record;
-  }
+  /**
+   * @brief Safely finds a mutable entity record, returning nullptr if dead or out of bounds.
+   */
+  [[nodiscard]] EntityRecord *find_record(Entity e) noexcept;
 
-  [[nodiscard]] inline const EntityRecord *find_record(
-      Entity e
-  ) const noexcept {
-    const uint32_t idx = e.index();
-    if (idx < slots.size() && slots[idx].generation == e.generation() &&
-        slots[idx].is_alive_flag == 1) {
-      return &slots[idx].record;
-    }
-    return nullptr;
-  }
+  /**
+   * @brief Mutable accessor for entity coordinate record.
+   */
+  [[nodiscard]] EntityRecord &get_mut(Entity e);
 
-  [[nodiscard]] inline EntityRecord *find_record(Entity e) noexcept {
-    const uint32_t idx = e.index();
-    if (idx < slots.size() && slots[idx].generation == e.generation() &&
-        slots[idx].is_alive_flag == 1) {
-      return &slots[idx].record;
-    }
-    return nullptr;
-  }
+  // --- Location Synchronization ----------------------------------------------
 
-  [[nodiscard]] inline EntityRecord &get_mut(Entity e) {
-    assert(
-        is_alive(e) &&
-        "arche::SlotMap: attempt to access dead or unallocated entity"
-    );
-    return slots[e.index()].record;
-  }
-
-  [[nodiscard]] inline size_t snapshot_byte_size() const noexcept {
-    return slots.size() * sizeof(Slot);
-  }
-
-  inline void write_snapshot_data(void *dest) const noexcept {
-    assert(dest != nullptr && "Destination buffer cannot be null");
-    std::memcpy(dest, slots.data(), snapshot_byte_size());
-  }
-
-  inline void read_snapshot_data(
-      const void *src,
-      size_t slot_count,
-      uint32_t free_head,
-      size_t count
-  ) {
-    assert(src != nullptr && "Source snapshot data cannot be null");
-    slots.resize(slot_count);
-    std::memcpy(slots.data(), src, slot_count * sizeof(Slot));
-    free_list_head = free_head;
-    active_count = count;
-  }
-
-  [[nodiscard]] inline uint32_t free_head_index() const noexcept {
-    return free_list_head;
-  }
-
-  inline void update_location(
+  /**
+   * @brief Updates the full physical location of an entity following relocation or swap-and-pop.
+   */
+  void update_location(
       Entity e,
       Archetype *arch,
       Chunk *chunk,
       uint32_t row
-  ) noexcept {
-    slots[e.index()].record = EntityRecord{arch, chunk, row};
-  }
+  ) noexcept;
 
-  inline void update_record(Entity e, Chunk *chunk, uint32_t row) noexcept {
-    slots[e.index()].record.chunk = chunk;
-    slots[e.index()].record.row = row;
-  }
+  /**
+   * @brief Updates chunk pointer and local row within the same archetype.
+   */
+  void update_record(Entity e, Chunk *chunk, uint32_t row) noexcept;
 
-  inline void update_record(
+  /**
+   * @brief Updates archetype, chunk pointer, and local row.
+   */
+  void update_record(
       Entity e,
       Archetype *archetype,
       Chunk *chunk,
       uint32_t row
-  ) noexcept {
-    slots[e.index()].record.archetype = archetype;
-    slots[e.index()].record.chunk = chunk;
-    slots[e.index()].record.row = row;
-  }
+  ) noexcept;
 
-  inline void update_row(Entity e, uint32_t newRow) noexcept {
-    slots[e.index()].record.row = newRow;
-  }
+  /**
+   * @brief Fast update of row index within the existing chunk.
+   */
+  void update_row(Entity e, uint32_t newRow) noexcept;
 
-  [[nodiscard]] size_t size() const noexcept { return active_count; }
-  [[nodiscard]] size_t capacity() const noexcept { return slots.size(); }
+  // --- Snapshot Serialization ------------------------------------------------
 
-  void clear() noexcept {
-    slots.clear();
-    free_list_head = INDEX_NONE_32;
-    active_count = 0;
-  }
+  /**
+   * @brief Computes total raw byte capacity required to serialize the slot table.
+   */
+  [[nodiscard]] size_t snapshot_byte_size() const noexcept;
+
+  /**
+   * @brief Blits raw slot table memory directly into a destination snapshot buffer.
+   */
+  void write_snapshot_data(void *dest) const noexcept;
+
+  /**
+   * @brief Restores slot table memory from a raw snapshot buffer.
+   */
+  void read_snapshot_data(
+      const void *src,
+      size_t slot_count,
+      uint32_t free_head,
+      size_t count
+  );
+
+  /**
+   * @brief Returns the index of the first free slot in the recycling list.
+   */
+  [[nodiscard]] uint32_t free_head_index() const noexcept;
+
+  // --- Metrics & Maintenance -------------------------------------------------
+
+  /**
+   * @brief Returns the number of currently active entities.
+   */
+  [[nodiscard]] size_t size() const noexcept;
+
+  /**
+   * @brief Returns the total allocated slot capacity (active + recycled).
+   */
+  [[nodiscard]] size_t capacity() const noexcept;
+
+  /**
+   * @brief Returns true if zero entities are currently active.
+   */
+  [[nodiscard]] bool is_empty() const noexcept;
+
+  /**
+   * @brief Clears all slots and resets allocation state.
+   */
+  void clear() noexcept;
 };
 
 namespace Internal {

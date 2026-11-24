@@ -15,7 +15,7 @@ export namespace arche {
 // ChunkPool Lifecycle & Memory Allocation Implementations
 // =============================================================================
 
-inline ChunkPool::ChunkPool(
+ChunkPool::ChunkPool(
     size_t chunk_size,
     size_t initial_reserve,
     ChunkAllocFn custom_alloc,
@@ -29,12 +29,12 @@ inline ChunkPool::ChunkPool(
   }
 }
 
-inline ChunkPool::~ChunkPool() {
+ChunkPool::~ChunkPool() {
   // 1. Release all pooled blocks back to allocator.
   purge();
 }
 
-inline ChunkPool::ChunkPool(ChunkPool &&other) noexcept
+ChunkPool::ChunkPool(ChunkPool &&other) noexcept
     : chunk_size_(other.chunk_size_),
       total_allocated_(other.total_allocated_),
       free_list_(std::move(other.free_list_)), alloc_fn_(other.alloc_fn_),
@@ -45,7 +45,7 @@ inline ChunkPool::ChunkPool(ChunkPool &&other) noexcept
   other.free_fn_ = nullptr;
 }
 
-inline ChunkPool &ChunkPool::operator=(ChunkPool &&other) noexcept {
+ChunkPool &ChunkPool::operator=(ChunkPool &&other) noexcept {
   if (this != &other) {
     // 1. Purge existing pooled blocks.
     purge();
@@ -69,7 +69,7 @@ inline ChunkPool &ChunkPool::operator=(ChunkPool &&other) noexcept {
 // Block Allocation & Recycling Implementations
 // =============================================================================
 
-inline void *ChunkPool::acquire() {
+void *ChunkPool::acquire() {
   // 1. Fast path: recycle recently freed block from LIFO free list.
   if (!free_list_.empty()) {
     void *ptr = free_list_.back();
@@ -83,7 +83,7 @@ inline void *ChunkPool::acquire() {
   return ptr;
 }
 
-inline void ChunkPool::release(void *ptr) {
+void ChunkPool::release(void *ptr) {
   // 1. Ignore null pointers safely.
   if (ptr == nullptr) {
     return;
@@ -93,7 +93,7 @@ inline void ChunkPool::release(void *ptr) {
   free_list_.push_back(ptr);
 }
 
-inline void ChunkPool::reserve(size_t count) {
+void ChunkPool::reserve(size_t count) {
   // 1. Reserve vector capacity to avoid reallocation during warm-up.
   free_list_.reserve(free_list_.size() + count);
 
@@ -104,7 +104,7 @@ inline void ChunkPool::reserve(size_t count) {
   }
 }
 
-inline void ChunkPool::purge() {
+void ChunkPool::purge() {
   // 1. Deallocate each cached block back to the underlying allocator.
   for (void *ptr : free_list_) {
     deallocate_block(ptr);
@@ -119,15 +119,15 @@ inline void ChunkPool::purge() {
 // Capacity & Telemetry Implementations
 // =============================================================================
 
-inline size_t ChunkPool::chunk_size() const noexcept { return chunk_size_; }
-inline size_t ChunkPool::available() const noexcept { return free_list_.size(); }
-inline size_t ChunkPool::allocated() const noexcept { return total_allocated_; }
+size_t ChunkPool::chunk_size() const noexcept { return chunk_size_; }
+size_t ChunkPool::available() const noexcept { return free_list_.size(); }
+size_t ChunkPool::allocated() const noexcept { return total_allocated_; }
 
-inline size_t ChunkPool::in_use() const noexcept {
+size_t ChunkPool::in_use() const noexcept {
   return total_allocated_ - free_list_.size();
 }
 
-inline void ChunkPool::set_allocator(
+void ChunkPool::set_allocator(
     ChunkAllocFn alloc_fn,
     ChunkFreeFn free_fn
 ) noexcept {
@@ -139,7 +139,7 @@ inline void ChunkPool::set_allocator(
 // Low-Level Memory Helpers
 // =============================================================================
 
-inline void *ChunkPool::allocate_block() {
+void *ChunkPool::allocate_block() {
   // 1. Query hardware cache line alignment boundary (typically 64 bytes).
   const size_t alignment = Hardware::cache_line_size();
 
@@ -150,7 +150,7 @@ inline void *ChunkPool::allocate_block() {
   return Hardware::allocate_aligned(chunk_size_, alignment);
 }
 
-inline void ChunkPool::deallocate_block(void *ptr) {
+void ChunkPool::deallocate_block(void *ptr) {
   // 1. Guard against null pointer deallocation.
   if (ptr == nullptr) {
     return;

@@ -9,10 +9,22 @@ import arche;
 #include <vector>
 
 namespace {
-using arche::GpuBufferView;
 using arche::GpuStd430Compatible;
 using arche::Std430Traits;
 using arche::World;
+
+/**
+ * @struct GpuBufferView
+ * @brief Example consumer-side descriptor demonstrating how an application
+ * adapts ComponentSpan to a graphics backend staging structure.
+ */
+struct GpuBufferView {
+  const void *data{nullptr};
+  size_t byte_size{0};
+  uint32_t count{0};
+  uint32_t element_size{0};
+  uint32_t alignment{0};
+};
 } // namespace
 
 // =============================================================================
@@ -209,7 +221,7 @@ void test_component_span_views() {
     GpuBufferView buffer_view{
         .data = first_span.data(),
         .byte_size = first_span.size_bytes(),
-        .count = first_span.count(),
+        .count = static_cast<uint32_t>(first_span.count()),
         .element_size = static_cast<uint32_t>(sizeof(GpuPosition)),
         .alignment = static_cast<uint32_t>(alignof(GpuPosition)),
     };

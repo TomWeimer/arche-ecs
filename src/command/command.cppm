@@ -13,29 +13,9 @@ export import :slot_map;
 export import :chunk_pool;
 export import :archetype;
 export import :archetype_graph;
+export import :mutation;
 
 export namespace arche {
-
-// =============================================================================
-// Command Execution Context
-// =============================================================================
-
-/**
- * @struct CommandExecutionContext
- * @brief Non-owning view of lower-layer ECS storage components required for
- * deferred command execution.
- *
- * Inverts dependencies so that Layer 3 (Command) operates strictly on Layer 0-2
- * primitives without upward coupling or forward declarations to Layer 5
- * (World).
- */
-struct CommandExecutionContext {
-  SlotMap &slot_map;
-  ChunkPool &chunk_pool;
-  ArchetypeGraph &graph;
-  TypeRegistry &registry;
-  uint32_t current_version{0};
-};
 
 // =============================================================================
 // Command Operation Codes
@@ -89,7 +69,7 @@ class CommandBuffer {
 public:
   /// Function pointer type for type-erased component tuple deserialization and
   /// entity creation.
-  using SpawnFn = void (*)(CommandExecutionContext &, const uint8_t *);
+  using SpawnFn = void (*)(MutationContext &, const uint8_t *);
 
   /// Function pointer type for deferred component type descriptor registration.
   using RegisterTypeFn = void (*)(TypeRegistry &);
@@ -186,7 +166,7 @@ public:
    * @param ctx Execution context view holding references to SlotMap, ChunkPool,
    * ArchetypeGraph, and TypeRegistry.
    */
-  void commit(CommandExecutionContext ctx);
+  void commit(MutationContext ctx);
 
   // --- Buffer Inspection & Reset ---------------------------------------------
 
@@ -248,7 +228,7 @@ public:
 
   /// Commits all thread-local command buffers sequentially into the ECS
   /// storage.
-  void commit(CommandExecutionContext ctx);
+  void commit(MutationContext ctx);
 
   /// Clears all thread-local command buffers.
   void clear() noexcept;

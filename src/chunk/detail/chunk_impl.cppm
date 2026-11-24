@@ -18,7 +18,7 @@ export namespace arche {
 // Chunk Lifecycle & Creation Implementations
 // =============================================================================
 
-inline Chunk::Chunk(uint32_t capacity, uint32_t) noexcept {
+Chunk::Chunk(uint32_t capacity, uint32_t) noexcept {
   // 1. Initialize fixed-size header bookkeeping fields.
   header_.capacity = capacity;
   header_.count = 0;
@@ -28,7 +28,7 @@ inline Chunk::Chunk(uint32_t capacity, uint32_t) noexcept {
   header_.structure_version = 0;
 }
 
-inline Chunk *Chunk::create(
+Chunk *Chunk::create(
     void *buffer,
     uint32_t capacity,
     uint32_t chunk_size
@@ -44,34 +44,34 @@ inline Chunk *Chunk::create(
 // Header & Metadata Introspection Implementations
 // =============================================================================
 
-inline ChunkHeader &Chunk::header() noexcept { return header_; }
-inline const ChunkHeader &Chunk::header() const noexcept { return header_; }
+ChunkHeader &Chunk::header() noexcept { return header_; }
+const ChunkHeader &Chunk::header() const noexcept { return header_; }
 
-inline uint32_t Chunk::count() const noexcept { return header_.count; }
-inline uint32_t Chunk::capacity() const noexcept { return header_.capacity; }
-inline uint32_t Chunk::chunk_index() const noexcept { return header_.chunk_index; }
+uint32_t Chunk::count() const noexcept { return header_.count; }
+uint32_t Chunk::capacity() const noexcept { return header_.capacity; }
+uint32_t Chunk::chunk_index() const noexcept { return header_.chunk_index; }
 
-inline bool Chunk::is_full() const noexcept {
+bool Chunk::is_full() const noexcept {
   return header_.count >= header_.capacity;
 }
 
-inline bool Chunk::is_empty() const noexcept {
+bool Chunk::is_empty() const noexcept {
   return header_.count == 0;
 }
 
-inline ChunkHeader *Chunk::next() const noexcept { return header_.next; }
+ChunkHeader *Chunk::next() const noexcept { return header_.next; }
 
-inline void Chunk::set_chunk_index(uint32_t idx) noexcept {
+void Chunk::set_chunk_index(uint32_t idx) noexcept {
   header_.chunk_index = idx;
 }
 
-inline void Chunk::set_next(ChunkHeader *n) noexcept { header_.next = n; }
+void Chunk::set_next(ChunkHeader *n) noexcept { header_.next = n; }
 
 // =============================================================================
 // Column Slices & Data Pointer Implementations
 // =============================================================================
 
-inline Entity *Chunk::entity_slice() noexcept {
+Entity *Chunk::entity_slice() noexcept {
   // 1. Compute entity array pointer offset directly past reserved header memory.
   constexpr size_t HEADER_RESERVE = ChunkGeometry::HEADER_BYTES;
   return reinterpret_cast<Entity *>(
@@ -79,7 +79,7 @@ inline Entity *Chunk::entity_slice() noexcept {
   );
 }
 
-inline const Entity *Chunk::entity_slice() const noexcept {
+const Entity *Chunk::entity_slice() const noexcept {
   // 1. Compute const entity array pointer offset past reserved header memory.
   constexpr size_t HEADER_RESERVE = ChunkGeometry::HEADER_BYTES;
   return reinterpret_cast<const Entity *>(
@@ -89,27 +89,39 @@ inline const Entity *Chunk::entity_slice() const noexcept {
 
 template <typename T>
 inline T *Chunk::typed_slice(uint32_t byte_offset) noexcept {
-  // 1. Cast raw column slice pointer to destination component type pointer.
+  // 1. Return typed component column slice at specific byte offset.
   return reinterpret_cast<T *>(component_slice(byte_offset));
 }
 
 template <typename T>
 inline const T *Chunk::typed_slice(uint32_t byte_offset) const noexcept {
-  // 1. Cast raw column slice pointer to const component type pointer.
+  // 1. Return const typed component column slice at specific byte offset.
   return reinterpret_cast<const T *>(component_slice(byte_offset));
 }
 
 template <typename T> inline T &Chunk::user_metadata() noexcept {
   // 1. Validate size and alignment bounds for inline metadata.
-  static_assert(sizeof(T) <= sizeof(header_.user_metadata));
-  static_assert(alignof(T) <= 16);
+  static_assert(
+      sizeof(T) <= sizeof(ChunkHeader::user_metadata),
+      "Metadata type exceeds user_metadata storage"
+  );
+  static_assert(
+      alignof(T) <= 16,
+      "Metadata alignment too strict"
+  );
   return *reinterpret_cast<T *>(header_.user_metadata);
 }
 
 template <typename T> inline const T &Chunk::user_metadata() const noexcept {
   // 1. Validate size and alignment bounds for inline metadata.
-  static_assert(sizeof(T) <= sizeof(header_.user_metadata));
-  static_assert(alignof(T) <= 16);
+  static_assert(
+      sizeof(T) <= sizeof(ChunkHeader::user_metadata),
+      "Metadata type exceeds user_metadata storage"
+  );
+  static_assert(
+      alignof(T) <= 16,
+      "Metadata alignment too strict"
+  );
   return *reinterpret_cast<const T *>(header_.user_metadata);
 }
 
@@ -117,21 +129,21 @@ template <typename T> inline const T &Chunk::user_metadata() const noexcept {
 // Change Detection & Versioning Implementations
 // =============================================================================
 
-inline uint32_t Chunk::column_version(uint16_t col) const noexcept {
+uint32_t Chunk::column_version(uint16_t col) const noexcept {
   assert(col < ChunkHeader::MAX_COMPONENTS_PER_CHUNK);
   return header_.column_versions[col];
 }
 
-inline void Chunk::set_column_version(uint16_t col, uint32_t version) noexcept {
+void Chunk::set_column_version(uint16_t col, uint32_t version) noexcept {
   assert(col < ChunkHeader::MAX_COMPONENTS_PER_CHUNK);
   header_.column_versions[col] = version;
 }
 
-inline uint32_t Chunk::structure_version() const noexcept {
+uint32_t Chunk::structure_version() const noexcept {
   return header_.structure_version;
 }
 
-inline void Chunk::set_structure_version(uint32_t version) noexcept {
+void Chunk::set_structure_version(uint32_t version) noexcept {
   header_.structure_version = version;
 }
 
@@ -169,17 +181,17 @@ inline void Chunk::copy_column(
   std::memcpy(dst, src_data, count * sizeof(Comp));
 }
 
-inline void *Chunk::component_slice(uint32_t chunk_byte_offset) noexcept {
+void *Chunk::component_slice(uint32_t chunk_byte_offset) noexcept {
   return reinterpret_cast<uint8_t *>(this) + chunk_byte_offset;
 }
 
-inline const void *Chunk::component_slice(
+const void *Chunk::component_slice(
     uint32_t chunk_byte_offset
 ) const noexcept {
   return reinterpret_cast<const uint8_t *>(this) + chunk_byte_offset;
 }
 
-inline void *Chunk::component_element(
+void *Chunk::component_element(
     const ComponentColumnLayout &layout,
     uint32_t row
 ) noexcept {
@@ -187,7 +199,7 @@ inline void *Chunk::component_element(
       (row * layout.size);
 }
 
-inline const void *Chunk::component_element(
+const void *Chunk::component_element(
     const ComponentColumnLayout &layout,
     uint32_t row
 ) const noexcept {
@@ -199,12 +211,12 @@ inline const void *Chunk::component_element(
 // Entity Ingestion Implementations
 // =============================================================================
 
-inline Entity Chunk::entity(uint32_t row) const noexcept {
+Entity Chunk::entity(uint32_t row) const noexcept {
   assert(row < header_.count);
   return entity_slice()[row];
 }
 
-inline uint32_t Chunk::append_entity(Entity entity) noexcept {
+uint32_t Chunk::append_entity(Entity entity) noexcept {
   // 1. Verify capacity bounds before advancing row counter.
   assert(header_.count < header_.capacity);
   const uint32_t row = header_.count++;
@@ -214,7 +226,7 @@ inline uint32_t Chunk::append_entity(Entity entity) noexcept {
   return row;
 }
 
-inline uint32_t Chunk::append_entities(
+uint32_t Chunk::append_entities(
     std::span<const Entity> entities
 ) noexcept {
   // 1. Verify batch bounds against remaining chunk capacity.
@@ -289,7 +301,7 @@ inline Entity relocate_entity_handle(
 // Swap-and-Pop Deletion Implementations
 // =============================================================================
 
-inline ChunkRelocation Chunk::swap_and_pop(
+ChunkRelocation Chunk::swap_and_pop(
     uint32_t row,
     std::span<const ComponentColumnLayout> layouts
 ) {
@@ -313,7 +325,7 @@ inline ChunkRelocation Chunk::swap_and_pop(
   return result;
 }
 
-inline uint32_t Chunk::batch_swap_and_pop(
+uint32_t Chunk::batch_swap_and_pop(
     std::span<const uint32_t> rows_to_delete,
     std::span<const ComponentColumnLayout> layouts,
     std::span<EntityRelocation> out_relocations

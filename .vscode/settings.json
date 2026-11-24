@@ -1,5 +1,5 @@
 {
-    "workbench.colorTheme": "Default Dark Modern",
+    "workbench.colorTheme": "Dark Modern",
     "workbench.colorCustomizations": {
         "editor.background": "#131314",
         "editor.foreground": "#e3e3e3",
@@ -22,8 +22,7 @@
         "--compile-commands-dir=${workspaceFolder}/build",
         "--background-index",
         "--clang-tidy",
-        "--header-insertion=never",
-        "--experimental-modules-support"
+        "--header-insertion=never"
     ],
     "files.associations": {
         "*.cppm": "cpp"

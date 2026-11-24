@@ -19,21 +19,20 @@ export module arche:world;
 
 export import :entity;
 export import :entity_view;
-export import :contracts.archetype;
-export import :contracts.entity;
-export import :contracts.gpu;
-export import :contracts.resource;
-export import :contracts.snapshot;
-export import :contracts.system;
+export import :facade.archetype;
+export import :facade.command;
+export import :facade.entity;
+export import :facade.gpu;
+export import :facade.resource;
+export import :facade.snapshot;
+export import :facade.system;
 export import :system_context;
 export import :query;
+export import :mutation;
 export import :command;
 export import :component_access;
 export import :sort;
 
-export import :world.detail.world_access;
-import :archetype.detail.component_migration;
-import :entity.detail.entity_allocator;
 import :world.detail.world_storage;
 
 export namespace arche {
@@ -64,47 +63,63 @@ export namespace arche {
  * - `world.archetypes` -> Structural graph metrics and chunk memory inspection.
  */
 class World {
-  friend struct internal::WorldAccess;
-
 private:
   internal::WorldStorage *storage_{nullptr};
 
 public:
+  // --- Internal Storage Access -----------------------------------------------
+
+  /// Direct access to internal storage for world algorithms and modules.
+  [[nodiscard]] internal::WorldStorage *storage() noexcept { return storage_; }
+  [[nodiscard]] const internal::WorldStorage *storage() const noexcept { return storage_; }
+
   // --- Domain Sub-Facades ----------------------------------------------------
 
-  /// Global entity table introspection: count, capacity, contains, and slot
-  /// resolution.
-  EntityFacade entities{this};
+  /// Global entity table introspection: count, capacity, contains, and slot resolution.
+  EntityFacade entities;
 
-  /// Serialization & persistence: saves and loads complete simulation state to
-  /// binary buffers.
-  SnapshotFacade snapshots{this};
+  /// Serialization & persistence: saves and loads complete simulation state to binary buffers.
+  SnapshotFacade snapshots;
 
   /// Global singleton resources independent of entity archetypes.
-  ResourceFacade resources{this};
+  ResourceFacade resources;
 
   /// Low-level archetype graph metrics and chunk memory layout inspection.
-  ArchetypeFacade archetypes{this};
+  ArchetypeFacade archetypes;
 
-  /// Stage-based system scheduler: register stages, systems, and execution
-  /// pipelines.
-  SystemFacade systems{this};
+  /// Stage-based system scheduler: register stages, systems, and execution pipelines.
+  SystemFacade systems;
 
-  /// GPU memory reflection: inspect contiguous component columns and stream to
-  /// GPU buffers.
-  GpuFacade gpu{this};
+  /// GPU memory reflection: inspect contiguous component columns and stream to GPU buffers.
+  GpuFacade gpu;
+
+  /// Deferred command buffer management: commit or clear world-level command buffers.
+  CommandFacade commands;
 
   // --- Constructors & Lifecycle ----------------------------------------------
 
   /// Constructs an ECS World with the specified chunk memory page size
-  /// (default: 64 KB).
-  explicit World(size_t chunk_size = 65536);
+  /// (default: 64 KB) and worker thread pool size (default: host CPU core count).
+  explicit World(
+      size_t chunk_size = 65536,
+      uint32_t thread_count = Hardware::core_count()
+  );
   ~World();
 
   World(const World &) = delete;
   World &operator=(const World &) = delete;
   World(World &&) = delete;
   World &operator=(World &&) = delete;
+
+  /// Reconfigures the world's internal worker thread pool.
+  void set_threads(uint32_t count);
+
+  /// Retrieves a reference to the world's internal worker thread pool.
+  [[nodiscard]] ThreadPool &thread_pool() noexcept;
+  [[nodiscard]] const ThreadPool &thread_pool() const noexcept;
+
+  /// Returns the number of worker threads in the world's thread pool.
+  [[nodiscard]] uint32_t thread_count() const noexcept;
 
   /// Destroys all active entities and recycles all allocated chunks back to the
   /// pool.
@@ -117,7 +132,7 @@ public:
   /// // Example:
   /// Entity e = world.spawn(Position{0.0f, 0.0f}, Velocity{1.0f, 0.0f});
   /// ```
-  template <typename... Comps>
+  template <Component... Comps>
     requires(!(std::is_same_v<std::decay_t<Comps>, Batch> || ...))
   Entity spawn(Comps &&...components);
 
@@ -128,7 +143,7 @@ public:
   /// auto ids = world.spawn({.count = 1000}, Position{0.0f, 0.0f},
   /// Velocity{1.0f, 0.0f});
   /// ```
-  template <typename... Comps>
+  template <Component... Comps>
     requires(!(std::is_same_v<std::decay_t<Comps>, std::span<Entity>> || ...))
   std::vector<Entity> spawn(Batch batch, const Comps &...components);
 
@@ -138,7 +153,7 @@ public:
   /// // Example:
   /// world.spawn({.count = N}, out_span, pos_ptr, vel_ptr);
   /// ```
-  template <typename... Comps>
+  template <Component... Comps>
   void spawn(
       Batch batch,
       std::span<Entity> out_entities,
@@ -180,14 +195,14 @@ public:
 
   /// Checks whether the entity possesses component T in O(1) via archetype
   /// bitmask.
-  template <typename T> [[nodiscard]] bool has(Entity entity) const noexcept;
+  template <Component T> [[nodiscard]] bool has(Entity entity) const noexcept;
 
   /// Fast one-off component read. Pure read-only; never marks chunk dirty.
   /// ```cpp
   /// // Example:
   /// const Position &p = world.get<Position>(e);
   /// ```
-  template <typename T> [[nodiscard]] const T &get(Entity entity) const;
+  template <Component T> [[nodiscard]] const T &get(Entity entity) const;
 
   /// Fast one-off component write. Automatically updates the chunk's dirty
   /// tick.
@@ -195,17 +210,24 @@ public:
   /// // Example:
   /// world.get_mut<Position>(e).x += 10.0f;
   /// ```
-  template <typename T> [[nodiscard]] T &get_mut(Entity entity);
+  template <Component T> [[nodiscard]] T &get_mut(Entity entity);
 
   /// Dynamically attaches component T to entity, relocating it to the target
   /// archetype.
-  template <typename T> void add(Entity entity, T &&component);
+  template <Component T> void add(Entity entity, T &&component);
 
   /// Dynamically removes component T from entity, relocating it to the target
   /// archetype.
-  template <typename T> void remove(Entity entity);
+  template <Component T> void remove(Entity entity);
 
   // --- Query Factory ---------------------------------------------------------
+
+  /// Creates a bounded execution context for a system.
+  [[nodiscard]] SystemContext create_system_context(
+      CommandBuffer &cmd,
+      ThreadPool *pool = nullptr,
+      ParallelCommandBuffer *parallel_cmd = nullptr
+  );
 
   /// Constructs a streaming query matching entities with requested components
   /// and optional filters. Supports With<...>, Without<...>, Mutated<T>, Added,
@@ -217,14 +239,48 @@ public:
   ///     // ...
   /// }
   /// ```
-  template <typename... Components, typename... FilterArgs>
+  template <QueryTerm... Components, QueryFilter... FilterArgs>
   [[nodiscard]] Query<Components...> query(FilterArgs &&...filters);
 
   // --- Versioning & Epoch Inspection -----------------------------------------
 
-  /// Monotonically increasing simulation version sequence, incremented on
-  /// mutations.
+  /// Monotonically increasing simulation version sequence, incremented on mutations.
   [[nodiscard]] uint32_t version() const noexcept;
+
+  /// Previous simulation version sequence before the most recent tick advancement.
+  [[nodiscard]] uint32_t previous_version() const noexcept;
+
+  /// Advances the simulation version sequence monotonically, skipping reserved sentinels.
+  uint32_t advance_version() noexcept;
+
+  /// Sets the current simulation version sequence directly (e.g. for testing rollover).
+  void set_version(uint32_t v) noexcept;
+
+  /// Retrieves a snapshot storage view over internal storage for serialization.
+  [[nodiscard]] SnapshotStorageView snapshot_storage_view() const noexcept;
+
+  /// Resolves or instantiates a matching QueryCache for the specified inclusion/exclusion masks.
+  QueryCache *query_cache(
+      const ComponentMask &include,
+      const ComponentMask &exclude,
+      const ComponentMask &any = {}
+  );
+
+  // --- Mutation Execution Context --------------------------------------------
+
+  /// Creates a lightweight mutation execution context view over the world storage.
+  [[nodiscard]] MutationContext mutation_context() noexcept;
+
+  /// Implicit conversion enabling direct `cmd.commit(world)` syntax without upward dependencies.
+  operator MutationContext() noexcept;
+
+  // --- System Execution View -------------------------------------------------
+
+  /// Creates a decoupled execution view over the world storage for the scheduler.
+  [[nodiscard]] SystemExecutionTarget system_execution_target() noexcept;
+
+  /// Implicit conversion enabling `scheduler.run(world, pool)` and `scheduler.compile(world)` syntax.
+  operator SystemExecutionTarget() noexcept;
 };
 
 } // namespace arche

@@ -53,7 +53,7 @@ struct ValidClockPlugin {
         "ClockTick",
         Access{}.writes_resource<SimulationClock>().build(),
         [](SystemContext &ctx) {
-          auto &clock = ctx.world.resources.get<SimulationClock>();
+          auto &clock = ctx.write_resource<SimulationClock>();
           clock.total_time += 0.016f;
           clock.frame_count++;
         },
@@ -77,7 +77,7 @@ struct ConfigurablePhysicsPlugin {
         "ApplyGravity",
         Access{}.reads_resource<PhysicsSettings>().writes<Velocity>().build(),
         [](SystemContext &ctx) {
-          const auto &settings = ctx.world.resources.get<PhysicsSettings>();
+          const auto &settings = ctx.read_resource<PhysicsSettings>();
           (void)settings;
         },
         SystemScale::Wide

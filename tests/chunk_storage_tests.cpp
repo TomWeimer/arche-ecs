@@ -107,7 +107,7 @@ void test_chunk_allocation_and_alignment() {
   assert(arch.chunk_capacity() > 0);
 
   ChunkPool pool(chunk_size, 1);
-  void *buffer = pool.acquire_buffer();
+  void *buffer = pool.acquire();
   Chunk *chunk = Chunk::create(buffer, arch.chunk_capacity(), chunk_size);
   assert(chunk != nullptr);
 
@@ -131,7 +131,7 @@ void test_chunk_allocation_and_alignment() {
   );
   assert(vel_addr % vel_layout->alignment == 0);
 
-  pool.release_buffer(buffer);
+  pool.release(buffer);
   std::cout << "PASSED\n";
 }
 
@@ -169,7 +169,7 @@ void test_swap_and_pop_compaction() {
   std::vector<TypeID> types = {pos_t, hp_t};
   Archetype arch(1, mask, std::move(types), registry, chunk_size);
   ChunkPool pool(chunk_size, 1);
-  void *buffer = pool.acquire_buffer();
+  void *buffer = pool.acquire();
   Chunk *chunk = Chunk::create(buffer, arch.chunk_capacity(), chunk_size);
 
   const auto *pos_layout = arch.column_layout_for(pos_t);
@@ -216,7 +216,7 @@ void test_swap_and_pop_compaction() {
   const auto &rec = slot_map.get_record(moved_entity);
   assert(rec.row == 1); // Row was updated from 3 to 1!
 
-  pool.release_buffer(buffer);
+  pool.release(buffer);
   std::cout << "PASSED\n";
 }
 
@@ -236,23 +236,23 @@ void test_chunk_pool_recycling() {
   std::cout << "[Test 4/4] ChunkPool Allocation & Recycling... ";
 
   ChunkPool pool(65536, 4);
-  assert(pool.free_count() == 4);
+  assert(pool.available() == 4);
 
-  void *b1 = pool.acquire_buffer();
-  void *b2 = pool.acquire_buffer();
+  void *b1 = pool.acquire();
+  void *b2 = pool.acquire();
   assert(b1 != nullptr && b2 != nullptr);
   assert(b1 != b2);
-  assert(pool.free_count() == 2);
+  assert(pool.available() == 2);
 
-  pool.release_buffer(b1);
-  pool.release_buffer(b2);
-  assert(pool.free_count() == 4);
+  pool.release(b1);
+  pool.release(b2);
+  assert(pool.available() == 4);
 
   // Re-acquire: must return warm pooled memory without OS calls
-  void *b3 = pool.acquire_buffer();
+  void *b3 = pool.acquire();
   assert(b3 == b2 || b3 == b1);
 
-  pool.release_buffer(b3);
+  pool.release(b3);
   std::cout << "PASSED\n";
 }
 

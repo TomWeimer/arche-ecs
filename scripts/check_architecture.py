@@ -5,7 +5,7 @@ Architecture-as-Code (AaC) Dependency Flow & Boundary Validator for Arche ECS.
 Enforces:
   Rule 1: Strict Top-Down DAG (Layer N may only import/include Layer <= N).
   Rule 2: Public Wall (Public headers and contracts must never include/import private src/ internals).
-  Rule 3: Storage Encapsulation (world_storage may only be imported/included by world/ and world_access).
+  Rule 3: Storage Encapsulation (world_storage may only be imported/included by world/).
   Rule 4: Black-Box Isolation (Subsystem detail/ partitions cannot be imported across subsystems).
   Rule 5: Cycle Detection (The file & module dependency graph must be strictly acyclic).
 """
@@ -25,8 +25,9 @@ from typing import Dict, List, Optional, Set, Tuple
 # Layer 2: Archetypal Table Storage & Query Cache
 # Layer 3: Entity Lifecycle & Deferred Commands
 # Layer 4: Queries, Iteration, DAG Scheduling, Spatial Permutation
-# Layer 5: Central World Coordination & Public Facades
-# Layer 6: Master Library Umbrella (arche.hpp / arche.cppm)
+# Layer 5: Domain Sub-Facades (Entity, Resource, Archetype, Gpu, Command, Snapshot, System)
+# Layer 6: Central World Coordination & Public Facades Composition
+# Layer 7: Master Library Umbrella (arche.hpp / arche.cppm)
 
 SUBSYSTEM_RULES: Dict[str, Dict] = {
     "types": {
@@ -59,10 +60,18 @@ SUBSYSTEM_RULES: Dict[str, Dict] = {
         "description": "Public Entity and Resource handle headers",
         "allowed_targets": ["types", "public_entities", "sparse_entity"],
     },
-    "persistence": {
-        "layer": 1,
-        "description": "Binary snapshot data structures",
-        "allowed_targets": ["types", "sparse_entity", "hardware", "persistence"],
+    "snapshot": {
+        "layer": 3,
+        "description": "Binary snapshot serialization engine and file I/O",
+        "allowed_targets": [
+            "archetype",
+            "chunk",
+            "sparse_entity",
+            "core_component",
+            "hardware",
+            "types",
+            "snapshot",
+        ],
     },
     "query_cache": {
         "layer": 2,
@@ -168,7 +177,7 @@ SUBSYSTEM_RULES: Dict[str, Dict] = {
             "public_entities",
         ],
     },
-    "spatial": {
+    "sort": {
         "layer": 4,
         "description": "Spatial cache locality permutation and sorting",
         "allowed_targets": [
@@ -179,21 +188,39 @@ SUBSYSTEM_RULES: Dict[str, Dict] = {
             "core_component",
             "hardware",
             "types",
-            "spatial",
+            "sort",
         ],
     },
-    "contracts": {
+    "facade": {
         "layer": 5,
-        "description": "Domain sub-facade abstract interfaces",
-        "allowed_targets": ["types", "public_entities", "contracts", "hardware"],
+        "description": "Domain facades encapsulating lower-level subsystems",
+        "allowed_targets": [
+            "types",
+            "hardware",
+            "core_component",
+            "component_access",
+            "chunk",
+            "sparse_entity",
+            "public_entities",
+            "entity_lifecycle",
+            "archetype",
+            "query_cache",
+            "command",
+            "snapshot",
+            "query",
+            "concurrency",
+            "system",
+            "sort",
+            "facade",
+        ],
     },
     "world": {
-        "layer": 5,
-        "description": "Central coordinator, WorldStorage assembly, and domain facades",
+        "layer": 6,
+        "description": "Central coordinator, WorldStorage assembly, and domain facades composition",
         "allowed_targets": ["*"],  # Assembly layer can access all subsystems
     },
     "arche_master": {
-        "layer": 6,
+        "layer": 7,
         "description": "Master library umbrella module / include",
         "allowed_targets": ["*"],
     },
@@ -210,7 +237,7 @@ def classify_subsystem(file_path: str) -> Tuple[str, int]:
         return "arche_master", SUBSYSTEM_RULES["arche_master"]["layer"]
 
     # src/ mappings
-    if p.startswith("src/hardware/"):
+    if p.startswith("src/hardware/") or p.startswith("src/common/"):
         return "hardware", SUBSYSTEM_RULES["hardware"]["layer"]
     if p.startswith("src/types/"):
         return "types", SUBSYSTEM_RULES["types"]["layer"]
@@ -237,8 +264,10 @@ def classify_subsystem(file_path: str) -> Tuple[str, int]:
         return "public_entities", SUBSYSTEM_RULES["public_entities"]["layer"]
     if p.startswith("src/entity/"):
         return "entity_lifecycle", SUBSYSTEM_RULES["entity_lifecycle"]["layer"]
-    if p.startswith("src/persistence/"):
-        return "persistence", SUBSYSTEM_RULES["persistence"]["layer"]
+    if p.startswith("src/mutation/"):
+        return "entity_lifecycle", SUBSYSTEM_RULES["entity_lifecycle"]["layer"]
+    if p.startswith("src/snapshot/"):
+        return "snapshot", SUBSYSTEM_RULES["snapshot"]["layer"]
     if p.startswith("src/query/query_cache"):
         return "query_cache", SUBSYSTEM_RULES["query_cache"]["layer"]
     if p.startswith("src/query/"):
@@ -251,10 +280,10 @@ def classify_subsystem(file_path: str) -> Tuple[str, int]:
         return "concurrency", SUBSYSTEM_RULES["concurrency"]["layer"]
     if p.startswith("src/system/"):
         return "system", SUBSYSTEM_RULES["system"]["layer"]
-    if p.startswith("src/spatial/"):
-        return "spatial", SUBSYSTEM_RULES["spatial"]["layer"]
-    if p.startswith("src/contracts/"):
-        return "contracts", SUBSYSTEM_RULES["contracts"]["layer"]
+    if p.startswith("src/sort/"):
+        return "sort", SUBSYSTEM_RULES["sort"]["layer"]
+    if p.startswith("src/facade/"):
+        return "facade", SUBSYSTEM_RULES["facade"]["layer"]
     if p.startswith("src/world/"):
         return "world", SUBSYSTEM_RULES["world"]["layer"]
 
@@ -421,9 +450,9 @@ def run_checks(root_dir: str) -> int:
                                 part_subsystem == "types"
                                 and (
                                     src_dir.startswith("src/types")
-                                    or src_dir.startswith("src/contracts")
+                                    or src_dir.startswith("src/world")
                                     or src_dir.startswith("src/system")
-                                    or src_dir.startswith("src/persistence")
+                                    or src_dir.startswith("src/snapshot")
                                     or src_dir.startswith("src/resource")
                                 )
                             )
@@ -440,25 +469,21 @@ def run_checks(root_dir: str) -> int:
                                 and src_dir.startswith("src/archetype")
                             )
                             or (
-                                part_subsystem == "spatial"
-                                and src_dir.startswith("src/spatial")
+                                part_subsystem == "sort"
+                                and src_dir.startswith("src/sort")
+                            )
+                            or (
+                                part_subsystem == "snapshot"
+                                and src_dir.startswith("src/snapshot")
                             )
                         )
-                        # Assembly layer exceptions: World and CommandPlayback need low-level detail
+                        # Assembly layer exceptions: World and coordinators
                         is_coordinator = (
                             src_file.startswith("src/world/")
                             or src_file == "src/arche.cppm"
                             or (
-                                partition == "archetype.detail.component_migration"
-                                and src_file.startswith("src/command/detail/")
-                            )
-                            or (
                                 partition == "component.detail.column_layout"
                                 and src_file.startswith("src/chunk/")
-                            )
-                            or (
-                                partition == "hardware.detail.math_utils"
-                                and src_file.startswith("src/archetype/")
                             )
                         )
                         if not is_own_subsystem and not is_coordinator:

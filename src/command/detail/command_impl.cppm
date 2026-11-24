@@ -13,7 +13,7 @@ module;
 export module arche:command.detail.impl;
 
 import :command;
-import :command.detail.command_playback;
+import :mutation;
 
 export namespace arche {
 
@@ -21,25 +21,25 @@ export namespace arche {
 // ParallelCommandBuffer Implementations
 // =============================================================================
 
-inline ParallelCommandBuffer::ParallelCommandBuffer(uint32_t thread_count)
+ParallelCommandBuffer::ParallelCommandBuffer(uint32_t thread_count)
     : buffers_(thread_count) {}
 
-inline uint32_t ParallelCommandBuffer::thread_count() const noexcept {
+uint32_t ParallelCommandBuffer::thread_count() const noexcept {
   return static_cast<uint32_t>(buffers_.size());
 }
 
-inline CommandBuffer &ParallelCommandBuffer::get(uint32_t thread_id) noexcept {
+CommandBuffer &ParallelCommandBuffer::get(uint32_t thread_id) noexcept {
   assert(thread_id < buffers_.size() && "Worker thread ID out of range");
   return buffers_[thread_id];
 }
 
-inline void ParallelCommandBuffer::commit(CommandExecutionContext ctx) {
+void ParallelCommandBuffer::commit(MutationContext ctx) {
   for (auto &buf : buffers_) {
     buf.commit(ctx);
   }
 }
 
-inline void ParallelCommandBuffer::clear() noexcept {
+void ParallelCommandBuffer::clear() noexcept {
   for (auto &buf : buffers_) {
     buf.clear();
   }
@@ -87,7 +87,7 @@ inline void CommandBuffer::spawn(Comps... components) {
     const uint32_t size = static_cast<uint32_t>(sizeof(TupleType));
     write(
         CommandType::CreateEntity,
-        &CommandPlayback::apply_create_entity<Comps...>,
+        &Mutation::spawn_payload<Comps...>,
         size
     );
     TupleType tuple{std::forward<Comps>(components)...};
@@ -95,7 +95,7 @@ inline void CommandBuffer::spawn(Comps... components) {
   } else {
     write(
         CommandType::CreateEntity,
-        &CommandPlayback::apply_create_entity<Comps...>,
+        &Mutation::spawn_payload<Comps...>,
         uint32_t{0}
     );
   }
@@ -208,7 +208,7 @@ inline const void *CommandBuffer::read_bytes(
 // CommandBuffer Execution & Commit
 // =============================================================================
 
-inline void CommandBuffer::commit(CommandExecutionContext ctx) {
+inline void CommandBuffer::commit(MutationContext ctx) {
   // 1. Initialize bytecode reading cursor.
   size_t offset = 0;
 
@@ -225,7 +225,7 @@ inline void CommandBuffer::commit(CommandExecutionContext ctx) {
       break;
     }
     case CommandType::DestroyEntity: {
-      CommandPlayback::apply_destroy_entity(ctx, read<Entity>(offset));
+      Mutation::destroy_entity(ctx, read<Entity>(offset));
       break;
     }
     case CommandType::DestroyEntities: {
@@ -233,7 +233,7 @@ inline void CommandBuffer::commit(CommandExecutionContext ctx) {
       const auto *ents = static_cast<const Entity *>(
           read_bytes(offset, count * sizeof(Entity))
       );
-      CommandPlayback::apply_destroy_entities(ctx, {ents, count});
+      Mutation::destroy_entities(ctx, {ents, count});
       break;
     }
     case CommandType::AddComponent: {
@@ -245,13 +245,13 @@ inline void CommandBuffer::commit(CommandExecutionContext ctx) {
       if (reg_fn) {
         reg_fn(ctx.registry);
       }
-      CommandPlayback::apply_add_component(ctx, entity, tid, data);
+      Mutation::add_component(ctx, entity, tid, data);
       break;
     }
     case CommandType::RemoveComponent: {
       const auto entity = read<Entity>(offset);
       const auto tid = read<TypeID>(offset);
-      CommandPlayback::apply_remove_component(ctx, entity, tid);
+      Mutation::remove_component(ctx, entity, tid);
       break;
     }
     default:

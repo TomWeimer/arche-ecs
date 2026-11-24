@@ -102,19 +102,18 @@ void test_basic_query_matching() {
  * - This test guarantees that component references can be modified in-place and
  *   that modifications persist accurately in chunk memory.
  */
-void test_per_entity_for_each() {
-  std::cout << "[Test 2/6] Ergonomic Per-Entity Callback (for_each)... ";
+void test_per_entity_range_loop() {
+  std::cout << "[Test 2/6] Ergonomic Per-Entity Default Range Iteration... ";
   World world;
 
   world.spawn(Position{10.0f, 20.0f}, Velocity{1.0f, 2.0f});
   world.spawn(Position{30.0f, 40.0f}, Velocity{3.0f, 4.0f});
 
-  // 1. In-place modification via for_each visitor
-  auto query = world.query<Position, Velocity>();
-  query.for_each([](Position &pos, Velocity &vel) {
+  // 1. In-place modification via default range loop
+  for (auto [pos, vel] : world.query<Position, Velocity>()) {
     pos.x += vel.vx;
     pos.y += vel.vy;
-  });
+  }
 
   // 2. Verification pass via range loop
   size_t verified = 0;
@@ -132,17 +131,17 @@ void test_per_entity_for_each() {
 }
 
 // =============================================================================
-// Unit Test 3: Direct Chunk Visitor for Vectorization (for_each_chunk)
+// Unit Test 3: Direct Chunk Visitor for Vectorization (each_chunk)
 // =============================================================================
 
 /**
- * @brief Verifies chunk-level pointer callback traversal (`for_each_chunk`).
+ * @brief Verifies chunk-level pointer callback traversal (`each_chunk`).
  *
  * --- Why This Test Is Necessary (Documentation Rationale) ---
  * Physics integration, neighbor distance calculations, and steering algorithms
  * require saturating CPU SIMD execution units (ARM Neon / x86 AVX2).
  *
- * `for_each_chunk` exposes contiguous C-style pointers `Position*` and
+ * `each_chunk` exposes contiguous C-style pointers `Position*` and
  * `Velocity*` directly to the caller, guaranteeing:
  * 1. Pointers never alias (separate SoA columns).
  * 2. Compilers auto-vectorize loops into SIMD instructions without function
@@ -150,7 +149,7 @@ void test_per_entity_for_each() {
  * 3. Exact entity counts are supplied for tight, unrolled loop trips.
  */
 void test_chunk_visitor_vectorization() {
-  std::cout << "[Test 3/6] Direct for_each_chunk Callback Traversal... ";
+  std::cout << "[Test 3/6] Direct each_chunk Callback Traversal... ";
   World world;
 
   constexpr int ENTITY_COUNT = 1000;
@@ -162,7 +161,7 @@ void test_chunk_visitor_vectorization() {
   constexpr float dt = 0.01666f;
 
   // 1. High-performance chunk callback
-  query.for_each_chunk([](uint32_t count, Position *pos, Velocity *vel) {
+  query.each_chunk([](uint32_t count, Position *pos, Velocity *vel) {
     for (uint32_t i = 0; i < count; ++i) {
       pos[i].x += vel[i].vx * dt;
       pos[i].y += vel[i].vy * dt;
@@ -376,7 +375,7 @@ void test_high_density_throughput_and_cycles() {
   constexpr float dt = 1.0f / 120.0f;
 
   // 1. Warm-up iteration to populate CPU L1/L2 caches
-  query.for_each_chunk([](uint32_t count, Position *pos, Velocity *vel) {
+  query.each_chunk([](uint32_t count, Position *pos, Velocity *vel) {
     for (uint32_t i = 0; i < count; ++i) {
       pos[i].x += vel[i].vx * dt;
       pos[i].y += vel[i].vy * dt;
@@ -388,7 +387,7 @@ void test_high_density_throughput_and_cycles() {
 
   constexpr int FRAMES = 100;
   for (int f = 0; f < FRAMES; ++f) {
-    query.for_each_chunk([](uint32_t count, Position *pos, Velocity *vel) {
+    query.each_chunk([](uint32_t count, Position *pos, Velocity *vel) {
       for (uint32_t i = 0; i < count; ++i) {
         pos[i].x += vel[i].vx * dt;
         pos[i].y += vel[i].vy * dt;
@@ -464,6 +463,31 @@ void test_optional_components_query() {
   for (auto [pos, shield] : world.query<Position, const Shield *>()) {
     if (shield != nullptr) {
       assert(shield->defense == 125.0f);
+    }
+  }
+
+  // Test Opt<T> alias (read-only optional)
+  size_t opt_with_shield = 0;
+  for (auto [pos, shield] : world.query<Position, arche::Opt<Shield>>()) {
+    static_assert(std::is_same_v<decltype(shield), const Shield *>);
+    if (shield != nullptr) {
+      assert(shield->defense == 125.0f);
+      ++opt_with_shield;
+    }
+  }
+  assert(opt_with_shield == 10);
+
+  // Test OptMut<T> alias (mutable optional)
+  for (auto [pos, shield] : world.query<Position, arche::OptMut<Shield>>()) {
+    static_assert(std::is_same_v<decltype(shield), Shield *>);
+    if (shield != nullptr) {
+      shield->defense += 10.0f;
+    }
+  }
+
+  for (auto [pos, shield] : world.query<Position, arche::Opt<Shield>>()) {
+    if (shield != nullptr) {
+      assert(shield->defense == 135.0f);
     }
   }
 
@@ -570,6 +594,46 @@ void test_or_query_filter() {
 }
 
 // =============================================================================
+// Unit Test 10: Query empty() Short-Circuiting
+// =============================================================================
+
+void test_query_empty() {
+  std::cout << "Testing Query empty() short-circuiting... ";
+
+  World world;
+
+  // 1. Initial state: no entities spawned
+  assert(world.query<Position>().empty());
+  assert(world.query<Velocity>().empty());
+
+  // 2. Spawn entity with Position
+  Entity e1 = world.spawn(Position{1.0f, 2.0f});
+  assert(!world.query<Position>().empty());
+  assert(world.query<Velocity>().empty());
+
+  // 3. Spawn entity with Velocity
+  Entity e2 = world.spawn(Velocity{3.0f, 4.0f});
+  assert(!world.query<Position>().empty());
+  assert(!world.query<Velocity>().empty());
+
+  // 4. Query with filters
+  assert((world.query<Position>(Without<TagDead>{}).empty() == false));
+  assert((world.query<Position>(With<TagDead>{}).empty() == true));
+
+  world.add(e1, TagDead{});
+  assert((world.query<Position>(With<TagDead>{}).empty() == false));
+  assert((world.query<Position>(Without<TagDead>{}).empty() == true));
+
+  // 5. Despawn all entities
+  world.despawn(e1);
+  world.despawn(e2);
+  assert(world.query<Position>().empty());
+  assert(world.query<Velocity>().empty());
+
+  std::cout << "PASSED\n";
+}
+
+// =============================================================================
 // Main Test Runner
 // =============================================================================
 
@@ -579,7 +643,7 @@ int main() {
   std::cout << "====================================================\n";
 
   test_basic_query_matching();
-  test_per_entity_for_each();
+  test_per_entity_range_loop();
   test_chunk_visitor_vectorization();
   test_query_filters_with_and_without();
   test_query_entity_and_deferred_mutation();
@@ -587,6 +651,7 @@ int main() {
   test_optional_components_query();
   test_has_query_parameter();
   test_or_query_filter();
+  test_query_empty();
 
   std::cout << "====================================================\n";
   std::cout << "All Query System tests completed successfully!\n";

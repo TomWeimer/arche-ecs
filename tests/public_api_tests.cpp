@@ -47,7 +47,7 @@ void test_clean_lifecycle_api() {
   static_assert(std::is_same_v<decltype(world.get<Pos>(e1)), const Pos &>);
   static_assert(std::is_same_v<decltype(world.get_mut<Pos>(e1)), Pos &>);
 
-  const auto &rec = arche::internal::WorldAccess::slot_map(world).get_record(
+  const auto &rec = world.entities.slot_map().get_record(
       e1
   );
   const int16_t pos_col = rec.archetype->column_index(arche::type_id<Pos>());
@@ -59,8 +59,8 @@ void test_clean_lifecycle_api() {
   assert(rec.chunk->column_version(pos_col) == 1);
 
   // Advance world version and mutate via get_mut
-  arche::internal::WorldAccess::advance_version(world);
-  arche::internal::WorldAccess::advance_version(world);
+  world.advance_version();
+  world.advance_version();
   assert(world.version() == 3);
 
   world.get_mut<Pos>(e1).x = 42.0f;
@@ -113,9 +113,7 @@ void test_clean_frame_loop_api() {
   assert(world.version() == 1);
 
   world.query<Pos, const Vel>().each_parallel(
-      pool,
-      cmd_buffers,
-      [](uint32_t count, CommandBuffer &, Pos *pos, const Vel *vel) {
+      [](uint32_t count, Pos *pos, const Vel *vel) {
         for (uint32_t i = 0; i < count; ++i) {
           pos[i].x += vel[i].vx;
           pos[i].y += vel[i].vy;
@@ -123,11 +121,9 @@ void test_clean_frame_loop_api() {
       }
   );
 
-  cmd_buffers.commit(world);
-
   // Verify updated positions
   auto q = world.query<const Pos>();
-  q.for_each_chunk([](uint32_t count, const Pos *p) {
+  q.each_chunk([](uint32_t count, const Pos *p) {
     for (uint32_t i = 0; i < count; ++i) {
       assert(p[i].x == 1.0f);
       assert(p[i].y == 2.0f);
@@ -151,7 +147,9 @@ void test_sorting_and_snapshots_api() {
   });
 
   std::vector<uint32_t> vals;
-  world.query<Key>().for_each([&](const Key &k) { vals.push_back(k.val); });
+  for (auto [k] : world.query<Key>()) {
+    vals.push_back(k.val);
+  }
   assert(vals.size() == 3);
   assert(vals[0] == 10 && vals[1] == 20 && vals[2] == 30);
 
@@ -208,7 +206,7 @@ void test_entity_view_api() {
   view.get_mut<Pos>().x = 99.0f;
   assert(view.get<Pos>().x == 99.0f);
 
-  const auto &rec = arche::internal::WorldAccess::slot_map(world).get_record(
+  const auto &rec = world.entities.slot_map().get_record(
       e1
   );
   const int16_t pos_col = rec.archetype->column_index(arche::type_id<Pos>());

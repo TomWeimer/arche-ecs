@@ -157,9 +157,9 @@ int main() {
 
       bench_2m.title("1. 2M Entities: Simple Streaming (Pos + Vel)")
           .run("arche-ecs (Chunked SoA)", [&] {
-            query.for_each_chunk([](uint32_t count,
-                                    Position *__restrict__ pos,
-                                    const Velocity *__restrict__ vel) {
+            query.each_chunk([](uint32_t count,
+                                Position *__restrict__ pos,
+                                const Velocity *__restrict__ vel) {
 #pragma clang loop vectorize(enable)
               for (uint32_t i = 0; i < count; ++i) {
                 pos[i].x += vel[i].vx * 0.016f;
@@ -224,9 +224,9 @@ int main() {
 
       bench_2m.title("2. 2M Entities: Realistic Swarm Physics (Euler + Bounds)")
           .run("arche-ecs (Chunked SoA)", [&] {
-            query.for_each_chunk([](uint32_t count,
-                                    Position *__restrict__ pos,
-                                    Velocity *__restrict__ vel) {
+            query.each_chunk([](uint32_t count,
+                                Position *__restrict__ pos,
+                                Velocity *__restrict__ vel) {
 #pragma clang loop vectorize(enable)
               for (uint32_t i = 0; i < count; ++i) {
                 pos[i].x += vel[i].vx * 0.016f;
@@ -296,7 +296,6 @@ int main() {
               "arche-ecs (8-Thread query_parallel)",
               [&] {
                 world.query<Position, const Velocity>().each_parallel(
-                    pool,
                     [](uint32_t count, Position *pos, const Velocity *vel) {
                       for (uint32_t i = 0; i < count; ++i) {
                         pos[i].x += vel[i].vx * 0.016f;
@@ -307,7 +306,7 @@ int main() {
               }
           )
           .run("arche-ecs (Single-Thread baseline)", [&] {
-            query.for_each_chunk(
+            query.each_chunk(
                 [](uint32_t count, Position *pos, const Velocity *vel) {
                   for (uint32_t i = 0; i < count; ++i) {
                     pos[i].x += vel[i].vx * 0.016f;
@@ -352,15 +351,15 @@ int main() {
 
     bench_wide.title("4. Wide Entity Simulation (500k Entities: 8 Components)")
         .run("arche-ecs (Chunked SoA)", [&] {
-          query.for_each_chunk([](uint32_t count,
-                                  Position *pos,
-                                  Velocity *vel,
-                                  const Acceleration *acc,
-                                  Rotation *rot,
-                                  const Scale *s,
-                                  const Mass *m,
-                                  const Radius *r,
-                                  BoidState *state) {
+          query.each_chunk([](uint32_t count,
+                              Position *pos,
+                              Velocity *vel,
+                              const Acceleration *acc,
+                              Rotation *rot,
+                              const Scale *s,
+                              const Mass *m,
+                              const Radius *r,
+                              BoidState *state) {
             for (uint32_t i = 0; i < count; ++i) {
               vel[i].vx += acc[i].ax * m[i].inv_mass * 0.016f;
               vel[i].vy += acc[i].ay * m[i].inv_mass * 0.016f;
@@ -524,7 +523,7 @@ int main() {
 
       bench_sort.title("6. Spatial Locality Query Speedup (500k Entities)")
           .run("arche-ecs (Before Sort: Random Coordinates)", [&] {
-            query.for_each_chunk(
+            query.each_chunk(
                 [](uint32_t count, Position *p, const Velocity *v) {
                   for (uint32_t i = 0; i < count; ++i) {
                     p[i].x += v[i].vx * 0.016f;
@@ -540,14 +539,12 @@ int main() {
       });
 
       bench_sort.run("arche-ecs (After Sort: Spatially Monotonic)", [&] {
-        query.for_each_chunk(
-            [](uint32_t count, Position *p, const Velocity *v) {
-              for (uint32_t i = 0; i < count; ++i) {
-                p[i].x += v[i].vx * 0.016f;
-                p[i].y += v[i].vy * 0.016f;
-              }
-            }
-        );
+        query.each_chunk([](uint32_t count, Position *p, const Velocity *v) {
+          for (uint32_t i = 0; i < count; ++i) {
+            p[i].x += v[i].vx * 0.016f;
+            p[i].y += v[i].vy * 0.016f;
+          }
+        });
       });
     }
   }
@@ -590,7 +587,7 @@ int main() {
       bench_frag
           .title("7. Deep Fragmentation (200k Entities across 20 Archetypes)")
           .run("arche-ecs (QueryCache)", [&] {
-            query.for_each_chunk(
+            query.each_chunk(
                 [](uint32_t count, Position *p, const Velocity *v) {
                   for (uint32_t i = 0; i < count; ++i) {
                     p[i].x += v[i].vx * 0.016f;
@@ -746,7 +743,7 @@ int main() {
               "8. Exclusion Filter Query (Without<FrozenTag>, 100k Entities)"
           )
           .run("arche-ecs (Query Bitmask Exclusion)", [&] {
-            query.for_each_chunk(
+            query.each_chunk(
                 [](uint32_t count, Position *p, const Velocity *v) {
                   for (uint32_t i = 0; i < count; ++i) {
                     p[i].x += v[i].vx * 0.016f;

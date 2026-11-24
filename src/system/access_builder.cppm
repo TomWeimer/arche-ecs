@@ -10,36 +10,59 @@ import :resource;
 
 export namespace arche {
 
+// =============================================================================
+// AccessBuilder (Fluent Component & Resource Access Descriptor Builder)
+// =============================================================================
+
+/**
+ * @class AccessBuilder
+ * @brief Fluent declarative builder for component and resource `AccessDescriptor` bitmasks.
+ *
+ * Used during system registration to declare component read/write sets and resource
+ * dependencies for automatic dependency graph construction and concurrency scheduling.
+ */
 class AccessBuilder {
 public:
-  template <typename... Comps> AccessBuilder &reads() noexcept {
-    (read_components_.set(type_id<std::decay_t<Comps>>()), ...);
-    return *this;
-  }
+  /**
+   * @brief Registers component types as read-only access.
+   *
+   * @tparam Comps Component types to read.
+   * @return Reference to this builder for chaining.
+   */
+  template <typename... Comps>
+  AccessBuilder &reads() noexcept;
 
-  template <typename... Comps> AccessBuilder &writes() noexcept {
-    (write_components_.set(type_id<std::decay_t<Comps>>()), ...);
-    return *this;
-  }
+  /**
+   * @brief Registers component types as read-write (mutable) access.
+   *
+   * @tparam Comps Component types to write.
+   * @return Reference to this builder for chaining.
+   */
+  template <typename... Comps>
+  AccessBuilder &writes() noexcept;
 
-  template <typename... Res> AccessBuilder &reads_resource() noexcept {
-    (read_resources_.set(resource_id<std::decay_t<Res>>()), ...);
-    return *this;
-  }
+  /**
+   * @brief Registers world resource types as read-only access.
+   *
+   * @tparam Res Resource types to read.
+   * @return Reference to this builder for chaining.
+   */
+  template <typename... Res>
+  AccessBuilder &reads_resource() noexcept;
 
-  template <typename... Res> AccessBuilder &writes_resource() noexcept {
-    (write_resources_.set(resource_id<std::decay_t<Res>>()), ...);
-    return *this;
-  }
+  /**
+   * @brief Registers world resource types as read-write (mutable) access.
+   *
+   * @tparam Res Resource types to write.
+   * @return Reference to this builder for chaining.
+   */
+  template <typename... Res>
+  AccessBuilder &writes_resource() noexcept;
 
-  [[nodiscard]] AccessDescriptor build() const noexcept {
-    return AccessDescriptor{
-        .read_components = read_components_,
-        .write_components = write_components_,
-        .read_resources = read_resources_,
-        .write_resources = write_resources_,
-    };
-  }
+  /**
+   * @brief Finalizes and returns the compiled AccessDescriptor bitmasks.
+   */
+  [[nodiscard]] AccessDescriptor build() const noexcept;
 
 private:
   ComponentMask read_components_{};
@@ -48,6 +71,7 @@ private:
   ResourceMask write_resources_{};
 };
 
+/// Ergonomic alias for AccessBuilder.
 using Access = AccessBuilder;
 
 } // namespace arche

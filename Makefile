@@ -2,9 +2,13 @@ BUILD_DIR ?= build
 BUILD_TYPE ?= Release
 NUM_JOBS ?= $(shell sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 8)
 
-.PHONY: all build test benchmark clean fclean re
+.PHONY: all build test benchmark clean fclean re lint
 
 all: build
+
+lint:
+	@python3 scripts/check_architecture.py
+	@ninja -C $(BUILD_DIR)
 
 $(BUILD_DIR)/CMakeCache.txt:
 	@cmake -B $(BUILD_DIR) -DCMAKE_BUILD_TYPE=$(BUILD_TYPE)
