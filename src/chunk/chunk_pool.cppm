@@ -1,9 +1,6 @@
 module;
 
-#include <algorithm>
-#include <cassert>
 #include <cstddef>
-#include <utility>
 #include <vector>
 
 export module arche:chunk_pool;
@@ -12,9 +9,38 @@ import :hardware;
 
 export namespace arche {
 
+// =============================================================================
+// ChunkPool: Slab Memory Manager for 64KB Chunk Pages
+// =============================================================================
+
+/**
+ * @class ChunkPool
+ * @brief High-performance slab allocator managing reusable 64KB page-aligned
+ * chunk memory.
+ *
+ * `ChunkPool` acts as a specialized L1 slab allocator for chunk memory blocks.
+ * It maintains a pool of 64KB cache-line-aligned blocks (typically 65,536
+ * bytes) to eliminate runtime dynamic allocation overhead and OS page-fault
+ * latency during entity spawns and archetype transitions.
+ *
+ * ### Performance Characteristics:
+ * - O(1) block acquisition and recycling via a LIFO free-list.
+ * - Hardware cache line alignment (64 bytes) for SIMD vectorization.
+ * - Support for pluggable custom allocators (e.g. huge pages, GPU shared
+ * memory).
+ *
+ * ### Thread Safety:
+ * `ChunkPool` instances are non-synchronized. Synchronization is maintained at
+ * the World or frame barrier level during structural mutation phases.
+ */
 class ChunkPool {
 public:
+  /// Function pointer type for custom block allocation: void*(size_t bytes,
+  /// size_t alignment).
   using ChunkAllocFn = void *(*)(size_t bytes, size_t alignment);
+
+  /// Function pointer type for custom block deallocation: void(void *ptr,
+  /// size_t bytes).
   using ChunkFreeFn = void (*)(void *ptr, size_t bytes);
 
 private:
@@ -25,136 +51,108 @@ private:
   ChunkFreeFn free_fn_{nullptr};
 
 public:
+  // --- Lifecycle & Construction ----------------------------------------------
+
+  /**
+   * @brief Constructs a ChunkPool with an optimal chunk page size and optional
+   * reservation.
+   * @param chunk_size Baseline chunk page size in bytes (default: 64 KB).
+   * @param initial_reserve Preallocated block count reserved immediately on
+   * construction.
+   * @param custom_alloc Optional custom allocation delegate.
+   * @param custom_free Optional custom deallocation delegate.
+   */
   explicit ChunkPool(
       size_t chunk_size = 65536,
       size_t initial_reserve = 0,
       ChunkAllocFn custom_alloc = nullptr,
       ChunkFreeFn custom_free = nullptr
-  )
-      : chunk_size_(Hardware::optimal_chunk_size(chunk_size)),
-        alloc_fn_(custom_alloc), free_fn_(custom_free) {
-    if (initial_reserve > 0) {
-      reserve(initial_reserve);
-    }
-  }
+  );
 
-  ~ChunkPool() { purge(); }
+  /**
+   * @brief Destructs the ChunkPool, freeing all cached blocks back to the OS or
+   * custom allocator.
+   */
+  ~ChunkPool();
 
   ChunkPool(const ChunkPool &) = delete;
   ChunkPool &operator=(const ChunkPool &) = delete;
 
-  ChunkPool(ChunkPool &&other) noexcept
-      : chunk_size_(other.chunk_size_),
-        total_allocated_(other.total_allocated_),
-        free_list_(std::move(other.free_list_)), alloc_fn_(other.alloc_fn_),
-        free_fn_(other.free_fn_) {
-    other.total_allocated_ = 0;
-    other.alloc_fn_ = nullptr;
-    other.free_fn_ = nullptr;
-  }
+  ChunkPool(ChunkPool &&other) noexcept;
+  ChunkPool &operator=(ChunkPool &&other) noexcept;
 
-  ChunkPool &operator=(ChunkPool &&other) noexcept {
-    if (this != &other) {
-      purge();
-      chunk_size_ = other.chunk_size_;
-      total_allocated_ = other.total_allocated_;
-      free_list_ = std::move(other.free_list_);
-      alloc_fn_ = other.alloc_fn_;
-      free_fn_ = other.free_fn_;
+  // --- Block Allocation & Recycling ------------------------------------------
 
-      other.total_allocated_ = 0;
-      other.alloc_fn_ = nullptr;
-      other.free_fn_ = nullptr;
-    }
-    return *this;
-  }
+  /**
+   * @brief Acquires a 64KB aligned memory block from the pool or allocates a
+   * new one.
+   * @return Aligned memory pointer to the acquired chunk page.
+   */
+  [[nodiscard]] void *acquire();
 
-  [[nodiscard]] void *acquire() {
-    if (!free_list_.empty()) {
-      void *ptr = free_list_.back();
-      free_list_.pop_back();
-      return ptr;
-    }
-    void *ptr = allocate_block();
-    total_allocated_++;
-    return ptr;
-  }
+  /**
+   * @brief Returns a previously acquired chunk memory block to the pool for
+   * reuse.
+   * @param ptr Pointer to the chunk block (safe to call with nullptr).
+   */
+  void release(void *ptr);
 
-  void release(void *ptr) {
-    if (ptr == nullptr)
-      return;
-    free_list_.push_back(ptr);
-  }
+  /// Compatibility alias for acquire().
+  [[nodiscard]] void *acquire_buffer();
 
-  [[nodiscard]] void *acquire_buffer() { return acquire(); }
-  void release_buffer(void *ptr) noexcept { release(ptr); }
-  void clear() noexcept { purge(); }
+  /// Compatibility alias for release().
+  void release_buffer(void *ptr) noexcept;
 
-  void reserve(size_t count) {
-    free_list_.reserve(free_list_.size() + count);
-    for (size_t i = 0; i < count; ++i) {
-      free_list_.push_back(allocate_block());
-      total_allocated_++;
-    }
-  }
+  /// Compatibility alias purging all cached free blocks.
+  void clear() noexcept;
 
-  void purge() {
-    for (void *ptr : free_list_) {
-      deallocate_block(ptr);
-    }
-    free_list_.clear();
-    total_allocated_ = 0;
-  }
+  /**
+   * @brief Preallocates a specified number of chunk blocks into the free list.
+   * @param count Number of 64KB blocks to preallocate.
+   */
+  void reserve(size_t count);
 
-  [[nodiscard]] size_t chunk_size() const noexcept { return chunk_size_; }
-  [[nodiscard]] size_t available() const noexcept { return free_list_.size(); }
-  [[nodiscard]] size_t free_count() const noexcept { return free_list_.size(); }
-  [[nodiscard]] size_t allocated() const noexcept { return total_allocated_; }
-  [[nodiscard]] size_t total_allocated() const noexcept {
-    return total_allocated_;
-  }
-  [[nodiscard]] size_t in_use() const noexcept {
-    return total_allocated_ - free_list_.size();
-  }
+  /**
+   * @brief Releases all cached blocks in the free list back to the OS or custom
+   * allocator.
+   */
+  void purge();
 
-  inline void set_allocator(
-      ChunkAllocFn alloc_fn,
-      ChunkFreeFn free_fn
-  ) noexcept {
-    alloc_fn_ = alloc_fn;
-    free_fn_ = free_fn;
-  }
+  // --- Capacity & Telemetry --------------------------------------------------
+
+  /// Returns the configured chunk size in bytes (e.g. 65536).
+  [[nodiscard]] size_t chunk_size() const noexcept;
+
+  /// Returns the number of ready-to-use recycled blocks currently in the free
+  /// list.
+  [[nodiscard]] size_t available() const noexcept;
+
+  /// Alias for available().
+  [[nodiscard]] size_t free_count() const noexcept;
+
+  /// Returns the cumulative number of chunk blocks allocated over the pool's
+  /// lifetime.
+  [[nodiscard]] size_t allocated() const noexcept;
+
+  /// Alias for allocated().
+  [[nodiscard]] size_t total_allocated() const noexcept;
+
+  /// Returns the number of chunk blocks currently active and checked out of the
+  /// pool.
+  [[nodiscard]] size_t in_use() const noexcept;
+
+  // --- Allocator Delegation --------------------------------------------------
+
+  /**
+   * @brief Replaces default OS heap allocation with custom memory handlers.
+   * @param alloc_fn Custom memory allocation delegate.
+   * @param free_fn Custom memory deallocation delegate.
+   */
+  void set_allocator(ChunkAllocFn alloc_fn, ChunkFreeFn free_fn) noexcept;
 
 private:
-  [[nodiscard]] void *allocate_block() {
-    const size_t alignment = std::max<size_t>(Hardware::cache_line_size(), 64);
-    if (alloc_fn_) {
-      return alloc_fn_(chunk_size_, alignment);
-    }
-    void *ptr = nullptr;
-#if defined(_WIN32)
-    ptr = _aligned_malloc(chunk_size_, alignment);
-#else
-    if (posix_memalign(&ptr, alignment, chunk_size_) != 0) {
-      ptr = nullptr;
-    }
-#endif
-    return ptr;
-  }
-
-  void deallocate_block(void *ptr) {
-    if (ptr == nullptr)
-      return;
-    if (free_fn_) {
-      free_fn_(ptr, chunk_size_);
-      return;
-    }
-#if defined(_WIN32)
-    _aligned_free(ptr);
-#else
-    free(ptr);
-#endif
-  }
+  [[nodiscard]] void *allocate_block();
+  void deallocate_block(void *ptr);
 };
 
 } // namespace arche

@@ -62,4 +62,24 @@ static_assert(
     "ChunkHeader must be padded to exactly 256 bytes (four cache lines)"
 );
 
+// =============================================================================
+// Standardized Chunk Geometry & Sizing Constants
+// =============================================================================
+
+/**
+ * @struct ChunkGeometry
+ * @brief Standardized chunk header and payload layout constants.
+ */
+struct ChunkGeometry {
+  static constexpr size_t HEADER_BYTES = sizeof(ChunkHeader);
+  static constexpr size_t DEFAULT_CHUNK_SIZE = 65536;
+  static constexpr size_t PAYLOAD_BYTES = DEFAULT_CHUNK_SIZE - HEADER_BYTES;
+
+  [[nodiscard]] static constexpr size_t payload_bytes(
+      size_t chunk_size = DEFAULT_CHUNK_SIZE
+  ) noexcept {
+    return (chunk_size > HEADER_BYTES) ? (chunk_size - HEADER_BYTES) : 0;
+  }
+};
+
 } // namespace arche
