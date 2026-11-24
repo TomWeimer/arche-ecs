@@ -9,6 +9,8 @@ import :command;
 
 export namespace arche {
 
+using namespace internal;
+
 // =============================================================================
 // CommandFacade Method Implementations
 // =============================================================================

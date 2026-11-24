@@ -101,7 +101,7 @@ public:
   /// (default: 64 KB) and worker thread pool size (default: host CPU core count).
   explicit World(
       size_t chunk_size = 65536,
-      uint32_t thread_count = Hardware::core_count()
+      uint32_t thread_count = internal::Hardware::core_count()
   );
   ~World();
 
@@ -114,8 +114,8 @@ public:
   void set_threads(uint32_t count);
 
   /// Retrieves a reference to the world's internal worker thread pool.
-  [[nodiscard]] ThreadPool &thread_pool() noexcept;
-  [[nodiscard]] const ThreadPool &thread_pool() const noexcept;
+  [[nodiscard]] internal::ThreadPool &thread_pool() noexcept;
+  [[nodiscard]] const internal::ThreadPool &thread_pool() const noexcept;
 
   /// Returns the number of worker threads in the world's thread pool.
   [[nodiscard]] uint32_t thread_count() const noexcept;
@@ -259,27 +259,27 @@ public:
   [[nodiscard]] SnapshotStorageView snapshot_storage_view() const noexcept;
 
   /// Resolves or instantiates a matching QueryCache for the specified inclusion/exclusion masks.
-  QueryCache *query_cache(
-      const ComponentMask &include,
-      const ComponentMask &exclude,
-      const ComponentMask &any = {}
+  internal::QueryCache *query_cache(
+      const internal::ComponentMask &include,
+      const internal::ComponentMask &exclude,
+      const internal::ComponentMask &any = {}
   );
 
   // --- Mutation Execution Context --------------------------------------------
 
   /// Creates a lightweight mutation execution context view over the world storage.
-  [[nodiscard]] MutationContext mutation_context() noexcept;
+  [[nodiscard]] internal::MutationContext mutation_context() noexcept;
 
   /// Implicit conversion enabling direct `cmd.commit(world)` syntax without upward dependencies.
-  operator MutationContext() noexcept;
+  operator internal::MutationContext() noexcept;
 
   // --- System Execution View -------------------------------------------------
 
   /// Creates a decoupled execution view over the world storage for the scheduler.
-  [[nodiscard]] SystemExecutionTarget system_execution_target() noexcept;
+  [[nodiscard]] internal::SystemExecutionTarget system_execution_target() noexcept;
 
   /// Implicit conversion enabling `scheduler.run(world, pool)` and `scheduler.compile(world)` syntax.
-  operator SystemExecutionTarget() noexcept;
+  operator internal::SystemExecutionTarget() noexcept;
 };
 
 // --- Spatial Locality Sorting Algorithms -------------------------------------

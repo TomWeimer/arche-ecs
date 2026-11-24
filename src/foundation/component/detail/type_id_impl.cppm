@@ -13,7 +13,7 @@ export module arche:component.detail.type_id_impl;
 
 import :type_id;
 
-export namespace arche {
+export namespace arche::internal {
 
 // =============================================================================
 // ComponentDescriptor Methods
@@ -148,4 +148,4 @@ const ComponentDescriptor &TypeRegistry::get_descriptor(TypeID id) const {
   return descriptors.size();
 }
 
-} // namespace arche
+} // namespace arche::internal

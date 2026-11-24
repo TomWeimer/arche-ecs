@@ -19,6 +19,8 @@ import :filters;
 
 export namespace arche::detail::query {
 
+using namespace internal;
+
 // =============================================================================
 // Column Offset Resolution
 // =============================================================================

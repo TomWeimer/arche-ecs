@@ -13,7 +13,7 @@ export module arche:entity.detail.slot_map_impl;
 
 import :slot_map;
 
-export namespace arche {
+export namespace arche::internal {
 
 // =============================================================================
 // SlotMap Lifecycle & Allocation

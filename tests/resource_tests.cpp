@@ -6,7 +6,7 @@ import arche;
 namespace {
 using arche::INVALID_RESOURCE_ID;
 using arche::resource_id;
-using arche::ResourceContainer;
+using arche::internal::ResourceContainer;
 using arche::ResourceID;
 } // namespace
 

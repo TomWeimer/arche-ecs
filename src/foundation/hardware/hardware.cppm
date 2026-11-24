@@ -21,7 +21,7 @@ export module arche:hardware;
 
 export import :math;
 
-export namespace arche {
+export namespace arche::internal {
 
 // =============================================================================
 // Hardware Topology & Platform-Adaptive Memory Utilities

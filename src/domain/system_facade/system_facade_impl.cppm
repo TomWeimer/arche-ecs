@@ -14,6 +14,8 @@ import :thread_pool;
 
 export namespace arche {
 
+using namespace internal;
+
 // =============================================================================
 // SystemFacade Method Implementations
 // =============================================================================
@@ -44,12 +46,12 @@ SystemFacade &SystemFacade::add_system(
   return *this;
 }
 
-Scheduler &SystemFacade::scheduler() noexcept {
+internal::Scheduler &SystemFacade::scheduler() noexcept {
   assert(scheduler_ != nullptr);
   return *scheduler_;
 }
 
-const Scheduler &SystemFacade::scheduler() const noexcept {
+const internal::Scheduler &SystemFacade::scheduler() const noexcept {
   assert(scheduler_ != nullptr);
   return *scheduler_;
 }

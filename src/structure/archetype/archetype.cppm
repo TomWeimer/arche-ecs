@@ -16,7 +16,7 @@ export import :hardware;
 export import :chunk;
 export import :chunk_pool;
 
-export namespace arche {
+export namespace arche::internal {
 
 class ArchetypeGraph;
 

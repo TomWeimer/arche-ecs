@@ -7,7 +7,7 @@ export module arche:query_cache;
 
 import :component_mask;
 
-export namespace arche {
+export namespace arche::internal {
 
 class Archetype;
 

@@ -7,8 +7,6 @@ import arche;
 namespace {
 using arche::CommandBuffer;
 using arche::Entity;
-using arche::ParallelCommandBuffer;
-using arche::ThreadPool;
 using arche::World;
 } // namespace
 
@@ -105,8 +103,6 @@ void test_clean_lifecycle_api() {
 void test_clean_frame_loop_api() {
   std::cout << "Testing Clean Frame Loop API (query_parallel, commit)... ";
   World world;
-  ThreadPool pool(2);
-  ParallelCommandBuffer cmd_buffers(2);
 
   world.spawn({.count = 1000}, Pos{0.0f, 0.0f}, Vel{1.0f, 2.0f});
 
@@ -232,6 +228,32 @@ void test_entity_view_api() {
   std::cout << "PASSED\n";
 }
 
+void test_public_encapsulation_boundary() {
+  std::cout << "Testing Public Encapsulation Boundary (Zero Internal Leaks)... ";
+
+  // Verify that all core public types reside directly in namespace arche
+  static_assert(std::is_same_v<arche::Entity, arche::Entity>);
+  static_assert(std::is_same_v<arche::Batch, arche::Batch>);
+  static_assert(std::is_same_v<arche::EntityRef, arche::EntityRef>);
+  static_assert(std::is_same_v<arche::EntityMut, arche::EntityMut>);
+  static_assert(std::is_same_v<arche::CommandBuffer, arche::CommandBuffer>);
+  static_assert(std::is_same_v<arche::World, arche::World>);
+  static_assert(std::is_same_v<arche::TypeID, arche::TypeID>);
+  static_assert(std::is_same_v<arche::Access, arche::AccessBuilder>);
+  static_assert(std::is_same_v<arche::AccessDescriptor, arche::AccessDescriptor>);
+  static_assert(std::is_same_v<arche::SystemContext, arche::SystemContext>);
+
+  // Verify internal namespace isolation
+  static_assert(std::is_same_v<arche::internal::Chunk, arche::internal::Chunk>);
+  static_assert(std::is_same_v<arche::internal::SlotMap, arche::internal::SlotMap>);
+  static_assert(std::is_same_v<arche::internal::Archetype, arche::internal::Archetype>);
+  static_assert(std::is_same_v<arche::internal::Scheduler, arche::internal::Scheduler>);
+  static_assert(std::is_same_v<arche::internal::ThreadPool, arche::internal::ThreadPool>);
+  static_assert(std::is_same_v<arche::internal::ParallelCommandBuffer, arche::internal::ParallelCommandBuffer>);
+
+  std::cout << "PASSED\n";
+}
+
 int main() {
   std::cout << "====================================================\n";
   std::cout << "Running arche-ecs Clean Public API Tests\n";
@@ -241,6 +263,7 @@ int main() {
   test_entity_view_api();
   test_clean_frame_loop_api();
   test_sorting_and_snapshots_api();
+  test_public_encapsulation_boundary();
 
   std::cout << "====================================================\n";
   std::cout << "All Clean Public API tests passed successfully!\n";

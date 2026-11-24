@@ -11,7 +11,7 @@ export module arche:resource.detail.impl;
 
 import :resource;
 
-export namespace arche {
+export namespace arche::internal {
 
 // =============================================================================
 // ResourceContainer Lifecycle & Storage Implementations

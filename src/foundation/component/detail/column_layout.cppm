@@ -7,7 +7,7 @@ export module arche:component.detail.column_layout;
 import :component_mask;
 import :type_id;
 
-export namespace arche {
+export namespace arche::internal {
 
 // =============================================================================
 // Component Column Layout Descriptor

@@ -12,12 +12,10 @@ export module arche:slot_map;
 import :entity;
 import :entity.detail.entity_record;
 
-export namespace arche {
+export namespace arche::internal {
 
 class Archetype;
 struct Chunk;
-
-namespace Internal {
 
 /**
  * @brief Advances a 32-bit generation integer, skipping zero.
@@ -28,8 +26,6 @@ namespace Internal {
   const uint32_t next = val + 1;
   return (next == 0) ? 1 : next;
 }
-
-} // namespace Internal
 
 /**
  * @class SlotMap
@@ -78,7 +74,7 @@ private:
   [[nodiscard]] static constexpr uint32_t advance_generation(
       uint32_t gen
   ) noexcept {
-    return Internal::advance_nonzero(gen);
+    return advance_nonzero(gen);
   }
 
 public:
@@ -249,8 +245,4 @@ public:
   void clear() noexcept;
 };
 
-namespace Internal {
-using SlotMap = arche::SlotMap;
-}
-
-} // namespace arche
+} // namespace arche::internal

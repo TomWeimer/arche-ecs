@@ -4,7 +4,7 @@ module;
 
 export module arche:entity.detail.entity_record;
 
-export namespace arche {
+export namespace arche::internal {
 
 class Archetype;
 struct Chunk;

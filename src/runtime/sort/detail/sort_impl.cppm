@@ -17,7 +17,7 @@ import :chunk;
 import :slot_map;
 import :type_id;
 
-export namespace arche {
+export namespace arche::internal {
 
 // =============================================================================
 // Radix Sort Implementation
@@ -233,7 +233,7 @@ inline void Sort::permute(
     const SortTarget &target,
     std::span<const uint32_t> target_indices
 ) {
-  arche::permute(
+  ::arche::internal::permute(
       target.arch,
       target.chunks,
       target.slot_map,

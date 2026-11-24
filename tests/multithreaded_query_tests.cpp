@@ -5,10 +5,10 @@ import arche;
 #include <vector>
 
 namespace {
-using arche::Archetype;
+using arche::internal::Archetype;
 using arche::Entity;
-using arche::ParallelCommandBuffer;
-using arche::ThreadPool;
+using arche::internal::ParallelCommandBuffer;
+using arche::internal::ThreadPool;
 using arche::World;
 } // namespace
 

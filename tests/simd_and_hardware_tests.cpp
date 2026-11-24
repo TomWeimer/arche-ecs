@@ -7,9 +7,9 @@ import arche;
 #include <vector>
 
 namespace {
-using arche::Chunk;
-using arche::ChunkHeader;
-using arche::ChunkPool;
+using arche::internal::Chunk;
+using arche::internal::ChunkHeader;
+using arche::internal::ChunkPool;
 using arche::Entity;
 using arche::World;
 } // namespace

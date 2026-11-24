@@ -69,10 +69,10 @@ class CommandBuffer {
 public:
   /// Function pointer type for type-erased component tuple deserialization and
   /// entity creation.
-  using SpawnFn = void (*)(MutationContext &, const uint8_t *);
+  using SpawnFn = void (*)(internal::MutationContext &, const uint8_t *);
 
   /// Function pointer type for deferred component type descriptor registration.
-  using RegisterTypeFn = void (*)(TypeRegistry &);
+  using RegisterTypeFn = void (*)(internal::TypeRegistry &);
 
 private:
   std::vector<uint8_t> buffer_;
@@ -166,7 +166,7 @@ public:
    * @param ctx Execution context view holding references to SlotMap, ChunkPool,
    * ArchetypeGraph, and TypeRegistry.
    */
-  void commit(MutationContext ctx);
+  void commit(internal::MutationContext ctx);
 
   // --- Buffer Inspection & Reset ---------------------------------------------
 
@@ -196,6 +196,8 @@ private:
 // =============================================================================
 // ParallelCommandBuffer: Sharded Thread-Local Command Aggregator
 // =============================================================================
+
+namespace internal {
 
 /**
  * @class ParallelCommandBuffer
@@ -228,10 +230,12 @@ public:
 
   /// Commits all thread-local command buffers sequentially into the ECS
   /// storage.
-  void commit(MutationContext ctx);
+  void commit(internal::MutationContext ctx);
 
   /// Clears all thread-local command buffers.
   void clear() noexcept;
 };
+
+} // namespace internal
 
 } // namespace arche

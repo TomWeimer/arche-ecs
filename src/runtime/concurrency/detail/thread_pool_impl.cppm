@@ -12,7 +12,7 @@ export module arche:concurrency.detail.thread_pool_impl;
 
 import :thread_pool;
 
-export namespace arche {
+export namespace arche::internal {
 
 // =============================================================================
 // ThreadPool Implementation

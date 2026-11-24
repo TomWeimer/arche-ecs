@@ -11,6 +11,8 @@ import :query;
 
 export namespace arche {
 
+using namespace internal;
+
 // =============================================================================
 // SystemContext Implementation
 // =============================================================================
@@ -56,7 +58,7 @@ template <QueryTerm... Components, QueryFilter... FilterArgs>
     FilterArgs &&...filters
 ) const {
   auto [include_mask, exclude_mask, any_mask] =
-      detail::query::compute_query_masks<Components...>(filters...);
+      arche::detail::query::compute_query_masks<Components...>(filters...);
 
   assert(get_cache_fn_ != nullptr);
   QueryCache *cache =

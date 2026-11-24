@@ -16,7 +16,7 @@ export module arche:archetype.detail.impl;
 import :archetype;
 import :math;
 
-export namespace arche {
+export namespace arche::internal {
 
 // =============================================================================
 // Archetype Construction & Layout Computation

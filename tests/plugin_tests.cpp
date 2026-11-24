@@ -8,10 +8,10 @@ import arche;
 namespace {
 using arche::Access;
 using arche::Plugin;
-using arche::Scheduler;
+using arche::internal::Scheduler;
 using arche::SystemContext;
 using arche::SystemScale;
-using arche::ThreadPool;
+using arche::internal::ThreadPool;
 using arche::World;
 } // namespace
 

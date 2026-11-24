@@ -17,9 +17,13 @@ import :mutation;
 
 export namespace arche {
 
+using namespace internal;
+
 // =============================================================================
 // ParallelCommandBuffer Implementations
 // =============================================================================
+
+namespace internal {
 
 ParallelCommandBuffer::ParallelCommandBuffer(uint32_t thread_count)
     : buffers_(thread_count) {}
@@ -44,6 +48,8 @@ void ParallelCommandBuffer::clear() noexcept {
     buf.clear();
   }
 }
+
+} // namespace internal
 
 // =============================================================================
 // CommandBuffer Lifecycle & Buffer Operations

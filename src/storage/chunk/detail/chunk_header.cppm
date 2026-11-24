@@ -6,7 +6,7 @@ module;
 
 export module arche:chunk.detail.chunk_header;
 
-export namespace arche {
+export namespace arche::internal {
 
 // =============================================================================
 // Cache-Aligned Physical Chunk Header

@@ -4,10 +4,10 @@ import arche;
 #include <iostream>
 
 namespace {
-using arche::ComponentMask;
+using arche::internal::ComponentMask;
 using arche::type_id;
 using arche::TypeID;
-using arche::TypeRegistry;
+using arche::internal::TypeRegistry;
 } // namespace
 
 // =============================================================================

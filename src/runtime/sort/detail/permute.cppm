@@ -9,7 +9,7 @@ import :archetype;
 import :chunk;
 import :slot_map;
 
-export namespace arche {
+export namespace arche::internal {
 
 // =============================================================================
 // Low-Level Permutation Engine Interface
@@ -37,4 +37,4 @@ void permute(
     std::span<const uint32_t> target_indices
 );
 
-} // namespace arche
+} // namespace arche::internal

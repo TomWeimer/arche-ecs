@@ -24,16 +24,16 @@ export namespace arche {
  */
 struct AccessDescriptor {
   /// Bitmask of component types read by the system.
-  ComponentMask read_components{};
+  internal::ComponentMask read_components{};
 
   /// Bitmask of component types written by the system.
-  ComponentMask write_components{};
+  internal::ComponentMask write_components{};
 
   /// Bitmask of world resource types read by the system.
-  ResourceMask read_resources{};
+  internal::ResourceMask read_resources{};
 
   /// Bitmask of world resource types written by the system.
-  ResourceMask write_resources{};
+  internal::ResourceMask write_resources{};
 
   [[nodiscard]] constexpr bool conflicts_with(
       const AccessDescriptor &other

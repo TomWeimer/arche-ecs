@@ -7,8 +7,10 @@ import arche;
 namespace {
 using arche::Entity;
 using arche::null_entity;
-using arche::Internal::advance_nonzero;
-namespace Internal = arche::Internal;
+using arche::internal::advance_nonzero;
+using arche::internal::SlotMap;
+namespace internal = arche::internal;
+namespace Internal = arche::internal;
 } // namespace
 
 // =============================================================================

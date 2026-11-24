@@ -17,6 +17,8 @@ import :gpu_span;
 
 export namespace arche {
 
+using namespace internal;
+
 // =============================================================================
 // GpuFacade Method Implementations
 // =============================================================================

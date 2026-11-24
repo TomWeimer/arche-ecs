@@ -11,6 +11,8 @@ import :resource;
 
 export namespace arche {
 
+using namespace internal;
+
 // =============================================================================
 // ResourceFacade Method Implementations
 // =============================================================================

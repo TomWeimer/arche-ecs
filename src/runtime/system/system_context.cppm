@@ -24,11 +24,11 @@ export namespace arche {
  * cached query instantiation, version inspection, and parallel intra-query dispatch.
  */
 struct SystemContext {
-  using CacheResolver = QueryCache *(*)(
+  using CacheResolver = internal::QueryCache *(*)(
       void *ctx,
-      ComponentMask inc,
-      ComponentMask exc,
-      ComponentMask any
+      internal::ComponentMask inc,
+      internal::ComponentMask exc,
+      internal::ComponentMask any
   );
 
   /// Reference to this worker thread's deferred mutation command buffer.
@@ -39,13 +39,13 @@ struct SystemContext {
    */
   SystemContext(
       CommandBuffer &c,
-      ResourceContainer &res,
+      internal::ResourceContainer &res,
       void *cache_ctx,
       CacheResolver get_cache,
       uint32_t ver,
       uint32_t prev_ver = 0,
-      ThreadPool *p = nullptr,
-      ParallelCommandBuffer *pc = nullptr
+      internal::ThreadPool *p = nullptr,
+      internal::ParallelCommandBuffer *pc = nullptr
   ) noexcept;
 
   /**
@@ -106,13 +106,13 @@ struct SystemContext {
   [[nodiscard]] uint32_t current_tick() const noexcept;
 
 private:
-  ResourceContainer *resources_{nullptr};
+  internal::ResourceContainer *resources_{nullptr};
   void *cache_ctx_{nullptr};
   CacheResolver get_cache_fn_{nullptr};
   uint32_t version_{0};
   uint32_t previous_version_{0};
-  ThreadPool *pool_{nullptr};
-  ParallelCommandBuffer *parallel_cmd_{nullptr};
+  internal::ThreadPool *pool_{nullptr};
+  internal::ParallelCommandBuffer *parallel_cmd_{nullptr};
 };
 
 } // namespace arche

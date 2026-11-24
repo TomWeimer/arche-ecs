@@ -18,6 +18,8 @@ import :query.detail.offsets;
 
 export namespace arche {
 
+using namespace internal;
+
 namespace detail::query {
 
 /**

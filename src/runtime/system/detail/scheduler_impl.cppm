@@ -19,7 +19,7 @@ import :command;
 import :resource;
 import :archetype;
 
-namespace arche::detail::scheduler {
+namespace arche::internal::detail::scheduler {
 
 inline void stamp_component_version(
     const ArchetypeGraph &graph,
@@ -78,9 +78,9 @@ inline void execute_parallel_narrow_nodes(
   });
 }
 
-} // namespace arche::detail::scheduler
+} // namespace arche::internal::detail::scheduler
 
-export namespace arche {
+export namespace arche::internal {
 
 // =============================================================================
 // Scheduler Implementation

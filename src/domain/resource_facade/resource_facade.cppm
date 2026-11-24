@@ -26,7 +26,7 @@ export namespace arche {
 class ResourceFacade {
 public:
   constexpr ResourceFacade() noexcept = default;
-  explicit constexpr ResourceFacade(ResourceContainer &resources) noexcept
+  explicit constexpr ResourceFacade(internal::ResourceContainer &resources) noexcept
       : resources_(&resources) {}
 
   /// Inserts or replaces a global singleton resource of type T.
@@ -53,13 +53,13 @@ public:
   bool remove();
 
   /// Direct immutable access to the underlying ResourceContainer.
-  [[nodiscard]] const ResourceContainer &container() const noexcept;
+  [[nodiscard]] const internal::ResourceContainer &container() const noexcept;
 
   /// Direct mutable access to the underlying ResourceContainer.
-  [[nodiscard]] ResourceContainer &container() noexcept;
+  [[nodiscard]] internal::ResourceContainer &container() noexcept;
 
 private:
-  ResourceContainer *resources_{nullptr};
+  internal::ResourceContainer *resources_{nullptr};
 };
 
 } // namespace arche

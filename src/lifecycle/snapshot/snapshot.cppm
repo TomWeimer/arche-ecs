@@ -15,7 +15,7 @@ import :chunk;
 import :chunk_pool;
 import :slot_map;
 
-export namespace arche {
+export namespace arche::internal {
 
 // =============================================================================
 // Snapshot Input / Output POD Boundaries

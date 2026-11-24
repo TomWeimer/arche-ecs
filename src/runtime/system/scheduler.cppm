@@ -17,7 +17,7 @@ import :resource;
 import :archetype_graph;
 import :query_cache;
 
-export namespace arche {
+export namespace arche::internal {
 
 // =============================================================================
 // SystemExecutionTarget (Decoupled Execution View Contract)

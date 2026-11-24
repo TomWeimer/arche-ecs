@@ -65,10 +65,10 @@ public:
   [[nodiscard]] AccessDescriptor build() const noexcept;
 
 private:
-  ComponentMask read_components_{};
-  ComponentMask write_components_{};
-  ResourceMask read_resources_{};
-  ResourceMask write_resources_{};
+  internal::ComponentMask read_components_{};
+  internal::ComponentMask write_components_{};
+  internal::ResourceMask read_resources_{};
+  internal::ResourceMask write_resources_{};
 };
 
 /// Ergonomic alias for AccessBuilder.

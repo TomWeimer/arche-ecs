@@ -12,7 +12,7 @@ module arche;
 
 import :sort.detail.permute;
 
-namespace arche {
+namespace arche::internal {
 
 namespace {
 
@@ -198,4 +198,4 @@ void permute(
   }
 }
 
-} // namespace arche
+} // namespace arche::internal

@@ -88,6 +88,8 @@ template <typename T>
 // Component Descriptor (Type Erased VTable & Layout metadata)
 // =============================================================================
 
+namespace internal {
+
 /**
  * @struct ComponentDescriptor
  * @brief Runtime metadata and type-erased lifecycle function pointers for a component.
@@ -213,5 +215,7 @@ static_assert(
     sizeof(TypeRegistry) == sizeof(std::vector<ComponentDescriptor>),
     "TypeRegistry must introduce zero memory overhead over std::vector"
 );
+
+} // namespace internal
 
 } // namespace arche

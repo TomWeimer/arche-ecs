@@ -289,7 +289,7 @@ int main() {
       const uint32_t threads = std::max(
           2u, std::thread::hardware_concurrency()
       );
-      arche::ThreadPool pool(threads);
+      arche::internal::ThreadPool pool(threads);
 
       bench_2m.title("3. 2M Entities: Multi-Threaded Chunk Parallelism")
           .run(

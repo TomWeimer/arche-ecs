@@ -6,17 +6,17 @@ import arche;
 #include <vector>
 
 namespace {
-using arche::Archetype;
-using arche::ArchetypeGraph;
+using arche::internal::Archetype;
+using arche::internal::ArchetypeGraph;
 using arche::CommandBuffer;
 using arche::Entity;
 using arche::GpuStd430Compatible;
-using arche::Hardware;
+using arche::internal::Hardware;
 using arche::Std430Traits;
 using arche::TypeID;
-using arche::TypeRegistry;
+using arche::internal::TypeRegistry;
 using arche::World;
-using arche::Internal::SlotMap;
+using arche::internal::SlotMap;
 } // namespace
 
 // =============================================================================

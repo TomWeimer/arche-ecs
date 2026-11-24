@@ -20,8 +20,8 @@ class CommandFacade {
 public:
   constexpr CommandFacade() noexcept = default;
   explicit constexpr CommandFacade(
-      ParallelCommandBuffer &parallel_cmd,
-      void (*commit_fn)(ParallelCommandBuffer &cmd, void *ctx) = nullptr,
+      internal::ParallelCommandBuffer &parallel_cmd,
+      void (*commit_fn)(internal::ParallelCommandBuffer &cmd, void *ctx) = nullptr,
       void *ctx = nullptr
   ) noexcept
       : parallel_cmd_(&parallel_cmd), commit_fn_(commit_fn), ctx_(ctx) {}
@@ -33,8 +33,8 @@ public:
   void clear();
 
 private:
-  ParallelCommandBuffer *parallel_cmd_{nullptr};
-  void (*commit_fn_)(ParallelCommandBuffer &cmd, void *ctx){nullptr};
+  internal::ParallelCommandBuffer *parallel_cmd_{nullptr};
+  void (*commit_fn_)(internal::ParallelCommandBuffer &cmd, void *ctx){nullptr};
   void *ctx_{nullptr};
 };
 

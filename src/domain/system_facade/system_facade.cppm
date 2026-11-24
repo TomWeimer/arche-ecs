@@ -35,8 +35,8 @@ class SystemFacade {
 public:
   constexpr SystemFacade() noexcept = default;
   explicit constexpr SystemFacade(
-      Scheduler &scheduler,
-      SystemExecutionTarget (*get_target)(void *ctx),
+      internal::Scheduler &scheduler,
+      internal::SystemExecutionTarget (*get_target)(void *ctx),
       PluginRegistry &plugins,
       void *world_ptr = nullptr
   ) noexcept
@@ -46,7 +46,7 @@ public:
         world_ptr_(world_ptr) {}
 
   /// Executes all compiled scheduler stages in parallel using the provided ThreadPool.
-  void run(ThreadPool &pool);
+  void run(internal::ThreadPool &pool);
 
   /// Executes all compiled scheduler stages sequentially on the current thread.
   void run();
@@ -63,10 +63,10 @@ public:
   );
 
   /// Direct mutable reference to the underlying stage Scheduler.
-  [[nodiscard]] Scheduler &scheduler() noexcept;
+  [[nodiscard]] internal::Scheduler &scheduler() noexcept;
 
   /// Direct read-only reference to the underlying stage Scheduler.
-  [[nodiscard]] const Scheduler &scheduler() const noexcept;
+  [[nodiscard]] const internal::Scheduler &scheduler() const noexcept;
 
   /// Registers a plugin name identifier for tracking and duplicate prevention.
   template <typename P>
@@ -80,14 +80,14 @@ public:
   World &add_plugin(P &&plugin);
 
   template <Plugin P>
-  World &add_plugin(Scheduler &ext_scheduler);
+  World &add_plugin(internal::Scheduler &ext_scheduler);
 
   template <Plugin P>
-  World &add_plugin(P &&plugin, Scheduler &ext_scheduler);
+  World &add_plugin(P &&plugin, internal::Scheduler &ext_scheduler);
 
 private:
-  Scheduler *scheduler_{nullptr};
-  SystemExecutionTarget (*get_target_)(void *ctx){nullptr};
+  internal::Scheduler *scheduler_{nullptr};
+  internal::SystemExecutionTarget (*get_target_)(void *ctx){nullptr};
   PluginRegistry *plugins_{nullptr};
   void *world_ptr_{nullptr};
 };

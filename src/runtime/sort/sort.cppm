@@ -14,7 +14,7 @@ import :chunk;
 import :slot_map;
 import :type_id;
 
-export namespace arche {
+export namespace arche::internal {
 
 // =============================================================================
 // Sort POD Input Boundary

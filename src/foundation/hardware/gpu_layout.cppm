@@ -5,7 +5,7 @@ module;
 
 export module arche:gpu_layout;
 
-export namespace arche {
+export namespace arche::internal {
 
 // =============================================================================
 // Std430 Layout Validation Traits

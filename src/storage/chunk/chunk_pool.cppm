@@ -7,7 +7,7 @@ export module arche:chunk_pool;
 
 import :hardware;
 
-export namespace arche {
+export namespace arche::internal {
 
 // =============================================================================
 // ChunkPool: Slab Memory Manager for 64KB Chunk Pages

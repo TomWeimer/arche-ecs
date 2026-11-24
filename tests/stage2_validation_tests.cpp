@@ -20,8 +20,8 @@ struct WorldTestAccessor {
 
 namespace {
 using arche::Entity;
-using arche::ParallelCommandBuffer;
-using arche::ThreadPool;
+using arche::internal::ParallelCommandBuffer;
+using arche::internal::ThreadPool;
 using arche::World;
 using arche::WorldTestAccessor;
 using arche::test::BoidTag;

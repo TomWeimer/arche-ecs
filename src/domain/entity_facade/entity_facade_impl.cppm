@@ -12,6 +12,8 @@ import :slot_map;
 
 export namespace arche {
 
+using namespace internal;
+
 // =============================================================================
 // EntityFacade Method Implementations
 // =============================================================================

@@ -9,7 +9,7 @@ export module arche:chunk_pool.detail.impl;
 
 import :chunk_pool;
 
-export namespace arche {
+export namespace arche::internal {
 
 // =============================================================================
 // ChunkPool Lifecycle & Memory Allocation Implementations

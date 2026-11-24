@@ -15,7 +15,7 @@ export module arche:snapshot.detail.impl;
 
 import :snapshot;
 
-namespace arche {
+namespace arche::internal {
 
 // =============================================================================
 // Size Inspection & Header Construction

@@ -27,7 +27,7 @@ export namespace arche {
 class EntityFacade {
 public:
   constexpr EntityFacade() noexcept = default;
-  explicit constexpr EntityFacade(SlotMap &slot_map) noexcept
+  explicit constexpr EntityFacade(internal::SlotMap &slot_map) noexcept
       : slot_map_(&slot_map) {}
 
   /// Returns true if the entity handle is alive and matches its current generation.
@@ -46,13 +46,13 @@ public:
   [[nodiscard]] std::optional<Entity> resolve(uint32_t index) const noexcept;
 
   /// Immutable reference to the underlying SlotMap routing table.
-  [[nodiscard]] const SlotMap &slot_map() const noexcept;
+  [[nodiscard]] const internal::SlotMap &slot_map() const noexcept;
 
   /// Mutable reference to the underlying SlotMap routing table.
-  [[nodiscard]] SlotMap &slot_map() noexcept;
+  [[nodiscard]] internal::SlotMap &slot_map() noexcept;
 
 private:
-  SlotMap *slot_map_{nullptr};
+  internal::SlotMap *slot_map_{nullptr};
 };
 
 } // namespace arche

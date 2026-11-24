@@ -14,7 +14,7 @@ export import :component_mask;
 export import :type_id;
 export import :query_cache;
 
-export namespace arche {
+export namespace arche::internal {
 
 // =============================================================================
 // ArchetypeGraph: Directional Graph & Archetype Factory

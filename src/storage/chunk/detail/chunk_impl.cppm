@@ -12,7 +12,7 @@ export module arche:chunk.detail.impl;
 
 import :chunk;
 
-export namespace arche {
+export namespace arche::internal {
 
 // =============================================================================
 // Chunk Lifecycle & Creation Implementations

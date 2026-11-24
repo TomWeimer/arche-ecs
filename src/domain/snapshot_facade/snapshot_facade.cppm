@@ -29,7 +29,7 @@ class SnapshotFacade {
 public:
   constexpr SnapshotFacade() noexcept = default;
   explicit constexpr SnapshotFacade(
-      SnapshotStorageView (*get_view)(void *ctx),
+      internal::SnapshotStorageView (*get_view)(void *ctx),
       void *ctx
   ) noexcept
       : get_view_(get_view), ctx_(ctx) {}
@@ -53,12 +53,12 @@ public:
   [[nodiscard]] SnapshotHeader header() const noexcept;
 
 private:
-  [[nodiscard]] SnapshotStorageView view() const noexcept {
+  [[nodiscard]] internal::SnapshotStorageView view() const noexcept {
     assert(get_view_ != nullptr);
     return get_view_(ctx_);
   }
 
-  SnapshotStorageView (*get_view_)(void *ctx){nullptr};
+  internal::SnapshotStorageView (*get_view_)(void *ctx){nullptr};
   void *ctx_{nullptr};
 };
 

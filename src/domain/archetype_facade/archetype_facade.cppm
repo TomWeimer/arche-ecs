@@ -29,30 +29,30 @@ export namespace arche {
 class ArchetypeFacade {
 public:
   constexpr ArchetypeFacade() noexcept = default;
-  explicit constexpr ArchetypeFacade(ArchetypeGraph &graph) noexcept
+  explicit constexpr ArchetypeFacade(internal::ArchetypeGraph &graph) noexcept
       : graph_(&graph) {}
 
   /// Returns the total number of distinct structural archetypes in the world.
   [[nodiscard]] size_t count() const noexcept;
 
   /// Returns the vector of memory chunks allocated to an archetype.
-  [[nodiscard]] std::vector<Chunk *> &chunks(Archetype *arch);
+  [[nodiscard]] std::vector<internal::Chunk *> &chunks(internal::Archetype *arch);
 
   /// Returns the immutable span of memory chunks allocated to an archetype.
-  [[nodiscard]] std::span<Chunk *const> chunks(const Archetype *arch) const;
+  [[nodiscard]] std::span<internal::Chunk *const> chunks(const internal::Archetype *arch) const;
 
   /// Counts total living entities possessing component type T across all archetypes.
   template <typename T>
   [[nodiscard]] uint32_t count_with() const noexcept;
 
   /// Direct immutable reference to the underlying ArchetypeGraph.
-  [[nodiscard]] const ArchetypeGraph &graph() const noexcept;
+  [[nodiscard]] const internal::ArchetypeGraph &graph() const noexcept;
 
   /// Direct mutable reference to the underlying ArchetypeGraph.
-  [[nodiscard]] ArchetypeGraph &graph() noexcept;
+  [[nodiscard]] internal::ArchetypeGraph &graph() noexcept;
 
 private:
-  ArchetypeGraph *graph_{nullptr};
+  internal::ArchetypeGraph *graph_{nullptr};
 };
 
 } // namespace arche

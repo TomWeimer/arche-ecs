@@ -75,10 +75,10 @@ concept ParallelChunkCallback =
  */
 struct QueryExecutionContext {
   /// Worker thread pool for parallel intra-query execution.
-  ThreadPool *pool{nullptr};
+  internal::ThreadPool *pool{nullptr};
 
   /// Multi-buffered command buffer for lock-free parallel mutations.
-  ParallelCommandBuffer *parallel_cmd{nullptr};
+  internal::ParallelCommandBuffer *parallel_cmd{nullptr};
 
   /// Current world or system tick used for auto-defaulting change detection.
   uint32_t current_version{0};
@@ -152,13 +152,13 @@ public:
   /// Constructs a standalone single-threaded Query view over the given
   /// QueryCache.
   template <QueryFilter... Filters>
-  explicit Query(const QueryCache &cache, Filters... filters);
+  explicit Query(const internal::QueryCache &cache, Filters... filters);
 
   /// Constructs an execution-ready Query view with injected concurrency
   /// context.
   template <QueryFilter... Filters>
   Query(
-      const QueryCache &cache,
+      const internal::QueryCache &cache,
       QueryExecutionContext exec_ctx,
       Filters... filters
   );
@@ -178,7 +178,7 @@ public:
 
   /// Returns a zero-copy span over all archetype tables matching this query's
   /// bitmasks.
-  [[nodiscard]] std::span<Archetype *const>
+  [[nodiscard]] std::span<internal::Archetype *const>
   matching_archetypes() const noexcept;
 
   // --- C++20 Range Iteration -------------------------------------------------
@@ -266,9 +266,9 @@ public:
   void each_parallel(Func &&func);
 
 private:
-  const QueryCache *cache_{nullptr};
-  ThreadPool *pool_{nullptr};
-  ParallelCommandBuffer *parallel_cmd_{nullptr};
+  const internal::QueryCache *cache_{nullptr};
+  internal::ThreadPool *pool_{nullptr};
+  internal::ParallelCommandBuffer *parallel_cmd_{nullptr};
   detail::query::MutationFilterList mutation_filters_{};
   uint32_t added_since_version_{0};
   bool has_added_filter_{false};

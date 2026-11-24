@@ -18,7 +18,7 @@ export module arche:mutation.detail.impl;
 
 import :mutation;
 
-export namespace arche {
+export namespace arche::internal {
 
 // =============================================================================
 // In-Place Construction & Version Stamping Helpers

@@ -11,6 +11,8 @@ import :snapshot;
 
 export namespace arche {
 
+using namespace internal;
+
 // =============================================================================
 // SnapshotFacade Method Implementations
 // =============================================================================

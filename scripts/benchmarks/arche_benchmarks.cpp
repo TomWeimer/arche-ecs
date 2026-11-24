@@ -10,7 +10,7 @@ import arche;
 
 namespace {
 using arche::Entity;
-using arche::Hardware;
+using arche::internal::Hardware;
 using arche::Query;
 using arche::World;
 } // namespace

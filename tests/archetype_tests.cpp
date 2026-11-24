@@ -7,11 +7,11 @@ import arche;
 #include <vector>
 
 namespace {
-using arche::Archetype;
-using arche::ArchetypeGraph;
+using arche::internal::Archetype;
+using arche::internal::ArchetypeGraph;
 
 using arche::TypeID;
-using arche::TypeRegistry;
+using arche::internal::TypeRegistry;
 } // namespace
 
 // =============================================================================

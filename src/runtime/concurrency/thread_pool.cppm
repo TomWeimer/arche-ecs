@@ -11,7 +11,7 @@ export module arche:thread_pool;
 
 import :hardware;
 
-export namespace arche {
+export namespace arche::internal {
 
 // =============================================================================
 // ThreadPool (Lock-Free Barrier Worker Pool)

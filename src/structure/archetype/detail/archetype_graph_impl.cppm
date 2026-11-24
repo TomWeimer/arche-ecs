@@ -16,7 +16,7 @@ export module arche:archetype_graph.detail.impl;
 import :archetype_graph;
 import :archetype.detail.impl;
 
-export namespace arche {
+export namespace arche::internal {
 
 // =============================================================================
 // ArchetypeGraph Construction & Root Node

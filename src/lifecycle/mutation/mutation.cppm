@@ -15,7 +15,7 @@ export import :chunk_pool;
 export import :archetype;
 export import :archetype_graph;
 
-export namespace arche {
+export namespace arche::internal {
 
 // =============================================================================
 // Mutation Execution Context

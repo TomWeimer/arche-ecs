@@ -17,6 +17,8 @@ import :query;
 
 export namespace arche {
 
+using namespace internal;
+
 namespace detail::query {
 
 /**

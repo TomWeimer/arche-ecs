@@ -6,16 +6,16 @@ import arche;
 #include <vector>
 
 namespace {
-using arche::Archetype;
-using arche::Chunk;
-using arche::ChunkPool;
-using arche::ComponentColumnLayout;
-using arche::ComponentMask;
+using arche::internal::Archetype;
+using arche::internal::Chunk;
+using arche::internal::ChunkPool;
+using arche::internal::ComponentColumnLayout;
+using arche::internal::ComponentMask;
 using arche::Entity;
-using arche::Hardware;
-using arche::SlotMap;
+using arche::internal::Hardware;
+using arche::internal::SlotMap;
 using arche::TypeID;
-using arche::TypeRegistry;
+using arche::internal::TypeRegistry;
 } // namespace
 
 // =============================================================================

@@ -16,6 +16,8 @@ import :archetype;
 
 export namespace arche::detail::query {
 
+using namespace internal;
+
 // =============================================================================
 // Temporal Change Detection Engine State
 // =============================================================================

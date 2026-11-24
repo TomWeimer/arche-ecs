@@ -27,7 +27,7 @@ export namespace arche {
 class GpuFacade {
 public:
   constexpr GpuFacade() noexcept = default;
-  explicit constexpr GpuFacade(ArchetypeGraph &graph) noexcept
+  explicit constexpr GpuFacade(internal::ArchetypeGraph &graph) noexcept
       : graph_(&graph) {}
 
   /// Returns spans of contiguous component column slices across all chunks for GPU upload.
@@ -39,7 +39,7 @@ public:
   size_t stream_to(void *destination_buffer);
 
 private:
-  ArchetypeGraph *graph_{nullptr};
+  internal::ArchetypeGraph *graph_{nullptr};
 };
 
 } // namespace arche

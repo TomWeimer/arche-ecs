@@ -47,6 +47,8 @@ template <typename T> [[nodiscard]] inline ResourceID resource_id() noexcept {
 // ResourceContainer: Zero-RTTI Monotonic Ambient Singleton Storage
 // =============================================================================
 
+namespace internal {
+
 /**
  * @class ResourceContainer
  * @brief High-performance, storage container for ambient world resources.
@@ -182,5 +184,7 @@ public:
    */
   template <typename T> bool remove();
 };
+
+} // namespace internal
 
 } // namespace arche

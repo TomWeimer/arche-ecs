@@ -10,7 +10,7 @@ namespace {
 using arche::Entity;
 using arche::null_entity;
 using arche::World;
-using arche::Internal::SlotMap;
+using arche::internal::SlotMap;
 } // namespace
 
 // =============================================================================

@@ -54,6 +54,8 @@ import :slot_map;
 
 export namespace arche {
 
+using namespace internal;
+
 // =============================================================================
 // EntityRef (Read-Only) Implementations
 // =============================================================================
@@ -301,7 +303,7 @@ inline World &SystemFacade::add_plugin(P &&plugin, Scheduler &ext_scheduler) {
 template <QueryTerm... Components, QueryFilter... FilterArgs>
 inline Query<Components...> World::query(FilterArgs &&...filters) {
   auto [include_mask, exclude_mask, any_mask] =
-      detail::query::compute_query_masks<Components...>(filters...);
+      arche::detail::query::compute_query_masks<Components...>(filters...);
 
   QueryCache *cache = query_cache(include_mask, exclude_mask, any_mask);
   assert(cache != nullptr);

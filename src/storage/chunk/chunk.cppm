@@ -10,7 +10,7 @@ export import :entity;
 export import :component.detail.column_layout;
 export import :chunk.detail.chunk_header;
 
-export namespace arche {
+export namespace arche::internal {
 
 // =============================================================================
 // Relocation Records (Delta Stream)

@@ -21,7 +21,7 @@ struct WorldTestAccessor {
 } // namespace arche
 
 namespace {
-using arche::Archetype;
+using arche::internal::Archetype;
 using arche::Entity;
 using arche::World;
 using arche::WorldTestAccessor;

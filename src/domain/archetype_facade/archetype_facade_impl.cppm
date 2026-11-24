@@ -16,6 +16,8 @@ import :chunk;
 
 export namespace arche {
 
+using namespace internal;
+
 // =============================================================================
 // ArchetypeFacade Method Implementations
 // =============================================================================

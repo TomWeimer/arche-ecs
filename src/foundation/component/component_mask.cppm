@@ -25,6 +25,8 @@ inline constexpr ComponentID INVALID_TYPE_ID = 0xFFFFFFFF;
 /// storage.
 using TypeID = ComponentID;
 
+namespace internal {
+
 // =============================================================================
 // ComponentMask: 128-Bit SIMD Presence Bitset
 // =============================================================================
@@ -196,12 +198,14 @@ struct ComponentMaskHash {
   }
 };
 
+} // namespace internal
+
 } // namespace arche
 
-template <> struct std::hash<arche::ComponentMask> {
+template <> struct std::hash<arche::internal::ComponentMask> {
   [[nodiscard]] size_t operator()(
-      const arche::ComponentMask &mask
+      const arche::internal::ComponentMask &mask
   ) const noexcept {
-    return arche::ComponentMaskHash{}(mask);
+    return arche::internal::ComponentMaskHash{}(mask);
   }
 };
