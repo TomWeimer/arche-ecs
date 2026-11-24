@@ -25,11 +25,19 @@ world.spawn({.count = 10000}, Position{0.0f, 0.0f}, Velocity{0.5f, 0.5f});
 
 ## 3. Querying & Iterating Entities
 ```cpp
-// Streaming query with optional filters
-for (auto [pos, vel] : world.query<Position, const Velocity*>()) {
-    pos.x += vel->dx;
-    pos.y += vel->dy;
+// 1. Streaming range-for query with structured bindings
+for (auto [pos, vel] : world.query<Position, const Velocity>()) {
+    pos.x += vel.dx;
+    pos.y += vel.dy;
 }
+
+// 2. High-throughput chunk traversal
+world.query<Position, const Velocity>().each_chunk([](uint32_t count, Position *pos, const Velocity *vel) {
+    for (uint32_t i = 0; i < count; ++i) {
+        pos[i].x += vel[i].dx;
+        pos[i].y += vel[i].dy;
+    }
+});
 ```
 
 ## 4. Entity Handles & Structural Mutation

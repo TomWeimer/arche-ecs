@@ -1,11 +1,8 @@
 module;
 
-#include <array>
-#include <atomic>
 #include <cassert>
 #include <cstdint>
 #include <span>
-#include <tuple>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -15,176 +12,266 @@ export module arche:query;
 export import :entity;
 export import :archetype;
 export import :chunk;
+export import :filters;
 export import :query_cache;
 export import :thread_pool;
 export import :command;
 export import :query.detail.filter;
-export import :query.detail.query_rules;
 export import :query.detail.query_iterator;
+export import :query.detail.masks;
+export import :query.detail.offsets;
 
 export namespace arche {
 
 // =============================================================================
-// Query View & SIMD Visitor
+// Query Callback Concepts
+// =============================================================================
+
+/**
+ * @concept ChunkCallback
+ * @brief Validates single-threaded chunk callbacks: void(uint32_t count,
+ * Components*...).
+ */
+template <typename F, typename... Components>
+concept ChunkCallback = std::
+    is_invocable_v<F, uint32_t, column_pointer_type_t<Components>...>;
+
+/**
+ * @concept PaddedChunkCallback
+ * @brief Validates SIMD-padded chunk callbacks: void(uint32_t active, uint32_t
+ * padded, Components*...).
+ */
+template <typename F, typename... Components>
+concept PaddedChunkCallback = std::
+    is_invocable_v<F, uint32_t, uint32_t, column_pointer_type_t<Components>...>;
+
+/**
+ * @concept ParallelChunkCallback
+ * @brief Validates multi-threaded chunk callbacks with optional CommandBuffer
+ * injection:
+ * - Mode A (Pure compute): void(uint32_t count, Components*...)
+ * - Mode B (Deferred mutations): void(uint32_t count, CommandBuffer&,
+ * Components*...)
+ */
+template <typename F, typename... Components>
+concept ParallelChunkCallback =
+    std::is_invocable_v<F, uint32_t, column_pointer_type_t<Components>...> ||
+    std::is_invocable_v<
+        F,
+        uint32_t,
+        CommandBuffer &,
+        column_pointer_type_t<Components>...>;
+
+// =============================================================================
+// Query Execution Context
+// =============================================================================
+
+/**
+ * @struct QueryExecutionContext
+ * @brief Concurrency and execution environment injected into a Query.
+ *
+ * Provides worker thread dispatching, thread-local deferred command buffers,
+ * and temporal simulation versioning (e.g. injected by SystemContext or World).
+ */
+struct QueryExecutionContext {
+  /// Worker thread pool for parallel intra-query execution.
+  ThreadPool *pool{nullptr};
+
+  /// Multi-buffered command buffer for lock-free parallel mutations.
+  ParallelCommandBuffer *parallel_cmd{nullptr};
+
+  /// Current world or system tick used for auto-defaulting change detection.
+  uint32_t current_version{0};
+
+  /// Previous simulation tick before recent advancement (used for SINCE_LAST_FRAME).
+  uint32_t previous_version{0};
+};
+
+// =============================================================================
+// Query: Type-Safe, SIMD-Aligned Entity Traversal
 // =============================================================================
 
 /**
  * @class Query
- * @brief Type-safe, SIMD-aligned query interface for traversing entities
- * matching component criteria.
+ * @brief Type-safe, SIMD-aligned query view over matching archetype chunks.
+ *
+ * Lightweight, zero-allocation streaming views constructed via
+ * `world.query<...>()` or `ctx.query<...>()`. Archetypes are cached globally in
+ * the World.
+ *
+ * ### Quick Traversal Guide
+ * - **Per-Entity Loop:**    `for (auto [pos, vel] : query) { pos.x += vel.vx;
+ * }`
+ * - **Contiguous Chunks:**  `query.each_chunk([](uint32_t count, Position *pos,
+ * ...) { ... });`
+ * - **SIMD-Padded Chunks:** `query.each_chunk_padded([](uint32_t active,
+ * uint32_t padded, Position *pos, ...) { ... });`
+ * - **Multi-Threaded:**     `query.each_parallel([](uint32_t count,
+ * [CommandBuffer &cmd,] Position *pos, ...) { ... });`
+ *
+ *
+ * ### Query Construction
+ *
+ * Depending of the intent of the query you may want different behaviors to
+ * define the behavior of a query you need to define the data terms and the
+ * query filters.
+ *
+ *  ```cpp
+ *  // Examples:
+ *  world.query<Position,  Without<Dead>>()
+ *  ctx.query<const Position, const Velocity
+ * // The Data terms must come first and then the filters
+ * // ctx.query<Data Terms, ..., Filters, ...>()
+ *  ```
+ *
+ * ### Data Terms
+ * - `T` → Fetches mutable `T&`
+ * - `const T` → Fetches read-only `const T&`
+ * - `Opt<T>` or `const T*` → Fetches readonly `const T*` if present, or nullptr
+ * if absent.
+ * - `OptMut<T>` or `T*` → Fetches `T*` mutable if present, or nullptr
+ * if absent.
+ * - `Has<T>` → Yields a boolean (`bool`) indicating whether an
+ * entity possesses component T, without fetching or binding any component data.
+ * ### Query Filters
+ * - `With<T...>`: Require components without fetching them.
+ * - `Without<T...>`: Exclude archetypes containing specified components.
+ * - `Or<With<A>, With<B>>`: Match archetypes containing any specified
+ * component.
+ * - `Mutated<T>` / `Added`: Skip untouched chunks since specified simulation
+ * version.
  */
-template <typename... Components> class Query {
+template <QueryTerm... Components> class Query {
 public:
   template <typename... Comps> friend class QueryIterator;
 
-  /// Iterator type for range-based for loops and structured bindings.
   using Iterator = QueryIterator<Components...>;
 
-  // --- Constructors & Destructors --------------------------------------------
+  // --- Constructors ----------------------------------------------------------
 
-  template <typename... Filters>
+  /// Constructs a standalone single-threaded Query view over the given
+  /// QueryCache.
+  template <QueryFilter... Filters>
   explicit Query(const QueryCache &cache, Filters... filters);
 
-  // --- Iteration & Callback Visitors -----------------------------------------
-
-  template <typename Func> void for_each_chunk(Func &&func);
-
-  template <typename Func> void for_each_chunk_padded(Func &&func);
-
-  template <typename Func> void for_each(Func &&func);
-
-  template <typename Func> void for_each_entity(Func &&func);
-
-  template <typename Func> void each(Func &&func) {
-    for_each(std::forward<Func>(func));
-  }
-
-  [[nodiscard]] Iterator begin();
-
-  [[nodiscard]] Iterator end();
-
-  template <typename Func> void each_parallel(ThreadPool &pool, Func &&func);
-
-  template <typename Func>
-  void each_parallel(
-      ThreadPool &pool,
-      ParallelCommandBuffer &cmd_buffers,
-      Func &&func
+  /// Constructs an execution-ready Query view with injected concurrency
+  /// context.
+  template <QueryFilter... Filters>
+  Query(
+      const QueryCache &cache,
+      QueryExecutionContext exec_ctx,
+      Filters... filters
   );
 
-  // --- Compile-Time Type Index Helpers ---------------------------------------
+  // --- Introspection ---------------------------------------------------------
 
-  template <typename... FilterArgs>
-  static std::pair<ComponentMask, ComponentMask> compute_query_masks(
-      const FilterArgs &...filters
-  );
+  /// Returns true if no matching archetypes contain live entities (O(1)
+  /// short-circuit).
+  ///
+  /// ```cpp
+  /// // Example:
+  /// if (world.query<Position, Without<Dead>>().empty()) {
+  ///     // All matched entities are dead or despawned
+  /// }
+  /// ```
+  [[nodiscard]] bool empty() const noexcept;
 
-  template <typename... Ts>
-  static void register_and_set_mask(ComponentMask &mask);
-
-private:
-  // --- Internal Data Structures ----------------------------------------------
-
-  struct MutationFilterRule {
-    TypeID type_id{INVALID_TYPE_ID};
-    uint32_t since_version{0};
-  };
-
-  // --- Filter Tag Dispatch Helpers -------------------------------------------
-
-  template <typename... Ts> void apply_filter(With<Ts...>);
-
-  template <typename... Ts> void apply_filter(Without<Ts...>);
-
-  struct OrBranch {
-    ComponentMask include{};
-    ComponentMask exclude{};
-  };
-
-  struct OrClause {
-    std::vector<OrBranch> branches{};
-  };
-
-  template <typename... SubFilters> void apply_filter(Or<SubFilters...>);
-
-  template <typename T> void apply_filter(Mutated<T> f);
-
-  void apply_filter(Added f);
-
-public:
-  // --- Column & Memory Resolution Helpers ------------------------------------
-
-  template <typename Comp>
-  static uint32_t resolve_column_offset(Archetype *arch);
-
-  template <typename Comp>
-  static auto get_column_ptr(Chunk *chunk, uint32_t offset);
-
-private:
-  auto get_column_pointers(Chunk *chunk, Archetype *arch) const;
-
-  // --- Chunk Traversal & Row Invocation Helpers ------------------------------
-
-  static void prefetch_next_chunk(
-      const Chunk *next_chunk,
-      Archetype *arch
-  ) noexcept;
-
-  template <typename Tuple>
-  static void prefetch_next_chunk_with_offsets(
-      const Chunk *next_chunk,
-      const Tuple &offsets
-  ) noexcept;
-
-  [[nodiscard]] bool chunk_matches_filters(
-      const Chunk *chunk,
-      Archetype *arch
-  ) const noexcept;
-
-  template <typename Visitor> void for_each_active_chunk(Visitor &&visitor);
-
-  template <typename Func, typename Tuple>
-  static void invoke_row(
-      Func &&func,
-      Entity entity,
-      const Tuple &cols,
-      uint32_t row
-  );
-
-  // --- Internal Query Resolution Methods -------------------------------------
-
-  void build_masks();
-
-  void filter_custom_archetypes();
-
-  [[nodiscard]] bool matches_or_clauses(Archetype *arch) const noexcept;
-
-  [[nodiscard]] std::span<Chunk *const> get_chunks_for(Archetype *arch);
-
-public:
+  /// Returns a zero-copy span over all archetype tables matching this query's
+  /// bitmasks.
   [[nodiscard]] std::span<Archetype *const>
   matching_archetypes() const noexcept;
 
-  [[nodiscard]] inline uint32_t count() const noexcept {
-    uint32_t total = 0;
-    for (Archetype *arch : matching_archetypes()) {
-      total += arch->entity_count();
-    }
-    return total;
-  }
+  // --- C++20 Range Iteration -------------------------------------------------
 
-  [[nodiscard]] inline bool empty() const noexcept { return count() == 0; }
+  /// Standard C++20 range iteration support: for (auto [pos, vel] : query)
+  [[nodiscard]] Iterator begin();
+  [[nodiscard]] Iterator end();
+  [[nodiscard]] Iterator iter() { return begin(); }
+
+  // --- SIMD & Batch Execution ------------------------------------------------
+
+  /// @brief Contiguous chunk batch loop for automatic compiler SIMD
+  /// vectorization.
+  ///
+  /// Invokes the provided callback once per 64 KB chunk with direct typed array
+  /// pointers.
+  ///
+  /// ### Inferred Callback Signature
+  /// ```cpp
+  /// [](uint32_t count, Components*...)
+  ///
+  /// // Example for Query<Position, const Velocity>:
+  /// query.each_chunk([](uint32_t count, Position *pos, const Velocity *vel) {
+  ///     for (uint32_t i = 0; i < count; ++i) {
+  ///         pos[i].x += vel[i].vx;
+  ///     }
+  /// });
+  /// ```
+  /// @param func Invocable receiving active entity count and component column
+  /// arrays.
+  template <ChunkCallback<Components...> Func> void each_chunk(Func &&func);
+
+  /// @brief SIMD tail-padded chunk batch loop with zero epilogue loops.
+  ///
+  /// Rounds active chunk entity counts up to SIMD lane boundaries (16 elements)
+  /// using safe capacity padding in 64 KB chunks, allowing unconditional vector
+  /// loads.
+  ///
+  /// ### Inferred Callback Signature
+  /// ```cpp
+  /// [](uint32_t active, uint32_t padded, Components*...)
+  ///
+  /// // Example for Query<Position, const Velocity>:
+  /// query.each_chunk_padded([](uint32_t active, uint32_t padded, Position
+  /// *pos, const Velocity *vel) {
+  ///     for (uint32_t i = 0; i < padded; i += 16) {
+  ///         // Safe to process 16 elements at a time with AVX-512 / NEON
+  ///         vector loads
+  ///     }
+  /// });
+  /// ```
+  /// @param func Invocable receiving active count, padded count (aligned to
+  /// 16), and column arrays.
+  template <PaddedChunkCallback<Components...> Func>
+  void each_chunk_padded(Func &&func);
+
+  /// @brief Multi-threaded chunk loop with compile-time inferred CommandBuffer
+  /// injection.
+  ///
+  /// Distributes 64 KB chunk tasks across worker threads. Arche ECS detects at
+  /// compile-time whether the callback accepts a thread-local `CommandBuffer&`
+  /// for deferred mutations:
+  ///
+  /// ### Inferred Callback Signatures
+  /// - **Mode A (Pure Math / Zero Allocations):**
+  ///   ```cpp
+  ///   [](uint32_t count, Components*...)
+  ///   ```
+  /// - **Mode B (Deferred Structural Mutations):**
+  ///   ```cpp
+  ///   [](uint32_t count, CommandBuffer &cmd, Components*...)
+  ///   ```
+  ///
+  /// ### Example:
+  /// ```cpp
+  /// query.each_parallel([](uint32_t count, CommandBuffer &cmd, Position *pos,
+  /// const Health *hp) {
+  ///     for (uint32_t i = 0; i < count; ++i) {
+  ///         if (hp[i].current <= 0) cmd.despawn(entity);
+  ///     }
+  /// });
+  /// ```
+  /// @param func Invocable matching either Mode A or Mode B signature.
+  template <ParallelChunkCallback<Components...> Func>
+  void each_parallel(Func &&func);
 
 private:
   const QueryCache *cache_{nullptr};
-  ComponentMask include_mask_{};
-  ComponentMask exclude_mask_{};
-
-  std::vector<OrClause> or_clauses_{};
-  std::vector<Archetype *> custom_matching_archetypes_{};
-  std::vector<MutationFilterRule> mutation_filters_{};
+  ThreadPool *pool_{nullptr};
+  ParallelCommandBuffer *parallel_cmd_{nullptr};
+  detail::query::MutationFilterList mutation_filters_{};
   uint32_t added_since_version_{0};
-  bool filter_added_{false};
+  bool has_added_filter_{false};
 };
 
 } // namespace arche
