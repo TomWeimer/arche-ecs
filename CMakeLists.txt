@@ -19,92 +19,90 @@ target_sources(arche
   PUBLIC
     FILE_SET CXX_MODULES FILES
       src/arche.cppm
-      # Layer 0: Foundation Types & Common Utilities
-      src/types/entity.cppm
-      src/types/access.cppm
-      src/types/filters.cppm
-      src/types/types.cppm
-      src/types/detail/snapshot_header.cppm
-      src/types/detail/system_types.cppm
-      src/types/detail/plugin_concept.cppm
-      src/types/detail/resource_id.cppm
-      src/component/component_mask.cppm
-      src/component/type_id.cppm
-      src/component/detail/type_id_impl.cppm
-      src/component/component_access.cppm
-      src/component/detail/component_access_impl.cppm
-      src/component/detail/column_layout.cppm
-      src/common/hardware.cppm
-      src/common/math.cppm
-      src/common/gpu_layout.cppm
-      src/common/gpu_span.cppm
-      # Layer 1: Memory & State Representation
-      src/chunk/chunk.cppm
-      src/chunk/detail/chunk_impl.cppm
-      src/chunk/chunk_pool.cppm
-      src/chunk/detail/chunk_pool_impl.cppm
-      src/chunk/detail/chunk_header.cppm
-      src/entity/entity.cppm
-      src/entity/entity_view.cppm
-      src/entity/slot_map.cppm
-      src/entity/detail/slot_map_impl.cppm
-      src/entity/detail/entity_record.cppm
-      src/resource/resource.cppm
-      src/resource/detail/resource_impl.cppm
-      # Layer 2: Archetypes & Query Cache
-      src/archetype/archetype.cppm
-      src/archetype/detail/archetype_impl.cppm
-      src/archetype/archetype_graph.cppm
-      src/archetype/detail/archetype_graph_impl.cppm
-      src/query/query_cache.cppm
-      # Layer 3: Deferred Operations, Snapshot & In-Place Access
-      src/mutation/mutation.cppm
-      src/mutation/detail/mutation_impl.cppm
-      src/snapshot/snapshot.cppm
-      src/snapshot/detail/snapshot_impl.cppm
-      src/command/command.cppm
-      src/command/detail/command_impl.cppm
-      # Layer 4: Execution Engine (Concurrency, Query, System, Sort)
-      src/concurrency/thread_pool.cppm
-      src/concurrency/detail/thread_pool_impl.cppm
-      src/query/query.cppm
-      src/query/detail/query_masks.cppm
-      src/query/detail/query_offsets.cppm
-      src/query/detail/query_filter.cppm
-      src/query/detail/query_iterator.cppm
-      src/query/detail/query_impl.cppm
-      src/system/scheduler.cppm
-      src/system/detail/scheduler_impl.cppm
-      src/system/system_context.cppm
-      src/system/detail/system_context_impl.cppm
-      src/system/access_builder.cppm
-      src/system/detail/access_builder_impl.cppm
-      src/system/plugin.cppm
-      src/system/detail/plugin_impl.cppm
-      src/sort/sort.cppm
-      src/sort/detail/permute.cppm
-      src/sort/detail/sort_impl.cppm
+      # Layer 0: Foundation
+      src/foundation/types/entity.cppm
+      src/foundation/types/access.cppm
+      src/foundation/types/filters.cppm
+      src/foundation/types/types.cppm
+      src/foundation/types/detail/snapshot_header.cppm
+      src/foundation/types/detail/system_types.cppm
+      src/foundation/types/detail/plugin_concept.cppm
+      src/foundation/types/detail/resource_id.cppm
+      src/foundation/component/component_mask.cppm
+      src/foundation/component/type_id.cppm
+      src/foundation/component/detail/type_id_impl.cppm
+      src/foundation/component/detail/column_layout.cppm
+      src/foundation/hardware/hardware.cppm
+      src/foundation/hardware/math.cppm
+      src/foundation/hardware/gpu_layout.cppm
+      src/foundation/hardware/gpu_span.cppm
+      # Layer 1: Storage
+      src/storage/chunk/chunk.cppm
+      src/storage/chunk/detail/chunk_impl.cppm
+      src/storage/chunk/chunk_pool.cppm
+      src/storage/chunk/detail/chunk_pool_impl.cppm
+      src/storage/chunk/detail/chunk_header.cppm
+      src/storage/entity/entity.cppm
+      src/storage/entity/slot_map.cppm
+      src/storage/entity/detail/slot_map_impl.cppm
+      src/storage/entity/detail/entity_record.cppm
+      # Layer 2: Structure
+      src/structure/archetype/archetype.cppm
+      src/structure/archetype/detail/archetype_impl.cppm
+      src/structure/archetype/archetype_graph.cppm
+      src/structure/archetype/detail/archetype_graph_impl.cppm
+      src/structure/query_cache/query_cache.cppm
+      # Layer 3: Lifecycle
+      src/lifecycle/mutation/mutation.cppm
+      src/lifecycle/mutation/detail/mutation_impl.cppm
+      src/lifecycle/command/command.cppm
+      src/lifecycle/command/detail/command_impl.cppm
+      src/lifecycle/snapshot/snapshot.cppm
+      src/lifecycle/snapshot/detail/snapshot_impl.cppm
+      src/lifecycle/resource/resource.cppm
+      src/lifecycle/resource/detail/resource_impl.cppm
+      src/lifecycle/entity_view/entity_view.cppm
+      # Layer 4: Runtime
+      src/runtime/concurrency/thread_pool.cppm
+      src/runtime/concurrency/detail/thread_pool_impl.cppm
+      src/runtime/query/query.cppm
+      src/runtime/query/detail/query_masks.cppm
+      src/runtime/query/detail/query_offsets.cppm
+      src/runtime/query/detail/query_filter.cppm
+      src/runtime/query/detail/query_iterator.cppm
+      src/runtime/query/detail/query_impl.cppm
+      src/runtime/system/scheduler.cppm
+      src/runtime/system/detail/scheduler_impl.cppm
+      src/runtime/system/system_context.cppm
+      src/runtime/system/detail/system_context_impl.cppm
+      src/runtime/system/access_builder.cppm
+      src/runtime/system/detail/access_builder_impl.cppm
+      src/runtime/system/plugin.cppm
+      src/runtime/system/detail/plugin_impl.cppm
+      src/runtime/sort/sort.cppm
+      src/runtime/sort/detail/permute.cppm
+      src/runtime/sort/detail/sort_impl.cppm
       # Layer 5: Domain Sub-Facades
-      src/facade/archetype_facade/archetype_facade.cppm
-      src/facade/archetype_facade/archetype_facade_impl.cppm
-      src/facade/command_facade/command_facade.cppm
-      src/facade/command_facade/command_facade_impl.cppm
-      src/facade/entity_facade/entity_facade.cppm
-      src/facade/entity_facade/entity_facade_impl.cppm
-      src/facade/gpu_facade/gpu_facade.cppm
-      src/facade/gpu_facade/gpu_facade_impl.cppm
-      src/facade/resource_facade/resource_facade.cppm
-      src/facade/resource_facade/resource_facade_impl.cppm
-      src/facade/snapshot_facade/snapshot_facade.cppm
-      src/facade/snapshot_facade/snapshot_facade_impl.cppm
-      src/facade/system_facade/system_facade.cppm
-      src/facade/system_facade/system_facade_impl.cppm
+      src/domain/archetype_facade/archetype_facade.cppm
+      src/domain/archetype_facade/archetype_facade_impl.cppm
+      src/domain/command_facade/command_facade.cppm
+      src/domain/command_facade/command_facade_impl.cppm
+      src/domain/entity_facade/entity_facade.cppm
+      src/domain/entity_facade/entity_facade_impl.cppm
+      src/domain/gpu_facade/gpu_facade.cppm
+      src/domain/gpu_facade/gpu_facade_impl.cppm
+      src/domain/resource_facade/resource_facade.cppm
+      src/domain/resource_facade/resource_facade_impl.cppm
+      src/domain/snapshot_facade/snapshot_facade.cppm
+      src/domain/snapshot_facade/snapshot_facade_impl.cppm
+      src/domain/system_facade/system_facade.cppm
+      src/domain/system_facade/system_facade_impl.cppm
       # Layer 6: World Assembly Coordinator & Storage
       src/world/world.cppm
       src/world/detail/world_storage.cppm
       src/world/detail/world_impl.cppm
   PRIVATE
-    src/sort/detail/sort.cpp
+    src/runtime/sort/detail/sort.cpp
     src/world/detail/world.cpp
 )
 

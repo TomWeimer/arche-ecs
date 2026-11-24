@@ -19,18 +19,17 @@ export module arche:world;
 
 export import :entity;
 export import :entity_view;
-export import :facade.archetype;
-export import :facade.command;
-export import :facade.entity;
-export import :facade.gpu;
-export import :facade.resource;
-export import :facade.snapshot;
-export import :facade.system;
+export import :domain.archetype;
+export import :domain.command;
+export import :domain.entity;
+export import :domain.gpu;
+export import :domain.resource;
+export import :domain.snapshot;
+export import :domain.system;
 export import :system_context;
 export import :query;
 export import :mutation;
 export import :command;
-export import :component_access;
 export import :sort;
 
 import :world.detail.world_storage;

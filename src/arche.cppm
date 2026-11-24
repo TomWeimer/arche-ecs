@@ -44,8 +44,6 @@ export import :snapshot;
 export import :snapshot.detail.impl;
 export import :command;
 export import :command.detail.impl;
-export import :component_access;
-export import :component.detail.component_access_impl;
 export import :entity_view;
 
 // Layer 4: Execution Engine
@@ -67,20 +65,20 @@ export import :sort;
 export import :sort.detail.impl;
 
 // Layer 5: Domain Sub-Facades
-export import :facade.archetype;
-export import :facade.archetype_impl;
-export import :facade.command;
-export import :facade.command_impl;
-export import :facade.entity;
-export import :facade.entity_impl;
-export import :facade.gpu;
-export import :facade.gpu_impl;
-export import :facade.resource;
-export import :facade.resource_impl;
-export import :facade.snapshot;
-export import :facade.snapshot_impl;
-export import :facade.system;
-export import :facade.system_impl;
+export import :domain.archetype;
+export import :domain.archetype_impl;
+export import :domain.command;
+export import :domain.command_impl;
+export import :domain.entity;
+export import :domain.entity_impl;
+export import :domain.gpu;
+export import :domain.gpu_impl;
+export import :domain.resource;
+export import :domain.resource_impl;
+export import :domain.snapshot;
+export import :domain.snapshot_impl;
+export import :domain.system;
+export import :domain.system_impl;
 
 // Layer 6: World Coordinator & Assembly
 export import :world;

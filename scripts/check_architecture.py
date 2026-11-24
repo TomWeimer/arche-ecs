@@ -57,21 +57,8 @@ SUBSYSTEM_RULES: Dict[str, Dict] = {
     },
     "public_entities": {
         "layer": 1,
-        "description": "Public Entity and Resource handle headers",
+        "description": "Public Entity handle headers",
         "allowed_targets": ["types", "public_entities", "sparse_entity"],
-    },
-    "snapshot": {
-        "layer": 3,
-        "description": "Binary snapshot serialization engine and file I/O",
-        "allowed_targets": [
-            "archetype",
-            "chunk",
-            "sparse_entity",
-            "core_component",
-            "hardware",
-            "types",
-            "snapshot",
-        ],
     },
     "query_cache": {
         "layer": 2,
@@ -91,17 +78,18 @@ SUBSYSTEM_RULES: Dict[str, Dict] = {
             "archetype",
         ],
     },
-    "entity_lifecycle": {
+    "mutation": {
         "layer": 3,
-        "description": "Fast entity spawn, batch allocation, and EntityRef view",
+        "description": "Component addition and removal archetype transitions",
         "allowed_targets": [
             "archetype",
             "chunk",
             "sparse_entity",
+            "public_entities",
             "core_component",
             "hardware",
             "types",
-            "entity_lifecycle",
+            "mutation",
         ],
     },
     "command": {
@@ -111,16 +99,17 @@ SUBSYSTEM_RULES: Dict[str, Dict] = {
             "archetype",
             "chunk",
             "sparse_entity",
-            "entity_lifecycle",
+            "public_entities",
             "core_component",
             "hardware",
             "types",
+            "mutation",
             "command",
         ],
     },
-    "component_access": {
+    "snapshot": {
         "layer": 3,
-        "description": "Type-erased in-place component access and version stamping",
+        "description": "Binary snapshot serialization engine and file I/O",
         "allowed_targets": [
             "archetype",
             "chunk",
@@ -128,7 +117,26 @@ SUBSYSTEM_RULES: Dict[str, Dict] = {
             "core_component",
             "hardware",
             "types",
-            "component_access",
+            "snapshot",
+        ],
+    },
+    "resource": {
+        "layer": 3,
+        "description": "Global singleton resource registry and container",
+        "allowed_targets": ["types", "hardware", "resource"],
+    },
+    "entity_lifecycle": {
+        "layer": 3,
+        "description": "Fast entity spawn, batch allocation, and EntityRef view",
+        "allowed_targets": [
+            "archetype",
+            "chunk",
+            "sparse_entity",
+            "public_entities",
+            "core_component",
+            "hardware",
+            "types",
+            "entity_lifecycle",
         ],
     },
     "query": {
@@ -136,6 +144,7 @@ SUBSYSTEM_RULES: Dict[str, Dict] = {
         "description": "Type-safe SIMD queries, filters, and iterators",
         "allowed_targets": [
             "command",
+            "mutation",
             "concurrency",
             "archetype",
             "chunk",
@@ -165,7 +174,9 @@ SUBSYSTEM_RULES: Dict[str, Dict] = {
         "description": "DAG system scheduling, access bitmasks, and plugins",
         "allowed_targets": [
             "command",
+            "mutation",
             "query",
+            "resource",
             "concurrency",
             "archetype",
             "chunk",
@@ -191,27 +202,28 @@ SUBSYSTEM_RULES: Dict[str, Dict] = {
             "sort",
         ],
     },
-    "facade": {
+    "domain": {
         "layer": 5,
         "description": "Domain facades encapsulating lower-level subsystems",
         "allowed_targets": [
             "types",
             "hardware",
             "core_component",
-            "component_access",
             "chunk",
             "sparse_entity",
             "public_entities",
             "entity_lifecycle",
             "archetype",
             "query_cache",
+            "mutation",
             "command",
             "snapshot",
+            "resource",
             "query",
             "concurrency",
             "system",
             "sort",
-            "facade",
+            "domain",
         ],
     },
     "world": {
@@ -236,54 +248,68 @@ def classify_subsystem(file_path: str) -> Tuple[str, int]:
     if p == "src/arche.cppm":
         return "arche_master", SUBSYSTEM_RULES["arche_master"]["layer"]
 
-    # src/ mappings
-    if p.startswith("src/hardware/") or p.startswith("src/common/"):
-        return "hardware", SUBSYSTEM_RULES["hardware"]["layer"]
-    if p.startswith("src/types/"):
+    # Tier 0: foundation
+    if p.startswith("src/foundation/types/") or p.startswith("src/types/"):
         return "types", SUBSYSTEM_RULES["types"]["layer"]
     if (
-        p.startswith("src/component/type_id")
-        or p.startswith("src/component/component_mask")
-        or p.startswith("src/component/detail/column_layout")
-        or p.startswith("src/component/column_layout")
+        p.startswith("src/foundation/hardware/")
+        or p.startswith("src/hardware/")
+        or p.startswith("src/common/")
+    ):
+        return "hardware", SUBSYSTEM_RULES["hardware"]["layer"]
+    if (
+        p.startswith("src/foundation/component/")
+        or p.startswith("src/component/")
     ):
         return "core_component", SUBSYSTEM_RULES["core_component"]["layer"]
-    if p.startswith("src/component/component_access") or p.startswith(
-        "src/component/detail/component_access"
-    ):
-        return "component_access", SUBSYSTEM_RULES["component_access"]["layer"]
-    if p.startswith("src/chunk/"):
+
+    # Tier 1: storage
+    if p.startswith("src/storage/chunk/") or p.startswith("src/chunk/"):
         return "chunk", SUBSYSTEM_RULES["chunk"]["layer"]
-    if (
-        p.startswith("src/entity/slot_map")
-        or p.startswith("src/entity/detail/entity_record")
-        or p.startswith("src/entity/entity_record")
-    ):
-        return "sparse_entity", SUBSYSTEM_RULES["sparse_entity"]["layer"]
-    if p == "src/entity/entity.cppm" or p.startswith("src/resource/"):
+    if p == "src/storage/entity/entity.cppm" or p == "src/entity/entity.cppm":
         return "public_entities", SUBSYSTEM_RULES["public_entities"]["layer"]
-    if p.startswith("src/entity/"):
-        return "entity_lifecycle", SUBSYSTEM_RULES["entity_lifecycle"]["layer"]
-    if p.startswith("src/mutation/"):
-        return "entity_lifecycle", SUBSYSTEM_RULES["entity_lifecycle"]["layer"]
-    if p.startswith("src/snapshot/"):
-        return "snapshot", SUBSYSTEM_RULES["snapshot"]["layer"]
-    if p.startswith("src/query/query_cache"):
-        return "query_cache", SUBSYSTEM_RULES["query_cache"]["layer"]
-    if p.startswith("src/query/"):
-        return "query", SUBSYSTEM_RULES["query"]["layer"]
-    if p.startswith("src/archetype/"):
+    if p.startswith("src/storage/entity/") or p.startswith("src/entity/"):
+        return "sparse_entity", SUBSYSTEM_RULES["sparse_entity"]["layer"]
+
+    # Tier 2: structure
+    if p.startswith("src/structure/archetype/") or p.startswith("src/archetype/"):
         return "archetype", SUBSYSTEM_RULES["archetype"]["layer"]
-    if p.startswith("src/command/"):
+    if (
+        p.startswith("src/structure/query_cache/")
+        or p.startswith("src/query/query_cache")
+    ):
+        return "query_cache", SUBSYSTEM_RULES["query_cache"]["layer"]
+
+    # Tier 3: lifecycle
+    if p.startswith("src/lifecycle/mutation/") or p.startswith("src/mutation/"):
+        return "mutation", SUBSYSTEM_RULES["mutation"]["layer"]
+    if p.startswith("src/lifecycle/command/") or p.startswith("src/command/"):
         return "command", SUBSYSTEM_RULES["command"]["layer"]
-    if p.startswith("src/concurrency/"):
+    if p.startswith("src/lifecycle/snapshot/") or p.startswith("src/snapshot/"):
+        return "snapshot", SUBSYSTEM_RULES["snapshot"]["layer"]
+    if p.startswith("src/lifecycle/resource/") or p.startswith("src/resource/"):
+        return "resource", SUBSYSTEM_RULES["resource"]["layer"]
+    if (
+        p.startswith("src/lifecycle/entity_view/")
+        or p.startswith("src/entity_view/")
+    ):
+        return "entity_lifecycle", SUBSYSTEM_RULES["entity_lifecycle"]["layer"]
+
+    # Tier 4: runtime
+    if p.startswith("src/runtime/query/") or p.startswith("src/query/"):
+        return "query", SUBSYSTEM_RULES["query"]["layer"]
+    if p.startswith("src/runtime/concurrency/") or p.startswith("src/concurrency/"):
         return "concurrency", SUBSYSTEM_RULES["concurrency"]["layer"]
-    if p.startswith("src/system/"):
+    if p.startswith("src/runtime/system/") or p.startswith("src/system/"):
         return "system", SUBSYSTEM_RULES["system"]["layer"]
-    if p.startswith("src/sort/"):
+    if p.startswith("src/runtime/sort/") or p.startswith("src/sort/"):
         return "sort", SUBSYSTEM_RULES["sort"]["layer"]
-    if p.startswith("src/facade/"):
-        return "facade", SUBSYSTEM_RULES["facade"]["layer"]
+
+    # Tier 5: domain
+    if p.startswith("src/domain/") or p.startswith("src/facade/"):
+        return "domain", SUBSYSTEM_RULES["domain"]["layer"]
+
+    # Tier 6: world
     if p.startswith("src/world/"):
         return "world", SUBSYSTEM_RULES["world"]["layer"]
 
@@ -433,48 +459,16 @@ def run_checks(root_dir: str) -> int:
                         src_dir = os.path.dirname(src_file).replace("\\", "/")
                         # Allow internal imports within the subsystem (or coordinator world/ / command_playback)
                         is_own_subsystem = (
-                            src_dir.startswith(f"src/{part_subsystem}")
-                            or (
-                                part_subsystem == "component"
-                                and src_dir.startswith("src/component")
-                            )
-                            or (
-                                part_subsystem == "hardware"
-                                and src_dir.startswith("src/hardware")
-                            )
-                            or (
-                                part_subsystem == "entity"
-                                and src_dir.startswith("src/entity")
-                            )
+                            f"/{part_subsystem}" in src_dir
                             or (
                                 part_subsystem == "types"
                                 and (
-                                    src_dir.startswith("src/types")
-                                    or src_dir.startswith("src/world")
-                                    or src_dir.startswith("src/system")
-                                    or src_dir.startswith("src/snapshot")
-                                    or src_dir.startswith("src/resource")
+                                    "types" in src_dir
+                                    or "world" in src_dir
+                                    or "system" in src_dir
+                                    or "snapshot" in src_dir
+                                    or "resource" in src_dir
                                 )
-                            )
-                            or (
-                                part_subsystem == "command"
-                                and src_dir.startswith("src/command")
-                            )
-                            or (
-                                part_subsystem == "query"
-                                and src_dir.startswith("src/query")
-                            )
-                            or (
-                                part_subsystem == "archetype"
-                                and src_dir.startswith("src/archetype")
-                            )
-                            or (
-                                part_subsystem == "sort"
-                                and src_dir.startswith("src/sort")
-                            )
-                            or (
-                                part_subsystem == "snapshot"
-                                and src_dir.startswith("src/snapshot")
                             )
                         )
                         # Assembly layer exceptions: World and coordinators
@@ -483,7 +477,7 @@ def run_checks(root_dir: str) -> int:
                             or src_file == "src/arche.cppm"
                             or (
                                 partition == "component.detail.column_layout"
-                                and src_file.startswith("src/chunk/")
+                                and "chunk" in src_file
                             )
                         )
                         if not is_own_subsystem and not is_coordinator:

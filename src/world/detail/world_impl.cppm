@@ -19,24 +19,22 @@ module;
 export module arche:world.detail.impl;
 
 import :world;
-import :facade.archetype;
-import :facade.archetype_impl;
-import :facade.command;
-import :facade.command_impl;
-import :facade.entity;
-import :facade.entity_impl;
-import :facade.gpu;
-import :facade.gpu_impl;
-import :facade.resource;
-import :facade.resource_impl;
-import :facade.snapshot;
-import :facade.snapshot_impl;
-import :facade.system;
-import :facade.system_impl;
+import :domain.archetype;
+import :domain.archetype_impl;
+import :domain.command;
+import :domain.command_impl;
+import :domain.entity;
+import :domain.entity_impl;
+import :domain.gpu;
+import :domain.gpu_impl;
+import :domain.resource;
+import :domain.resource_impl;
+import :domain.snapshot;
+import :domain.snapshot_impl;
+import :domain.system;
+import :domain.system_impl;
 import :mutation;
 import :command;
-import :component_access;
-import :component.detail.component_access_impl;
 import :component.detail.type_id_impl;
 import :concurrency.detail.thread_pool_impl;
 import :system.detail.scheduler_impl;
@@ -193,17 +191,30 @@ inline SystemContext World::create_system_context(
 }
 
 template <Component T> inline bool World::has(Entity entity) const noexcept {
-  return ComponentAccess::has<T>(storage_->slot_map, entity);
+  const EntityRecord *record = storage_->slot_map.find_record(entity);
+  if (!record || !record->archetype) {
+    return false;
+  }
+  return record->archetype->has_component(type_id<T>());
 }
 
 template <Component T> inline const T &World::get(Entity entity) const {
-  return ComponentAccess::get<T>(storage_->slot_map, entity);
+  const EntityRecord &record = storage_->slot_map.get_record(entity);
+  Archetype *arch = record.archetype;
+  const int16_t col = arch->column_index(type_id<T>());
+  assert(col >= 0 && "Component not present on entity");
+  const auto &layout = arch->column_layout(static_cast<size_t>(col));
+  return *reinterpret_cast<const T *>(record.chunk->component_element(layout, record.row));
 }
 
 template <Component T> inline T &World::get_mut(Entity entity) {
-  return ComponentAccess::get_mut<T>(
-      storage_->slot_map, entity, storage_->current_version
-  );
+  const EntityRecord &record = storage_->slot_map.get_record(entity);
+  Archetype *arch = record.archetype;
+  const int16_t col = arch->column_index(type_id<T>());
+  assert(col >= 0 && "Component not present on entity");
+  record.chunk->set_column_version(static_cast<uint16_t>(col), storage_->current_version);
+  const auto &layout = arch->column_layout(static_cast<size_t>(col));
+  return *reinterpret_cast<T *>(record.chunk->component_element(layout, record.row));
 }
 
 template <Component T> inline void World::add(Entity entity, T &&component) {
