@@ -69,95 +69,11 @@
 
 ## Layered Architecture & Strict Dependency Flow
 
-Dependencies flow strictly top-down. Lower layers never depend on or include higher layers. Validated by `make lint` (`scripts/check_architecture.py`). Interactive SVG schema available at [docs/architecture/architecture_schema.html](docs/architecture/architecture_schema.html).
+Dependencies flow strictly top-down. Lower layers never depend on or include higher layers. Validated by `make lint` (`scripts/check_architecture.py`).
 
-```text
-                ┌──────────────────────────────────────────────────────┐
-                │                       LAYER 0                        │
-                │                     foundation                       │
-                │                                                      │
-                │  ┌──────────┐ ┌───────────┐ ┌──────────┐ ┌────────┐  │
-                │  │  entity  │ │ component │ │ hardware │ │ types  │  │
-                │  └──────────┘ └───────────┘ └──────────┘ └────────┘  │
-                └──────────────────────────┬───────────────────────────┘
-                                           │
-                                           ▼
-                ┌──────────────────────────────────────────────────────┐
-                │                       LAYER 1                        │
-                │                       storage                        │
-                │                                                      │
-                │  ┌──────────┐ ┌───────────┐ ┌──────────┐ ┌─────────┐ │
-                │  │  chunk   │ │ slot_map  │ │ resource │ │ command │ │
-                │  └──────────┘ └───────────┘ └──────────┘ └─────────┘ │
-                └──────────────────────────┬───────────────────────────┘
-                                           │
-                                           ▼
-                                ┌──────────────────────┐
-                                │       LAYER 2        │
-                                │      archetype       │
-                                └──────────┬───────────┘
-                                           │
-                                           ▼
-                                ┌──────────────────────┐
-                                │       LAYER 3        │
-                                │    mutation.cppm     │
-                                └──────────┬───────────┘
-                                           │
-                                           ▼
-    ┌──────────────────────────────────────────────────────────────────────┐
-    │                               RUNTIME                                │
-    │                                                                      │
-    │                        ┌────────────────────┐                        │
-    │                        │    concurrency     │                        │
-    │                        └─────────┬──────────┘                        │
-    │                                  │                                   │
-    │                         ┌────────┴────────┐                          │
-    │                         ▼                 ▼                          │
-    │                  ┌─────────────┐   ┌─────────────┐                   │
-    │                  │    query    │   │    sort     │                   │
-    │                  └──────┬──────┘   └──────┬──────┘                   │
-    │                         └────────┬────────┘                          │
-    │                                  │                                   │
-    │                                  ▼                                   │
-    │                        ┌────────────────────┐                        │
-    │                        │       access       │                        │
-    │                        └─────────┬──────────┘                        │
-    │                                  │                                   │
-    │                                  ▼                                   │
-    │                        ┌────────────────────┐                        │
-    │                        │       system       │                        │
-    │                        └─────────┬──────────┘                        │
-    │                                  │                                   │
-    │                                  ▼                                   │
-    │                        ┌────────────────────┐                        │
-    │                        │     scheduler      │                        │
-    │                        └─────────┬──────────┘                        │
-    │                                  │                                   │
-    │                                  ▼                                   │
-    │                        ┌────────────────────┐                        │
-    │                        │       plugin       │                        │
-    │                        └─────────┬──────────┘                        │
-    │                                  │                                   │
-    └──────────────────────────────────┼───────────────────────────────────┘
-                                       │
-                                       ▼
-                            ┌──────────────────────┐
-                            │       LAYER 10       │
-                            │        views         │
-                            └──────────┬───────────┘
-                                       │
-                                       ▼
-                            ┌──────────────────────┐
-                            │       LAYER 11       │
-                            │        world         │
-                            └──────────┬───────────┘
-                                       │
-                                       ▼
-                            ┌──────────────────────┐
-                            │       LAYER 12       │
-                            │      arche.cppm      │
-                            └──────────────────────┘
-```
+<p align="center">
+  <img src="docs/images/architecture_schema.svg" alt="Arche ECS Architectural & Dependency Flow" width="700">
+</p>
 
 | Layer | Subsystem / Tier | Contents | Permitted Dependencies |
 | :---: | :--- | :--- | :--- |
