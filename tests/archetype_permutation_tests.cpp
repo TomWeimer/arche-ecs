@@ -1,4 +1,5 @@
 import arche;
+#include "common/world_test_probe.hpp"
 
 #include <algorithm>
 #include <cassert>
@@ -12,7 +13,7 @@ namespace {
 using arche::internal::Archetype;
 using arche::Entity;
 using arche::World;
-using arche::WorldTestAccessor;
+using arche::test::WorldTestProbe;
 } // namespace
 
 // =============================================================================
@@ -56,11 +57,11 @@ void test_single_chunk_permutation() {
 
   // Reverse permutation: [4, 3, 2, 1, 0]
   std::vector<uint32_t> perm = {4, 3, 2, 1, 0};
-  Archetype *arch = world.storage()->slot_map
+  Archetype *arch = WorldTestProbe::slot_map(world)
                         .get_record(entities[0])
                         .archetype;
 
-  WorldTestAccessor::permute(world, arch, perm);
+  WorldTestProbe::permute(world, arch, perm);
 
   // Verify all entity handles remain alive and point to their permuted values
   for (size_t i = 0; i < COUNT; ++i) {
@@ -119,12 +120,12 @@ void test_multi_chunk_permutation() {
     perm[i] = static_cast<uint32_t>(COUNT - 1 - i);
   }
 
-  Archetype *arch = world.storage()->slot_map
+  Archetype *arch = WorldTestProbe::slot_map(world)
                         .get_record(entities[0])
                         .archetype;
 
   auto start = std::chrono::high_resolution_clock::now();
-  WorldTestAccessor::permute(world, arch, perm);
+  WorldTestProbe::permute(world, arch, perm);
   auto end = std::chrono::high_resolution_clock::now();
   std::chrono::duration<double, std::milli> duration = end - start;
 
@@ -208,7 +209,7 @@ void test_handle_stability_stress() {
     entities.push_back(world.spawn(Position{static_cast<float>(i), 0.0f}));
   }
 
-  Archetype *arch = world.storage()->slot_map
+  Archetype *arch = WorldTestProbe::slot_map(world)
                         .get_record(entities[0])
                         .archetype;
 
@@ -218,7 +219,7 @@ void test_handle_stability_stress() {
 
   for (int iter = 0; iter < 5; ++iter) {
     std::reverse(perm.begin(), perm.end());
-    WorldTestAccessor::permute(world, arch, perm);
+    WorldTestProbe::permute(world, arch, perm);
 
     // Verify all 2,000 entities still resolve correctly
     for (size_t i = 0; i < COUNT; ++i) {

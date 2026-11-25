@@ -39,22 +39,6 @@ uint32_t World::advance_version() noexcept {
   return next;
 }
 
-void World::set_version(uint32_t v) noexcept {
-  storage_->current_version = v;
-}
-
-SnapshotStorageView World::snapshot_storage_view() const noexcept {
-  return SnapshotStorageView{
-      .slot_map = storage_->slot_map,
-      .graph = storage_->graph,
-      .chunk_pool = storage_->chunk_pool,
-      .registry = storage_->registry,
-      .resources = storage_->resources,
-      .chunk_size = storage_->chunk_size,
-      .version = storage_->current_version,
-  };
-}
-
 QueryCache *World::query_cache(
     const ComponentMask &include,
     const ComponentMask &exclude,
@@ -93,9 +77,18 @@ World::World(size_t chunk_size, uint32_t thread_count)
       entities(storage_->slot_map),
       snapshots(
           [](void *ctx) -> SnapshotStorageView {
-            return static_cast<World *>(ctx)->snapshot_storage_view();
+            auto *storage = static_cast<internal::WorldStorage *>(ctx);
+            return SnapshotStorageView{
+                .slot_map = storage->slot_map,
+                .graph = storage->graph,
+                .chunk_pool = storage->chunk_pool,
+                .registry = storage->registry,
+                .resources = storage->resources,
+                .chunk_size = storage->chunk_size,
+                .version = storage->current_version,
+            };
           },
-          this
+          storage_
       ),
       resources(storage_->resources),
       archetypes(storage_->graph) {
@@ -116,18 +109,6 @@ void World::run() {
   } else {
     storage_->scheduler.run(*storage_->execution_target);
   }
-}
-
-void World::run_sequential() {
-  assert(storage_ != nullptr);
-  assert(storage_->execution_target != nullptr);
-  storage_->scheduler.run(*storage_->execution_target);
-}
-
-void World::compile() {
-  assert(storage_ != nullptr);
-  assert(storage_->execution_target != nullptr);
-  storage_->scheduler.compile(*storage_->execution_target);
 }
 
 std::optional<SystemFacade> World::system(std::string_view name) noexcept {

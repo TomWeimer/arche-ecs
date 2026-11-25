@@ -1,4 +1,5 @@
 import arche;
+#include "common/world_test_probe.hpp"
 
 #include <cassert>
 #include <chrono>
@@ -11,6 +12,7 @@ using arche::Added;
 using arche::Entity;
 using arche::Mutated;
 using arche::World;
+using arche::test::WorldTestProbe;
 } // namespace
 
 // =============================================================================
@@ -201,7 +203,7 @@ void test_tick_wraparound_protection() {
   World world;
 
   // Set version to right before wrap-around: UINT32_MAX - 2
-  world.set_version(UINT32_MAX - 2);
+  WorldTestProbe::set_version(world, UINT32_MAX - 2);
 
   // Spawn entity at UINT32_MAX - 2 (in Position+Velocity archetype chunk)
   Entity e1 = world.spawn(Position{1.0f, 2.0f}, Velocity{1.0f, 1.0f});

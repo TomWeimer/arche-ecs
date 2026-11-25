@@ -1,4 +1,5 @@
 import arche;
+#include "common/world_test_probe.hpp"
 
 #include <atomic>
 
@@ -15,6 +16,7 @@ using arche::SystemContext;
 using arche::SystemScale;
 using arche::internal::ThreadPool;
 using arche::World;
+using arche::test::WorldTestProbe;
 } // namespace
 
 // =============================================================================
@@ -61,8 +63,8 @@ void test_read_write_hazard_separation() {
       [&](SystemContext &) { log.push_back("Write"); }
   );
 
-  scheduler.compile(world);
-  scheduler.run(world, pool);
+  scheduler.compile(WorldTestProbe::execution_target(world));
+  scheduler.run(WorldTestProbe::execution_target(world), pool);
 
   // Reader and Writer must NOT run in the same batch due to conflict
   assert(log.size() == 2);
@@ -96,8 +98,8 @@ void test_concurrent_readers_in_single_batch() {
       }
   );
 
-  scheduler.compile(world);
-  scheduler.run(world, pool);
+  scheduler.compile(WorldTestProbe::execution_target(world));
+  scheduler.run(WorldTestProbe::execution_target(world), pool);
 
   assert(reader_count.load() == 2);
   std::cout << "PASSED\n";
@@ -135,8 +137,8 @@ void test_parallel_chunk_work_stealing_writers() {
       SystemScale::Wide
   );
 
-  scheduler.compile(world);
-  scheduler.run(world, pool);
+  scheduler.compile(WorldTestProbe::execution_target(world));
+  scheduler.run(WorldTestProbe::execution_target(world), pool);
 
   // Verify all entities updated in-place across worker threads without data
   // race
@@ -205,13 +207,13 @@ void test_scheduler_stage_overhead() {
       }
   );
 
-  scheduler.compile(world);
+  scheduler.compile(WorldTestProbe::execution_target(world));
 
   constexpr int ITERS = 10'000;
   auto start = std::chrono::high_resolution_clock::now();
 
   for (int i = 0; i < ITERS; ++i) {
-    scheduler.run(world, pool);
+    scheduler.run(WorldTestProbe::execution_target(world), pool);
   }
 
   auto end = std::chrono::high_resolution_clock::now();

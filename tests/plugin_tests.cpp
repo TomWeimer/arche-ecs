@@ -162,7 +162,6 @@ void test_stateless_plugin_installation() {
   assert(world.resources.get<SimulationClock>().frame_count == 0);
 
   // Compile and run a frame
-  world.compile();
   world.run();
 
   assert(world.resources.get<SimulationClock>().frame_count == 1);
@@ -189,7 +188,6 @@ void test_stateful_plugin_installation() {
   assert(world.resources.has<PhysicsSettings>());
   assert(world.resources.get<PhysicsSettings>().gravity_y == -19.62f);
 
-  world.compile();
   world.run();
 
   std::cout << "PASSED\n";
@@ -209,7 +207,6 @@ void test_plugin_fluent_chaining() {
   assert(world.resources.has<SimulationClock>());
   assert(world.resources.get<PhysicsSettings>().gravity_y == -25.0f);
 
-  world.compile();
   world.run();
 
   assert(world.resources.get<SimulationClock>().frame_count == 1);
@@ -266,7 +263,6 @@ void test_world_run_frame_advances_tick() {
   World world;
 
   world.add_plugin<ValidClockPlugin>();
-  world.compile();
 
   const uint32_t initial_version = world.version();
   assert(initial_version >= 1);
@@ -292,7 +288,6 @@ void test_system_facade_inspection_and_control() {
   World world;
   world.add_plugin<ValidClockPlugin>();
   world.add_plugin(ConfigurablePhysicsPlugin{.custom_gravity = -9.81f});
-  world.compile();
 
   // 1. Non-existent system lookup returns nullopt
   auto missing = world.system("NonExistentSystem");

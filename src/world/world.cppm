@@ -18,6 +18,8 @@ module;
 export module arche:world;
 
 export import :entity;
+export import :slot_map;
+export import :archetype_graph;
 export import :entity_view;
 export import :archetype_view;
 export import :resource_view;
@@ -32,6 +34,11 @@ export import :sort;
 import :world.detail.world_storage;
 
 export namespace arche {
+
+// Forward declaration for internal engine access
+namespace internal {
+struct WorldAccess;
+}
 
 // =============================================================================
 // World: Central Simulation Coordinator
@@ -54,20 +61,23 @@ export namespace arche {
  * - `world.entities`   -> Entity alive checks, total count, slot resolution.
  * - `world.resources`  -> Global singleton resources (Time, Input, Config).
  * - `world.snapshots`  -> Binary persistence (save / load world state).
- * - `world.systems`    -> Stage scheduler and pipeline execution.
  * - `world.archetypes` -> Structural graph metrics and chunk memory inspection.
  */
 class World {
 private:
   internal::WorldStorage *storage_{nullptr};
 
+  friend struct internal::WorldAccess;
+
+  [[nodiscard]] internal::MutationContext mutation_context() noexcept;
+  [[nodiscard]] internal::SystemExecutionTarget system_execution_target() noexcept;
+  [[nodiscard]] internal::QueryCache *query_cache(
+      const internal::ComponentMask &include,
+      const internal::ComponentMask &exclude,
+      const internal::ComponentMask &any = {}
+  );
+
 public:
-  // --- Internal Storage Access -----------------------------------------------
-
-  /// Direct access to internal storage for world algorithms and modules.
-  [[nodiscard]] internal::WorldStorage *storage() noexcept { return storage_; }
-  [[nodiscard]] const internal::WorldStorage *storage() const noexcept { return storage_; }
-
   // --- Domain Sub-Facades ----------------------------------------------------
 
   /// Global entity table introspection: count, capacity, contains, and slot resolution.
@@ -84,14 +94,8 @@ public:
 
   // --- Simulation Execution --------------------------------------------------
 
-  /// Executes all compiled scheduler stages in parallel using the World's worker threads.
+  /// Executes all compiled scheduler stages using the World's worker threads.
   void run();
-
-  /// Executes all compiled scheduler stages sequentially on the calling thread.
-  void run_sequential();
-
-  /// Compiles system stages, resolving parallel dependencies and access descriptors.
-  void compile();
 
   // --- System Introspection --------------------------------------------------
 
@@ -122,12 +126,6 @@ public:
   /// Destroys all active entities and recycles all allocated chunks back to the
   /// pool.
   void clear();
-
-  /// Commits all deferred mutations recorded in a CommandBuffer to this World.
-  void commit(CommandBuffer &cmd);
-
-  /// Commits all deferred mutations recorded in a ParallelCommandBuffer to this World.
-  void commit(internal::ParallelCommandBuffer &cmd);
 
   // --- Plugin Management -----------------------------------------------------
 
@@ -235,12 +233,6 @@ public:
 
   // --- Query Factory ---------------------------------------------------------
 
-  /// Creates a bounded execution context for a system.
-  [[nodiscard]] SystemContext create_system_context(
-      CommandBuffer &cmd,
-      ParallelCommandBuffer *parallel_cmd = nullptr
-  );
-
   /// Constructs a streaming query matching entities with requested components
   /// and optional filters. Supports With<...>, Without<...>, Mutated<T>, Added,
   /// Or<...>, and optional pointer components.
@@ -264,36 +256,39 @@ public:
 
   /// Advances the simulation version sequence monotonically, skipping reserved sentinels.
   uint32_t advance_version() noexcept;
-
-  /// Sets the current simulation version sequence directly (e.g. for testing rollover).
-  void set_version(uint32_t v) noexcept;
-
-  /// Retrieves a snapshot storage view over internal storage for serialization.
-  [[nodiscard]] SnapshotStorageView snapshot_storage_view() const noexcept;
-
-  /// Resolves or instantiates a matching QueryCache for the specified inclusion/exclusion masks.
-  internal::QueryCache *query_cache(
-      const internal::ComponentMask &include,
-      const internal::ComponentMask &exclude,
-      const internal::ComponentMask &any = {}
-  );
-
-  // --- Mutation Execution Context --------------------------------------------
-
-  /// Creates a lightweight mutation execution context view over the world storage.
-  [[nodiscard]] internal::MutationContext mutation_context() noexcept;
-
-  /// Implicit conversion enabling direct `cmd.commit(world)` syntax without upward dependencies.
-  operator internal::MutationContext() noexcept;
-
-  // --- System Execution View -------------------------------------------------
-
-  /// Creates a decoupled execution view over the world storage for the scheduler.
-  [[nodiscard]] internal::SystemExecutionTarget system_execution_target() noexcept;
-
-  /// Implicit conversion enabling `scheduler.run(world, pool)` and `scheduler.compile(world)` syntax.
-  operator internal::SystemExecutionTarget() noexcept;
 };
+
+// =============================================================================
+// WorldAccess: Internal Subsystem Bridge
+// =============================================================================
+
+namespace internal {
+
+struct WorldAccess {
+  [[nodiscard]] static SlotMap &slot_map(World &w) noexcept;
+  [[nodiscard]] static const SlotMap &slot_map(const World &w) noexcept;
+  [[nodiscard]] static ArchetypeGraph &graph(World &w) noexcept;
+  [[nodiscard]] static const ArchetypeGraph &graph(const World &w) noexcept;
+  [[nodiscard]] static ComponentRegistry &registry(World &w) noexcept;
+  static void set_version(World &w, uint32_t v) noexcept;
+  static void commit(World &w, CommandBuffer &cmd);
+  static void commit_commands(World &w);
+  static SystemContext create_system_context(
+      World &w,
+      CommandBuffer &cmd,
+      ParallelCommandBuffer *parallel_cmd = nullptr
+  );
+  [[nodiscard]] static MutationContext mutation_context(World &w) noexcept;
+  [[nodiscard]] static SystemExecutionTarget system_execution_target(World &w) noexcept;
+  [[nodiscard]] static QueryCache *query_cache(
+      World &w,
+      const ComponentMask &include,
+      const ComponentMask &exclude,
+      const ComponentMask &any = {}
+  );
+};
+
+} // namespace internal
 
 // --- Spatial Locality Sorting Algorithms -------------------------------------
 
@@ -304,18 +299,5 @@ public:
  */
 template <typename Component, typename... Filters, typename Compare>
 void sort(World &world, Compare &&comp);
-
-// =============================================================================
-// WorldTestAccessor (Internal White-Box Testing Harness)
-// =============================================================================
-
-struct WorldTestAccessor {
-  static void commit_commands(World &w);
-  static void permute(
-      World &w,
-      internal::Archetype *arch,
-      std::span<const uint32_t> indices
-  );
-};
 
 } // namespace arche

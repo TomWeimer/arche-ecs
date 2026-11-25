@@ -1,4 +1,5 @@
 import arche;
+#include "common/world_test_probe.hpp"
 
 #include <cassert>
 #include <iostream>
@@ -10,6 +11,7 @@ using arche::Entity;
 using arche::internal::ParallelCommandBuffer;
 using arche::internal::ThreadPool;
 using arche::World;
+using arche::test::WorldTestProbe;
 } // namespace
 
 // =============================================================================
@@ -90,7 +92,7 @@ void test_parallel_command_buffers() {
         }
       }
   );
-  arche::WorldTestAccessor::commit_commands(world);
+  WorldTestProbe::commit_commands(world);
 
   assert(world.entities.count() == COUNT / 2);
 
@@ -135,7 +137,7 @@ void test_chunk_user_metadata_culling() {
   constexpr size_t COUNT = 5000;
   world.spawn({.count = COUNT}, Position{1.0f, 1.0f});
 
-  Archetype *arch = world.storage()->graph
+  Archetype *arch = WorldTestProbe::graph(world)
                         .archetypes()
                         .back()
                         .get();

@@ -1,4 +1,5 @@
 import arche;
+#include "common/world_test_probe.hpp"
 
 #include <cassert>
 #include <chrono>
@@ -9,6 +10,7 @@ namespace {
 using arche::CommandBuffer;
 using arche::Entity;
 using arche::World;
+using arche::test::WorldTestProbe;
 } // namespace
 
 // =============================================================================
@@ -167,7 +169,7 @@ void test_command_buffer_batch_destruction() {
   cmd.despawn(std::span<const Entity>(entities.data(), 5000));
   assert(world.entities.count() == COUNT); // Deferred until playback
 
-  world.commit(cmd);
+  WorldTestProbe::commit(world, cmd);
   assert(world.entities.count() == 5000);
 
   std::cout << "PASSED\n";

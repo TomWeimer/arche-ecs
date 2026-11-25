@@ -1,4 +1,5 @@
 import arche;
+#include "common/world_test_probe.hpp"
 
 #include <atomic>
 #include <cassert>
@@ -14,6 +15,7 @@ using arche::SystemContext;
 using arche::SystemScale;
 using arche::internal::ThreadPool;
 using arche::World;
+using arche::test::WorldTestProbe;
 } // namespace
 
 // =============================================================================
@@ -61,8 +63,8 @@ void test_empty_scheduler() {
   Scheduler scheduler;
 
   // Compiling and running an empty scheduler must not throw or crash
-  scheduler.compile(world);
-  scheduler.run(world, pool);
+  scheduler.compile(WorldTestProbe::execution_target(world));
+  scheduler.run(WorldTestProbe::execution_target(world), pool);
 
   std::cout << "PASSED\n";
 }
@@ -101,8 +103,8 @@ void test_narrow_parallel_batching() {
       SystemScale::Narrow
   );
 
-  scheduler.compile(world);
-  scheduler.run(world, pool);
+  scheduler.compile(WorldTestProbe::execution_target(world));
+  scheduler.run(WorldTestProbe::execution_target(world), pool);
 
   assert(system1_executed.load() == 1);
   assert(system2_executed.load() == 1);
@@ -140,8 +142,8 @@ void test_conflict_separation() {
       SystemScale::Narrow
   );
 
-  scheduler.compile(world);
-  scheduler.run(world, pool);
+  scheduler.compile(WorldTestProbe::execution_target(world));
+  scheduler.run(WorldTestProbe::execution_target(world), pool);
 
   assert(execution_order.size() == 2);
   assert(execution_order[0] == 1);
@@ -187,8 +189,8 @@ void test_wide_system_isolation() {
       SystemScale::Narrow
   );
 
-  scheduler.compile(world);
-  scheduler.run(world, pool);
+  scheduler.compile(WorldTestProbe::execution_target(world));
+  scheduler.run(WorldTestProbe::execution_target(world), pool);
 
   assert(log.size() == 3);
   std::cout << "PASSED\n";
@@ -234,8 +236,8 @@ void test_deterministic_deferred_mutations() {
       SystemScale::Narrow
   );
 
-  scheduler.compile(world);
-  scheduler.run(world, pool);
+  scheduler.compile(WorldTestProbe::execution_target(world));
+  scheduler.run(WorldTestProbe::execution_target(world), pool);
 
   assert(observed_entities.load() == 10);
   assert(world.archetypes.count_with<Position>() == 10);
@@ -264,7 +266,7 @@ void test_missing_resource_validation() {
   // Compiling without the resource registered must throw std::runtime_error
   bool threw = false;
   try {
-    scheduler.compile(world);
+    scheduler.compile(WorldTestProbe::execution_target(world));
   } catch (const std::runtime_error &e) {
     threw = true;
   }
@@ -272,7 +274,7 @@ void test_missing_resource_validation() {
 
   // Once resource is registered, compile succeeds cleanly
   world.resources.insert<MissingResource>();
-  scheduler.compile(world);
+  scheduler.compile(WorldTestProbe::execution_target(world));
 
   std::cout << "PASSED\n";
 }
@@ -297,8 +299,8 @@ void test_dirty_recompilation() {
       SystemScale::Narrow
   );
 
-  scheduler.compile(world);
-  scheduler.run(world, pool);
+  scheduler.compile(WorldTestProbe::execution_target(world));
+  scheduler.run(WorldTestProbe::execution_target(world), pool);
   assert(counter.load() == 1);
 
   // Adding a new system marks scheduler dirty
@@ -310,7 +312,7 @@ void test_dirty_recompilation() {
   );
 
   // Next run must re-compile and execute both systems
-  scheduler.run(world, pool);
+  scheduler.run(WorldTestProbe::execution_target(world), pool);
   assert(counter.load() == 12); // 1 + 1 + 10
 
   std::cout << "PASSED\n";
@@ -338,12 +340,12 @@ void test_scheduler_copy_and_move() {
 
   // Move construction
   Scheduler moved_scheduler(std::move(original));
-  moved_scheduler.run(world, pool);
+  moved_scheduler.run(WorldTestProbe::execution_target(world), pool);
   assert(executions.load() == 1);
 
   // Copy construction
   Scheduler copied_scheduler(moved_scheduler);
-  copied_scheduler.run(world, pool);
+  copied_scheduler.run(WorldTestProbe::execution_target(world), pool);
   assert(executions.load() == 2);
 
   std::cout << "PASSED\n";
@@ -393,7 +395,7 @@ void test_wide_system_chunk_work_stealing() {
       SystemScale::Wide
   );
 
-  scheduler.run(world, pool);
+  scheduler.run(WorldTestProbe::execution_target(world), pool);
 
   // Verify all entity positions updated
   for (auto [pos, vel] : world.query<Position, Velocity>()) {
@@ -418,7 +420,7 @@ void test_wide_system_single_threaded_fallback() {
   world.spawn(Position{10.0f, 20.0f}, Velocity{5.0f, 5.0f});
 
   CommandBuffer cmd;
-  SystemContext ctx = world.create_system_context(cmd);
+  SystemContext ctx = WorldTestProbe::create_system_context(world, cmd);
 
   ctx.query<Position, const Velocity>().each_chunk(
       [&](uint32_t count, Position *pos, const Velocity *vel) {
@@ -435,7 +437,7 @@ void test_wide_system_single_threaded_fallback() {
   }
 
   // Commit manual command buffer
-  world.commit(cmd);
+  WorldTestProbe::commit(world, cmd);
   assert(world.archetypes.count_with<Marker>() == 1);
 
   std::cout << "PASSED\n";
@@ -466,7 +468,7 @@ void test_narrow_systems_exceeding_worker_count() {
     );
   }
 
-  scheduler.run(world, pool);
+  scheduler.run(WorldTestProbe::execution_target(world), pool);
 
   // All 8 systems must have executed, even though worker_count was only 2!
   assert(executed.load() == 8);

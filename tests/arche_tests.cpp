@@ -1,4 +1,5 @@
 import arche;
+#include "common/world_test_probe.hpp"
 
 #include <cassert>
 #include <cstdint>
@@ -15,6 +16,7 @@ using arche::ComponentID;
 using arche::internal::ComponentRegistry;
 using arche::World;
 using arche::internal::SlotMap;
+using arche::test::WorldTestProbe;
 } // namespace
 
 // =============================================================================
@@ -283,7 +285,7 @@ void test_deferred_command_buffer() {
   assert(world.entities.contains(e));
 
   // 4. Flush and execute command buffer
-  world.commit(cmd);
+  WorldTestProbe::commit(world, cmd);
 
   // 5. Verify entity is successfully destroyed
   assert(!world.entities.contains(e));

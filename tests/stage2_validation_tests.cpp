@@ -1,4 +1,5 @@
 import arche;
+#include "common/world_test_probe.hpp"
 #include "test_components.hpp"
 
 #include <cassert>
@@ -11,7 +12,7 @@ using arche::Entity;
 using arche::internal::ParallelCommandBuffer;
 using arche::internal::ThreadPool;
 using arche::World;
-using arche::WorldTestAccessor;
+using arche::test::WorldTestProbe;
 using arche::test::BoidTag;
 using arche::test::Position;
 using arche::test::Velocity;
@@ -82,7 +83,7 @@ void test_permutation_and_reactive_cache() {
       {.count = COUNT}, Position{0.0f, 0.0f}, Velocity{1.0f, 1.0f}
   );
 
-  arche::Archetype *arch = world.storage()->slot_map
+  arche::Archetype *arch = WorldTestProbe::slot_map(world)
                                .get_record(entities[0])
                                .archetype;
 
@@ -92,7 +93,7 @@ void test_permutation_and_reactive_cache() {
     perm[i] = static_cast<uint32_t>(COUNT - 1 - i);
   }
 
-  WorldTestAccessor::permute(world, arch, perm);
+  WorldTestProbe::permute(world, arch, perm);
 
   // Existing query must read all permuted entities without failure
   size_t count = 0;
@@ -132,7 +133,7 @@ void test_parallel_mutation_churn() {
         }
       }
   );
-  WorldTestAccessor::commit_commands(world);
+  WorldTestProbe::commit_commands(world);
 
   // Total entity count must remain exactly COUNT
   assert(world.entities.count() == COUNT);

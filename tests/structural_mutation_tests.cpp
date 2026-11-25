@@ -1,4 +1,5 @@
 import arche;
+#include "common/world_test_probe.hpp"
 
 #include <cassert>
 #include <iostream>
@@ -9,6 +10,7 @@ using arche::CommandBuffer;
 using arche::Entity;
 using arche::ComponentID;
 using arche::World;
+using arche::test::WorldTestProbe;
 } // namespace
 
 // =============================================================================
@@ -235,7 +237,7 @@ void test_deferred_command_buffer() {
   assert(world.entities.contains(entities[2]));
 
   // 4. Flush commands at synchronization boundary
-  world.commit(cmd);
+  WorldTestProbe::commit(world, cmd);
   assert(cmd.empty());
 
   // 5. After playback: even entities must be destroyed, odd entities must

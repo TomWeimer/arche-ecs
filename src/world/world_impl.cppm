@@ -69,10 +69,6 @@ inline MutationContext World::mutation_context() noexcept {
   };
 }
 
-inline World::operator MutationContext() noexcept {
-  return mutation_context();
-}
-
 inline SystemExecutionTarget World::system_execution_target() noexcept {
   return SystemExecutionTarget{
       .resources = storage_->resources,
@@ -98,41 +94,6 @@ inline SystemExecutionTarget World::system_execution_target() noexcept {
         static_cast<World *>(world_ptr)->advance_version();
       },
       .world_ptr = this,
-  };
-}
-
-inline World::operator SystemExecutionTarget() noexcept {
-  return system_execution_target();
-}
-
-inline void World::commit(CommandBuffer &cmd) {
-  auto ctx = mutation_context();
-  internal::Mutation::apply(ctx, cmd);
-}
-
-inline void World::commit(internal::ParallelCommandBuffer &cmd) {
-  auto ctx = mutation_context();
-  internal::Mutation::commit(ctx, cmd);
-}
-
-inline SystemContext World::create_system_context(
-    CommandBuffer &cmd,
-    ParallelCommandBuffer *parallel_cmd
-) {
-  return SystemContext{
-      cmd,
-      storage_->resources,
-      this,
-      [](void *ctx,
-         ComponentMask inc,
-         ComponentMask exc,
-         ComponentMask any) -> QueryCache * {
-        return static_cast<World *>(ctx)->query_cache(inc, exc, any);
-      },
-      version(),
-      previous_version(),
-      storage_->thread_pool.get(),
-      parallel_cmd != nullptr ? parallel_cmd : storage_->parallel_cmd.get()
   };
 }
 
@@ -263,7 +224,7 @@ inline void permute(
       SortTarget{
           .arch = arch,
           .chunks = arch->chunks(),
-          .slot_map = world.storage()->slot_map,
+          .slot_map = internal::WorldAccess::slot_map(world),
           .version = world.version(),
       },
       target_indices
@@ -272,25 +233,95 @@ inline void permute(
 
 template <typename... Components>
 inline void permute(World &world, std::span<const uint32_t> target_indices) {
-  (world.storage()->registry.register_component<std::decay_t<Components>>(), ...);
+  auto &reg = internal::WorldAccess::registry(world);
+  auto &g = internal::WorldAccess::graph(world);
+  (reg.register_component<std::decay_t<Components>>(), ...);
   std::vector<ComponentID> types = {component_id<std::decay_t<Components>>()...};
-  Archetype *arch = world.storage()->graph.get_or_create(types);
+  Archetype *arch = g.get_or_create(types);
   permute(world, arch, target_indices);
 }
 
-inline void WorldTestAccessor::commit_commands(World &w) {
-  assert(w.storage() != nullptr && w.storage()->parallel_cmd != nullptr);
-  auto ctx = w.mutation_context();
-  Mutation::commit(ctx, *w.storage()->parallel_cmd);
+// =============================================================================
+// WorldAccess Implementations
+// =============================================================================
+
+namespace internal {
+
+inline SlotMap &WorldAccess::slot_map(World &w) noexcept {
+  return w.storage_->slot_map;
 }
 
-inline void WorldTestAccessor::permute(
-    World &w,
-    internal::Archetype *arch,
-    std::span<const uint32_t> indices
-) {
-  arche::permute(w, arch, indices);
+inline const SlotMap &WorldAccess::slot_map(const World &w) noexcept {
+  return w.storage_->slot_map;
 }
+
+inline ArchetypeGraph &WorldAccess::graph(World &w) noexcept {
+  return w.storage_->graph;
+}
+
+inline const ArchetypeGraph &WorldAccess::graph(const World &w) noexcept {
+  return w.storage_->graph;
+}
+
+inline ComponentRegistry &WorldAccess::registry(World &w) noexcept {
+  return w.storage_->registry;
+}
+
+inline void WorldAccess::set_version(World &w, uint32_t v) noexcept {
+  w.storage_->current_version = v;
+}
+
+inline void WorldAccess::commit(World &w, CommandBuffer &cmd) {
+  auto ctx = w.mutation_context();
+  internal::Mutation::apply(ctx, cmd);
+}
+
+inline void WorldAccess::commit_commands(World &w) {
+  assert(w.storage_ != nullptr && w.storage_->parallel_cmd != nullptr);
+  auto ctx = w.mutation_context();
+  Mutation::commit(ctx, *w.storage_->parallel_cmd);
+}
+
+inline SystemContext WorldAccess::create_system_context(
+    World &w,
+    CommandBuffer &cmd,
+    ParallelCommandBuffer *parallel_cmd
+) {
+  return SystemContext{
+      cmd,
+      w.storage_->resources,
+      &w,
+      [](void *ctx,
+         ComponentMask inc,
+         ComponentMask exc,
+         ComponentMask any) -> QueryCache * {
+        return static_cast<World *>(ctx)->query_cache(inc, exc, any);
+      },
+      w.version(),
+      w.previous_version(),
+      w.storage_->thread_pool.get(),
+      parallel_cmd != nullptr ? parallel_cmd : w.storage_->parallel_cmd.get()
+  };
+}
+
+inline MutationContext WorldAccess::mutation_context(World &w) noexcept {
+  return w.mutation_context();
+}
+
+inline SystemExecutionTarget WorldAccess::system_execution_target(World &w) noexcept {
+  return w.system_execution_target();
+}
+
+inline QueryCache *WorldAccess::query_cache(
+    World &w,
+    const ComponentMask &include,
+    const ComponentMask &exclude,
+    const ComponentMask &any
+) {
+  return w.query_cache(include, exclude, any);
+}
+
+} // namespace internal
 
 template <typename Component, typename Compare>
 inline void sort(World &world, Archetype *arch, Compare &&comp) {
@@ -299,7 +330,7 @@ inline void sort(World &world, Archetype *arch, Compare &&comp) {
       SortTarget{
           .arch = arch,
           .chunks = arch->chunks(),
-          .slot_map = world.storage()->slot_map,
+          .slot_map = internal::WorldAccess::slot_map(world),
           .version = world.version(),
       },
       std::forward<Compare>(comp)
@@ -316,18 +347,18 @@ inline void sort(World &world, Compare &&comp) {
         [&]<typename Filter>() {
           if constexpr (is_with_v<Filter>) {
             apply_filter_to_mask<Filter>(
-                include_mask, world.storage()->registry
+                include_mask, internal::WorldAccess::registry(world)
             );
           } else if constexpr (is_without_v<Filter>) {
             apply_filter_to_mask<Filter>(
-                exclude_mask, world.storage()->registry
+                exclude_mask, internal::WorldAccess::registry(world)
             );
           }
         }.template operator()<Filters>(),
         ...);
   }
 
-  QueryCache *cache = world.query_cache(include_mask, exclude_mask);
+  QueryCache *cache = internal::WorldAccess::query_cache(world, include_mask, exclude_mask);
   for (Archetype *arch : cache->matching_archetypes) {
     sort<Component>(world, arch, comp);
   }
@@ -343,25 +374,25 @@ inline void sort_by_key(World &world, KeyExtractor &&key_fn) {
         [&]<typename Filter>() {
           if constexpr (is_with_v<Filter>) {
             apply_filter_to_mask<Filter>(
-                include_mask, world.storage()->registry
+                include_mask, internal::WorldAccess::registry(world)
             );
           } else if constexpr (is_without_v<Filter>) {
             apply_filter_to_mask<Filter>(
-                exclude_mask, world.storage()->registry
+                exclude_mask, internal::WorldAccess::registry(world)
             );
           }
         }.template operator()<Filters>(),
         ...);
   }
 
-  QueryCache *cache = world.query_cache(include_mask, exclude_mask);
+  QueryCache *cache = internal::WorldAccess::query_cache(world, include_mask, exclude_mask);
   for (Archetype *arch : cache->matching_archetypes) {
     world.advance_version();
     Sort::by_key<Component>(
         SortTarget{
             .arch = arch,
             .chunks = arch->chunks(),
-            .slot_map = world.storage()->slot_map,
+            .slot_map = internal::WorldAccess::slot_map(world),
             .version = world.version(),
         },
         key_fn

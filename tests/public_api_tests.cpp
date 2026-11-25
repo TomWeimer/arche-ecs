@@ -1,4 +1,5 @@
 import arche;
+#include "common/world_test_probe.hpp"
 
 #include <cassert>
 #include <iostream>
@@ -8,6 +9,7 @@ namespace {
 using arche::CommandBuffer;
 using arche::Entity;
 using arche::World;
+using arche::test::WorldTestProbe;
 } // namespace
 
 struct Pos {
@@ -45,7 +47,7 @@ void test_clean_lifecycle_api() {
   static_assert(std::is_same_v<decltype(world.get<Pos>(e1)), const Pos &>);
   static_assert(std::is_same_v<decltype(world.get_mut<Pos>(e1)), Pos &>);
 
-  const auto &rec = world.storage()->slot_map.get_record(
+  const auto &rec = WorldTestProbe::slot_map(world).get_record(
       e1
   );
   const int16_t pos_col = rec.archetype->column_index(arche::component_id<Pos>());
@@ -202,7 +204,7 @@ void test_entity_view_api() {
   view.get_mut<Pos>().x = 99.0f;
   assert(view.get<Pos>().x == 99.0f);
 
-  const auto &rec = world.storage()->slot_map.get_record(
+  const auto &rec = WorldTestProbe::slot_map(world).get_record(
       e1
   );
   const int16_t pos_col = rec.archetype->column_index(arche::component_id<Pos>());

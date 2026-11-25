@@ -1,4 +1,5 @@
 import arche;
+#include "common/world_test_probe.hpp"
 
 #include <cassert>
 #include <chrono>
@@ -12,6 +13,7 @@ using arche::Entity;
 using arche::With;
 using arche::Without;
 using arche::World;
+using arche::test::WorldTestProbe;
 } // namespace
 
 // =============================================================================
@@ -305,7 +307,7 @@ void test_query_entity_and_deferred_mutation() {
   assert(world.entities.count() == 10);
 
   // 4. Playback deferred commands safely outside the query loop
-  world.commit(cmd);
+  WorldTestProbe::commit(world, cmd);
   assert(cmd.empty());
 
   // 5. Verify results:
@@ -322,7 +324,7 @@ void test_query_entity_and_deferred_mutation() {
   cmd.spawn(Position{300.0f, 400.0f}, Velocity{30.0f, 40.0f});
   assert(world.entities.count() == 6); // Not yet created
 
-  world.commit(cmd);
+  WorldTestProbe::commit(world, cmd);
   assert(world.entities.count() == 8); // Now created!
 
   // Verify the newly created entities can be queried immediately
