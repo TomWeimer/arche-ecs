@@ -5,7 +5,7 @@ module;
 #include <string_view>
 #include <vector>
 
-export module arche:system.detail.plugin_impl;
+export module arche:plugin.detail.plugin_impl;
 
 import :plugin;
 

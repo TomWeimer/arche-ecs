@@ -2,7 +2,7 @@ module;
 
 #include <type_traits>
 
-export module arche:system.detail.access_builder_impl;
+export module arche:access.detail.access_builder_impl;
 
 import :access_builder;
 import :access;

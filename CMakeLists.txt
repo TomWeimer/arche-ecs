@@ -37,22 +37,23 @@ target_sources(arche
       # Layer 2: Structure
       src/structure/archetype/archetype.cppm
       src/structure/archetype/archetype_impl.cppm
+      src/structure/archetype/archetype_index.cppm
       src/structure/archetype/archetype_graph.cppm
       src/structure/archetype/archetype_graph_impl.cppm
-      src/structure/query_cache/query_cache.cppm
       # Layer 3: Lifecycle
       src/lifecycle/mutation/mutation.cppm
       src/lifecycle/mutation/mutation_impl.cppm
-      src/lifecycle/command/command.cppm
-      src/lifecycle/command/command_impl.cppm
+      src/lifecycle/mutation/command.cppm
+      src/lifecycle/mutation/command_impl.cppm
       src/lifecycle/snapshot/snapshot.cppm
       src/lifecycle/snapshot/snapshot_header.cppm
       src/lifecycle/snapshot/snapshot_impl.cppm
       src/lifecycle/resource/resource.cppm
       src/lifecycle/resource/resource_impl.cppm
-      # Layer 4: Runtime
+      # Layer 4: Concurrency
       src/runtime/concurrency/thread_pool.cppm
       src/runtime/concurrency/thread_pool_impl.cppm
+      # Layer 5: Query & Sort
       src/runtime/query/query_filters.cppm
       src/runtime/query/query.cppm
       src/runtime/query/query_masks.cppm
@@ -60,19 +61,20 @@ target_sources(arche
       src/runtime/query/query_filter.cppm
       src/runtime/query/query_iterator.cppm
       src/runtime/query/query_impl.cppm
-      src/runtime/system/access.cppm
-      src/runtime/system/system_types.cppm
-      src/runtime/system/scheduler.cppm
-      src/runtime/system/scheduler_impl.cppm
-      src/runtime/system/system_context.cppm
-      src/runtime/system/system_context_impl.cppm
-      src/runtime/system/access_builder.cppm
-      src/runtime/system/access_builder_impl.cppm
-      src/runtime/system/plugin.cppm
-      src/runtime/system/plugin_impl.cppm
       src/runtime/sort/sort.cppm
       src/runtime/sort/permute.cppm
       src/runtime/sort/sort_impl.cppm
+      # Layer 6: Execution Pipeline (access -> system -> scheduler -> plugin)
+      src/runtime/access/access.cppm
+      src/runtime/access/access_builder.cppm
+      src/runtime/access/access_builder_impl.cppm
+      src/runtime/system/system_types.cppm
+      src/runtime/system/system_context.cppm
+      src/runtime/system/system_context_impl.cppm
+      src/runtime/scheduler/scheduler.cppm
+      src/runtime/scheduler/scheduler_impl.cppm
+      src/runtime/plugin/plugin.cppm
+      src/runtime/plugin/plugin_impl.cppm
       # Layer 5: Views
       src/views/archetype_view.cppm
       src/views/entity_view.cppm

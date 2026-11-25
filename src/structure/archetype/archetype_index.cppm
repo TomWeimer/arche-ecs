@@ -3,7 +3,7 @@ module;
 #include <cstddef>
 #include <vector>
 
-export module arche:query_cache;
+export module arche:archetype_index;
 
 import :component_mask;
 
@@ -12,15 +12,15 @@ export namespace arche::internal {
 class Archetype;
 
 /**
- * @struct QueryCacheKey
- * @brief Composite 3-mask lookup key uniquely identifying a cached query.
+ * @struct ArchetypeIndexKey
+ * @brief Composite 3-mask lookup key uniquely identifying a cached archetype index.
  *
- * Encapsulates the complete compile-time component filtering criteria:
+ * Encapsulates compile-time component filtering criteria:
  * - `include_mask`: Required components (conjunction: must have ALL).
  * - `exclude_mask`: Prohibited components (rejection: must have NONE).
  * - `any_mask`: Disjunctive components (disjunction: must have AT LEAST ONE, or empty).
  */
-struct QueryCacheKey {
+struct ArchetypeIndexKey {
   /// Mask of components that matching archetypes must all possess.
   ComponentMask include_mask;
 
@@ -31,7 +31,7 @@ struct QueryCacheKey {
   ComponentMask any_mask;
 
   /// Strict equality comparison across all three component masks.
-  constexpr bool operator==(const QueryCacheKey &other) const noexcept {
+  constexpr bool operator==(const ArchetypeIndexKey &other) const noexcept {
     return include_mask == other.include_mask &&
         exclude_mask == other.exclude_mask &&
         any_mask == other.any_mask;
@@ -39,25 +39,25 @@ struct QueryCacheKey {
 };
 
 /**
- * @struct QueryCacheKeyHash
- * @brief 64-bit hash functor for indexing `QueryCacheKey` in `std::unordered_map`.
+ * @struct ArchetypeIndexKeyHash
+ * @brief 64-bit hash functor for indexing `ArchetypeIndexKey` in `std::unordered_map`.
  */
-struct QueryCacheKeyHash {
-  [[nodiscard]] size_t operator()(const QueryCacheKey &k) const noexcept {
+struct ArchetypeIndexKeyHash {
+  [[nodiscard]] size_t operator()(const ArchetypeIndexKey &k) const noexcept {
     ComponentMaskHash h;
     return h(k.include_mask) ^ (h(k.exclude_mask) << 1) ^ (h(k.any_mask) << 2);
   }
 };
 
 /**
- * @struct QueryCache
- * @brief Reactive archetype cache storing pre-matched archetype table pointers.
+ * @struct ArchetypeIndex
+ * @brief Reactive index storing pre-matched archetype table pointers for fast query resolution.
  *
  * Maintained persistently by `WorldStorage` and registered with `ArchetypeGraph`.
  * Whenever a new archetype is registered in the graph, it is evaluated against
  * these masks and reactively appended to `matching_archetypes` in $O(1)$ amortized time.
  */
-struct QueryCache {
+struct ArchetypeIndex {
   /// Required components mask.
   ComponentMask include_mask;
 
@@ -71,4 +71,9 @@ struct QueryCache {
   std::vector<Archetype *> matching_archetypes;
 };
 
-} // namespace arche
+// Aliases for compatibility
+using QueryCacheKey = ArchetypeIndexKey;
+using QueryCacheKeyHash = ArchetypeIndexKeyHash;
+using QueryCache = ArchetypeIndex;
+
+} // namespace arche::internal

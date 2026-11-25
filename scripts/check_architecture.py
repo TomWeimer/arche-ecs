@@ -62,8 +62,8 @@ SUBSYSTEM_RULES: Dict[str, Dict] = {
     },
     "query_cache": {
         "layer": 2,
-        "description": "Reactive matching archetype cache",
-        "allowed_targets": ["core_component", "types", "query_cache"],
+        "description": "Reactive matching archetype cache (alias for archetype_index)",
+        "allowed_targets": ["core_component", "types", "query_cache", "archetype"],
     },
     "archetype": {
         "layer": 2,
@@ -90,6 +90,7 @@ SUBSYSTEM_RULES: Dict[str, Dict] = {
             "hardware",
             "types",
             "mutation",
+            "command",
         ],
     },
     "command": {
@@ -139,13 +140,22 @@ SUBSYSTEM_RULES: Dict[str, Dict] = {
             "entity_lifecycle",
         ],
     },
-    "query": {
+    "concurrency": {
         "layer": 4,
+        "description": "Work-stealing thread pool and chunk dispatchers",
+        "allowed_targets": [
+            "hardware",
+            "types",
+            "concurrency",
+        ],
+    },
+    "query": {
+        "layer": 5,
         "description": "Type-safe SIMD queries, filters, and iterators",
         "allowed_targets": [
+            "concurrency",
             "command",
             "mutation",
-            "concurrency",
             "archetype",
             "chunk",
             "sparse_entity",
@@ -156,26 +166,39 @@ SUBSYSTEM_RULES: Dict[str, Dict] = {
             "query",
         ],
     },
-    "concurrency": {
-        "layer": 4,
-        "description": "Work-stealing thread pool and chunk dispatchers",
+    "sort": {
+        "layer": 5,
+        "description": "Spatial cache locality permutation and sorting",
         "allowed_targets": [
             "query",
-            "command",
+            "sparse_entity",
             "archetype",
             "chunk",
+            "core_component",
             "hardware",
             "types",
-            "concurrency",
+            "sort",
+        ],
+    },
+    "access": {
+        "layer": 6,
+        "description": "Declarative component and resource access footprints",
+        "allowed_targets": [
+            "core_component",
+            "hardware",
+            "types",
+            "resource",
+            "access",
         ],
     },
     "system": {
-        "layer": 4,
-        "description": "DAG system scheduling, access bitmasks, and plugins",
+        "layer": 7,
+        "description": "Execution scope and system function abstractions",
         "allowed_targets": [
-            "command",
-            "mutation",
+            "access",
             "query",
+            "mutation",
+            "command",
             "resource",
             "concurrency",
             "archetype",
@@ -185,25 +208,43 @@ SUBSYSTEM_RULES: Dict[str, Dict] = {
             "hardware",
             "types",
             "system",
-            "public_entities",
         ],
     },
-    "sort": {
-        "layer": 4,
-        "description": "Spatial cache locality permutation and sorting",
+    "scheduler": {
+        "layer": 8,
+        "description": "DAG system scheduling, conflict analysis, and batch runner",
         "allowed_targets": [
-            "sparse_entity",
+            "system",
+            "access",
             "query",
+            "concurrency",
+            "mutation",
+            "command",
+            "resource",
             "archetype",
             "chunk",
+            "sparse_entity",
             "core_component",
             "hardware",
             "types",
-            "sort",
+            "scheduler",
+        ],
+    },
+    "plugin": {
+        "layer": 9,
+        "description": "Modular engine plugin registration and life cycle",
+        "allowed_targets": [
+            "scheduler",
+            "system",
+            "access",
+            "core_component",
+            "hardware",
+            "types",
+            "plugin",
         ],
     },
     "views": {
-        "layer": 5,
+        "layer": 10,
         "description": "Domain views encapsulating lower-level subsystems",
         "allowed_targets": [
             "types",
@@ -221,14 +262,17 @@ SUBSYSTEM_RULES: Dict[str, Dict] = {
             "resource",
             "query",
             "concurrency",
+            "access",
             "system",
+            "scheduler",
+            "plugin",
             "sort",
             "views",
             "domain",
         ],
     },
     "domain": {
-        "layer": 5,
+        "layer": 10,
         "description": "Domain views encapsulating lower-level subsystems (alias)",
         "allowed_targets": [
             "types",
@@ -246,19 +290,22 @@ SUBSYSTEM_RULES: Dict[str, Dict] = {
             "resource",
             "query",
             "concurrency",
+            "access",
             "system",
+            "scheduler",
+            "plugin",
             "sort",
             "views",
             "domain",
         ],
     },
     "world": {
-        "layer": 6,
+        "layer": 11,
         "description": "Central coordinator, WorldStorage assembly, and domain facades composition",
         "allowed_targets": ["*"],  # Assembly layer can access all subsystems
     },
     "arche_master": {
-        "layer": 7,
+        "layer": 12,
         "description": "Master library umbrella module / include",
         "allowed_targets": ["*"],
     },
@@ -310,34 +357,39 @@ def classify_subsystem(file_path: str) -> Tuple[str, int]:
         p.startswith("src/structure/query_cache/")
         or p.startswith("src/query/query_cache")
     ):
-        return "query_cache", SUBSYSTEM_RULES["query_cache"]["layer"]
+        return "archetype", SUBSYSTEM_RULES["archetype"]["layer"]
 
     # Tier 3: lifecycle
     if p.startswith("src/lifecycle/mutation/") or p.startswith("src/mutation/"):
         return "mutation", SUBSYSTEM_RULES["mutation"]["layer"]
     if p.startswith("src/lifecycle/command/") or p.startswith("src/command/"):
-        return "command", SUBSYSTEM_RULES["command"]["layer"]
+        return "mutation", SUBSYSTEM_RULES["mutation"]["layer"]
     if p.startswith("src/lifecycle/snapshot/") or p.startswith("src/snapshot/"):
         return "snapshot", SUBSYSTEM_RULES["snapshot"]["layer"]
     if p.startswith("src/lifecycle/resource/") or p.startswith("src/resource/"):
         return "resource", SUBSYSTEM_RULES["resource"]["layer"]
-    if (
-        p.startswith("src/lifecycle/entity_view/")
-        or p.startswith("src/entity_view/")
-    ):
-        return "entity_lifecycle", SUBSYSTEM_RULES["entity_lifecycle"]["layer"]
 
-    # Tier 4: runtime
-    if p.startswith("src/runtime/query/") or p.startswith("src/query/"):
-        return "query", SUBSYSTEM_RULES["query"]["layer"]
+    # Tier 4: concurrency
     if p.startswith("src/runtime/concurrency/") or p.startswith("src/concurrency/"):
         return "concurrency", SUBSYSTEM_RULES["concurrency"]["layer"]
-    if p.startswith("src/runtime/system/") or p.startswith("src/system/"):
-        return "system", SUBSYSTEM_RULES["system"]["layer"]
+
+    # Tier 5: query & sort
+    if p.startswith("src/runtime/query/") or p.startswith("src/query/"):
+        return "query", SUBSYSTEM_RULES["query"]["layer"]
     if p.startswith("src/runtime/sort/") or p.startswith("src/sort/"):
         return "sort", SUBSYSTEM_RULES["sort"]["layer"]
 
-    # Tier 5: views / domain
+    # Tier 6..9: execution pipeline
+    if p.startswith("src/runtime/access/") or p.startswith("src/access/"):
+        return "access", SUBSYSTEM_RULES["access"]["layer"]
+    if p.startswith("src/runtime/system/") or p.startswith("src/system/"):
+        return "system", SUBSYSTEM_RULES["system"]["layer"]
+    if p.startswith("src/runtime/scheduler/") or p.startswith("src/scheduler/"):
+        return "scheduler", SUBSYSTEM_RULES["scheduler"]["layer"]
+    if p.startswith("src/runtime/plugin/") or p.startswith("src/plugin/"):
+        return "plugin", SUBSYSTEM_RULES["plugin"]["layer"]
+
+    # Tier 10: views / domain
     if (
         p.startswith("src/views/")
         or p.startswith("src/domain/")
@@ -345,7 +397,7 @@ def classify_subsystem(file_path: str) -> Tuple[str, int]:
     ):
         return "views", SUBSYSTEM_RULES["views"]["layer"]
 
-    # Tier 6: world
+    # Tier 11: world
     if p.startswith("src/world/"):
         return "world", SUBSYSTEM_RULES["world"]["layer"]
 
@@ -433,11 +485,17 @@ def run_checks(root_dir: str) -> int:
 
                     # Rule 1: Strict Top-Down DAG on Headers (.hpp / .cppm)
                     is_interface = src_file.endswith((".hpp", ".cppm"))
-                    if is_interface and src_layer < tgt_layer:
-                        violations.append(
-                            f"[Rule 1 Violation: Upward Include] {src_file}:{line_no}\n"
-                            f"    Layer {src_layer} ({src_sub}) includes Layer {tgt_layer} ({tgt_sub}): '{raw_target}'"
-                        )
+                    if is_interface:
+                        if src_layer < tgt_layer:
+                            violations.append(
+                                f"[Rule 1 Violation: Upward Include] {src_file}:{line_no}\n"
+                                f"    Layer {src_layer} ({src_sub}) includes higher Layer {tgt_layer} ({tgt_sub}): '{raw_target}'"
+                            )
+                        elif src_layer == tgt_layer and src_sub != tgt_sub and src_layer < 11:
+                            violations.append(
+                                f"[Rule 1 Violation: Peer Cross-Subsystem Include] {src_file}:{line_no}\n"
+                                f"    Peer Layer {src_layer} subsystem '{src_sub}' includes peer subsystem '{tgt_sub}': '{raw_target}'"
+                            )
 
                     # Rule 2: Clean Public Wall
                     if src_file.startswith(
@@ -474,11 +532,17 @@ def run_checks(root_dir: str) -> int:
 
                     # Rule 1: Strict Top-Down DAG on module partitions
                     is_interface = src_file.endswith(".cppm")
-                    if is_interface and src_layer < tgt_layer:
-                        violations.append(
-                            f"[Rule 1 Violation: Upward Module Import] {src_file}:{line_no}\n"
-                            f"    Layer {src_layer} ({src_sub}) imports Layer {tgt_layer} ({tgt_sub}): ':{partition}'"
-                        )
+                    if is_interface:
+                        if src_layer < tgt_layer:
+                            violations.append(
+                                f"[Rule 1 Violation: Upward Module Import] {src_file}:{line_no}\n"
+                                f"    Layer {src_layer} ({src_sub}) imports higher Layer {tgt_layer} ({tgt_sub}): ':{partition}'"
+                            )
+                        elif src_layer == tgt_layer and src_sub != tgt_sub and src_layer < 11:
+                            violations.append(
+                                f"[Rule 1 Violation: Peer Cross-Subsystem Import] {src_file}:{line_no}\n"
+                                f"    Peer Layer {src_layer} subsystem '{src_sub}' imports peer subsystem '{tgt_sub}': ':{partition}'"
+                            )
 
                     # Rule 3: Storage Encapsulation for modules
                     if partition == "world.detail.world_storage":

@@ -13,7 +13,6 @@ export import :entity;
 export import :archetype;
 export import :chunk;
 export import :filters;
-export import :query_cache;
 export import :thread_pool;
 export import :command;
 export import :query.detail.filter;

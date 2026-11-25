@@ -15,7 +15,6 @@ import :thread_pool;
 import :command;
 import :resource;
 import :archetype_graph;
-import :query_cache;
 
 export namespace arche::internal {
 

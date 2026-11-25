@@ -16,7 +16,6 @@ import :chunk_pool;
 import :slot_map;
 import :resource;
 import :resource.detail.impl;
-import :query_cache;
 import :archetype_graph;
 import :scheduler;
 import :plugin;

@@ -10,7 +10,7 @@ module;
 #include <utility>
 #include <vector>
 
-export module arche:system.detail.scheduler_impl;
+export module arche:scheduler.detail.scheduler_impl;
 
 import :scheduler;
 import :system_context;

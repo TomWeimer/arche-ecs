@@ -20,13 +20,18 @@ Dependencies flow strictly **top-down**. Lower layers must NEVER depend on or in
 | Layer | Subsystem / Tier | Contents | Permitted Dependencies |
 | :---: | :--- | :--- | :--- |
 | **0** | `foundation` (`entity`, `hardware`, `component`) | Entity handle, POD types, bitmasks, CPU intrinsics, ColumnLayout, ComponentID | Only Layer 0 |
-| **1** | `storage` (`chunk`, `slot_map`) | 64KB chunk page memory, SlotMap routing table | Layer 0 only |
-| **2** | `structure` (`archetype`, `query_cache`) | Archetype tables, transition graph, reactive cache | Layers 0 and 1 |
-| **3** | `lifecycle` (`mutation`, `command`, `snapshot`, `resource`) | Archetype transitions, command buffer, snapshot I/O, singleton resources | Layers 0, 1, and 2 |
-| **4** | `runtime` (`query`, `concurrency`, `system`, `sort`) | Query iterators, ThreadPool, Scheduler DAG, sort / permute | Layers 0, 1, 2, and 3 (+ sibling concurrency) |
-| **5** | `views` | Domain views (`archetype_view`, `entity_view`, `resource_view`, `snapshot_view`, `system_view`) | Layers 0, 1, 2, 3, and 4 |
-| **6** | `world` | Central World assembly, domain facades composition, storage | All lower layers (assembly coordinator) |
-| **7** | `arche_master` | Umbrella header & module (`src/arche.cppm`, `include/arche/arche.hpp`) | All layers |
+| **1** | `storage` (`chunk`, `slot_map`) | 64KB chunk page memory, SlotMap routing table (independent peers) | Layer 0 only |
+| **2** | `structure` (`archetype`, `archetype_index`) | Archetype tables, transition graph, reactive table index | Layers 0 and 1 |
+| **3** | `lifecycle` (`mutation`, `snapshot`, `resource`) | Archetype transitions & command buffers, snapshot I/O, singleton resources (independent peers) | Layers 0, 1, and 2 |
+| **4** | `concurrency` (`thread_pool`) | Barrier-synchronized worker thread pool | Layer 0 only |
+| **5** | `query` (`query`, `sort`) | Query iterators, SIMD tail padding, each_parallel, sort / permute | Layers 0..4 (storage, structure, mutation, concurrency) |
+| **6** | `access` | Declarative component and resource access footprints | Layers 0 and 3 (`resource`) |
+| **7** | `system` (`system_context`, `system_types`) | System execution scope and function signatures | Layers 0..6 (mutation, query, concurrency, access) |
+| **8** | `scheduler` | Conflict graph compilation, topological sort, batch dispatch | Layers 0..7 (access, system, concurrency, mutation) |
+| **9** | `plugin` | Autonomous plugin installation and system registration | Layers 6, 7, 8 (`access`, `system`, `scheduler`) |
+| **10** | `views` | Domain views (`archetype_view`, `entity_view`, `resource_view`, `snapshot_view`, `system_view`) | Layers 0..9 |
+| **11** | `world` | Central World assembly, domain facades composition, storage | All lower layers (assembly coordinator) |
+| **12** | `arche_master` | Umbrella header & module (`src/arche.cppm`, `include/arche/arche.hpp`) | All layers |
 
 ## Architecture Rules & Code Conventions
 1. **No Upward Dependencies:**

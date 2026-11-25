@@ -12,7 +12,7 @@ export module arche:archetype_graph;
 export import :archetype;
 export import :component_mask;
 export import :component_id;
-export import :query_cache;
+export import :archetype_index;
 
 export namespace arche::internal {
 

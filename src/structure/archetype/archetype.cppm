@@ -15,6 +15,7 @@ export import :component_id;
 export import :hardware;
 export import :chunk;
 export import :chunk_pool;
+export import :archetype_index;
 
 export namespace arche::internal {
 
