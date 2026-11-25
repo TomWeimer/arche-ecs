@@ -9,11 +9,11 @@
 </p>
 
 <p align="center">
-  <a href="https://en.cppreference.com/w/cpp/20"><img src="https://img.shields.io/badge/C%2B%2B-20-blue.svg" alt="C++20"></a>
+  <a href="https://en.cppreference.com/w/cpp/20"><img src="https://img.shields.io/badge/C%2B%2B-20%20Modules-blue.svg" alt="C++20 Modules"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License: MIT"></a>
-  <img src="https://img.shields.io/badge/Tests-19%2F19%20Passing-brightgreen.svg" alt="Build Status">
-  <img src="https://img.shields.io/badge/Dependencies-Zero-orange.svg" alt="Zero Dependencies">
-  <img src="https://img.shields.io/badge/Scale-2%2C000%2C000%2B%20Entities-blueviolet.svg" alt="Scale">
+  <img src="https://img.shields.io/badge/Tests-25%2F25%20Passing-brightgreen.svg" alt="Build Status">
+  <img src="https://img.shields.io/badge/Architecture-AaC%20Verified-blueviolet.svg" alt="Architecture as Code">
+  <img src="https://img.shields.io/badge/Scale-2%2C000%2C000%2B%20Entities-blue.svg" alt="Scale">
   <a href="LLMS.md"><img src="https://img.shields.io/badge/AI%20Context-LLMS.md-informational.svg" alt="LLMS.md"></a>
 </p>
 
@@ -25,35 +25,32 @@
 ## Table of Contents
 
 - [Architectural Principles & Hard Invariants](#architectural-principles--hard-invariants)
+- [Layered Architecture & Strict Dependency Flow](#layered-architecture--strict-dependency-flow)
 - [Comparative Benchmarks (arche-ecs vs. Flecs vs. EnTT)](#comparative-benchmarks-arche-ecs-vs-flecs-vs-entt)
-  - [1. Extreme Scale: 2,000,000 Entities](#1-extreme-scale-2000000-entities)
-  - [2. Multi-Threaded Chunk Parallelism (8 Cores)](#2-multi-threaded-chunk-parallelism-8-cores)
-  - [3. Entity Lifecycle & Structural Mutations](#3-entity-lifecycle--structural-mutations)
-  - [4. Random Entity Access](#4-random-entity-access)
-  - [5. In-Place Entity Sorting (500k Entities)](#5-in-place-entity-sorting-500k-entities)
+  - [1. Memory Footprint & Steady-State Zero Allocations (1,000,000 Entities)](#1-memory-footprint--steady-state-zero-allocations-1000000-entities)
+  - [2. Change Detection & Sparse Activity (500,000 Entities, 5% Active)](#2-change-detection--sparse-activity-500000-entities-5-active)
+  - [3. Extreme Scale: 2,000,000 Entities Simulation](#3-extreme-scale-2000000-entities-simulation)
+  - [4. Multi-Threaded Query Scaling (1, 2, 4, 8 Threads)](#4-multi-threaded-query-scaling-1-2-4-8-threads)
+  - [5. Full-Frame 10-System Game Loop Simulation (100k Entities)](#5-full-frame-10-system-game-loop-simulation-100k-entities)
+  - [6. Entity Lifecycle & Structural Mutations (20k Entities)](#6-entity-lifecycle--structural-mutations-20k-entities)
+  - [7. Dynamic Archetype Churn (50k Entities Buff/Tag Cycling)](#7-dynamic-archetype-churn-50k-entities-bufftag-cycling)
+- [Comparative Performance Analysis & Honest Diagnostic](#comparative-performance-analysis--honest-diagnostic)
+  - [The Harsh Numbers: Where arche-ecs Lost](#the-harsh-numbers-where-arche-ecs-lost)
+  - [Why We Are Losing](#why-we-are-losing)
+  - [What Specifically Needs to Be Fixed (Optimization Roadmap)](#what-specifically-needs-to-be-fixed-optimization-roadmap)
 - [Zero-Loss Integration Guide](#zero-loss-integration-guide)
-  - [Single Umbrella Header](#single-umbrella-header)
+  - [C++20 Module Import](#c20-module-import)
   - [CMake Subproject Setup](#cmake-subproject-setup)
-  - [Crucial Compiler Flags for Maximum Performance](#crucial-compiler-flags-for-maximum-performance)
 - [Modern API Usage Guide](#modern-api-usage-guide)
-  - [1. Defining Components](#1-defining-components)
+  - [1. Defining Components & Resources](#1-defining-components--resources)
   - [2. Initializing the World & Entity Lifecycle](#2-initializing-the-world--entity-lifecycle)
-  - [3. High-Throughput Batch Spawning (Broadcasting & SoA Streaming)](#3-high-throughput-batch-spawning-broadcasting--soa-streaming)
+  - [3. Bulk Spawning (Broadcasting & SoA Ingestion)](#3-bulk-spawning-broadcasting--soa-ingestion)
   - [4. Component Access & Structural Mutation](#4-component-access--structural-mutation)
   - [5. Querying & Iteration](#5-querying--iteration)
-    - [Range-Based For-Loops & Structured Bindings](#range-based-for-loops--structured-bindings)
-    - [Querying Entity Handles](#querying-entity-handles)
-    - [Compile-Time Tag Filters (`With` & `Without`)](#compile-time-tag-filters-with--without)
-    - [Hot-Path SIMD Chunk Traversal (`for_each_chunk`)](#hot-path-simd-chunk-traversal-for_each_chunk)
-  - [6. Multi-Threaded Work-Stealing Simulation (`query_parallel`)](#6-multi-threaded-work-stealing-simulation-query_parallel)
-  - [7. Double-Buffered Physics Sub-Steps & O(1) Pointer Flipping](#7-double-buffered-physics-sub-steps--o1-pointer-flipping)
-  - [8. Dirty Version Ticking & Change Detection (`Mutated` & `Added`)](#8-dirty-version-ticking--change-detection-mutated--added)
-  - [9. In-Place Spatial Sorting & Cache Locality](#9-in-place-spatial-sorting--cache-locality)
-  - [10. Direct GPU Ring Streaming & Draw Indirect Commands](#10-direct-gpu-ring-streaming--draw-indirect-commands)
-  - [11. Instant World Snapshots & Deterministic Rollback](#11-instant-world-snapshots--deterministic-rollback)
-- [Full Simulation Frame Walkthrough (Colony Flocking Engine)](#full-simulation-frame-walkthrough-colony-flocking-engine)
-- [Architectural Roadmap & The Generality Tax](#architectural-roadmap--the-generality-tax)
-- [Building & Testing](#building--testing)
+  - [6. Declarative Plugins & Conflict-Resolving DAG Scheduler](#6-declarative-plugins--conflict-resolving-dag-scheduler)
+  - [7. Change Detection via Dirty Ticks (`Mutated` & `Added`)](#7-change-detection-via-dirty-ticks-mutated--added)
+  - [8. In-Place Spatial Sorting & Cache Locality](#8-in-place-spatial-sorting--cache-locality)
+- [Building, Testing & Visualizing](#building-testing--visualizing)
 - [Project Layout](#project-layout)
 - [License](#license)
 
@@ -62,89 +59,175 @@
 ## Architectural Principles & Hard Invariants
 
 1. **Flat Data over Abstraction:**
-   - **Zero virtual methods, zero inheritance, zero dynamic dispatch.**
+   - **Zero virtual methods, zero inheritance, zero runtime RTTI.**
    - Components are strictly Plain Old Data (POD) structs arranged linearly in 64 KB cache-aligned chunk pages in pure Structure-of-Arrays (SoA) layout.
 2. **Zero External Dependencies:**
-   - Standard library (`<cstdint>`, `<vector>`, `<cstring>`, `<chrono>`, `<span>`, `<concepts>`) and hardware CPU intrinsics only.
-   - Absolutely no dependency on game engines, graphics APIs (no Vulkan/Metal headers), or third-party frameworks.
+   - Pure C++20 standard library (`<cstdint>`, `<vector>`, `<cstring>`, `<chrono>`, `<span>`, `<concepts>`) and hardware CPU intrinsics only.
+   - Absolutely no dependency on game engines, graphics APIs, or third-party containers.
 3. **Hardware-Aligned Chunk Storage:**
-   - Adapts automatically to host cache line sizes (64B on x86, 128B on Apple Silicon) and virtual memory page boundaries (4 KB / 16 KB) to prevent TLB thrashing and false sharing.
+   - Adapts to host cache line sizes (64B on x86, 128B on Apple Silicon) and virtual memory page boundaries (4 KB / 16 KB) to prevent TLB thrashing and false sharing.
 4. **Deterministic O(1) Operations:**
    - Entity routing via a 32-byte generational `SlotMap` with automatic stale-handle invalidation.
    - Chunk compaction via $O(1)$ Swap-and-Pop with zero memory holes.
-5. **Lock-Free Concurrency on the Hot Path:**
-   - Chunks are independent 64 KB memory pages; worker threads process discrete chunks without mutex locks or atomic contention.
+5. **Declarative Concurrency & Scheduling:**
+   - Compile-time and runtime component access footprints (`Access{}.reads<T>().writes<U>()`).
+   - Automated DAG stage sorting, conflict-free batch parallelism, and barrier synchronization.
+
+---
+
+## Layered Architecture & Strict Dependency Flow
+
+`arche-ecs` is implemented with a strictly enforced **Architecture-as-Code (AaC)** DAG. Lower layers must NEVER depend on or include higher layers. Verified via `make lint` (`scripts/check_architecture.py`).
+
+| Layer | Subsystem / Tier | Contents | Permitted Dependencies |
+| :---: | :--- | :--- | :--- |
+| **0** | `foundation` (`entity`, `hardware`, `component`) | Entity handle, POD types, bitmasks, CPU intrinsics, ColumnLayout, ComponentID, SnapshotHeader | Only Layer 0 |
+| **1** | `storage` (`chunk`, `slot_map`, `resource`, `command`) | 64KB chunk page memory, SlotMap routing table, singleton resources, CommandBuffer byte queue | Layer 0 only |
+| **2** | `archetype` (`archetype`, `archetype_index`) | Archetype tables, transition graph, reactive table index | Layers 0 and 1 |
+| **3** | `mutation` | Immediate archetype transitions & command buffer playback | Layers 0, 1, and 2 |
+| **4** | `concurrency` (`thread_pool`) | Barrier-synchronized work-stealing worker thread pool | Layer 0 only |
+| **5** | `query` (`query`, `sort`) | Query iterators, SIMD tail padding, each_parallel, sort / permute | Layers 0..4 |
+| **6** | `access` | Declarative component and resource access footprints | Layers 0 and 1 (`resource`) |
+| **7** | `system` (`system_context`, `system_types`) | System execution scope and function signatures | Layers 0..6 |
+| **8** | `scheduler` | Conflict graph compilation, topological sort, batch dispatch | Layers 0..7 |
+| **9** | `plugin` | Autonomous plugin installation and system registration | Layers 6, 7, 8 |
+| **10** | `views` | Domain facades (`archetype_view`, `entity_view`, `resource_view`, `snapshot_view`, `system_view`) | Layers 0..9 |
+| **11** | `world` | Central World assembly, storage, facade coordinator | All lower layers |
+| **12** | `arche` | Umbrella C++20 module (`src/arche.cppm`) | All layers |
 
 ---
 
 ## Comparative Benchmarks (arche-ecs vs. Flecs vs. EnTT)
 
-Empirically verified against **Flecs** (v4.0.4, archetype table engine) and **EnTT** (v3.13.2, sparse-set engine) under identical hardware conditions (Apple Silicon M-Series, 3.2 GHz reference, Clang 17, `-O3 -march=native -ffast-math`).
+Empirically verified against **Flecs** (v4.0.4, archetype table engine) and **EnTT** (v3.13.2, sparse-set engine) under identical hardware conditions (Apple Silicon M-Series, Clang C++20, `-O3 -DNDEBUG`). 
 
-### 1. Extreme Scale: 2,000,000 Entities
+All benchmark telemetry is serialized directly to [build/benchmark_results.json](build/benchmark_results.json). Run `make charts` to view the interactive dashboard in [docs/benchmarks/benchmark_dashboard.html](docs/benchmarks/benchmark_dashboard.html).
 
-| Benchmark Scenario | arche-ecs (Chunked SoA) | Flecs (Archetype Table) | EnTT (Sparse Set) | Speedup vs. Competitors |
-| :--- | :---: | :---: | :---: | :---: |
-| **Realistic Swarm Physics**<br>*(Euler Integration + Bounding Box Bounds)* | **1.70 ms** | 2.63 ms | 5.26 ms | **1.55× faster than Flecs**<br>**3.1× faster than EnTT** |
-| **Simple Streaming Iteration**<br>*(pos += vel \* dt)* | 0.93 ms | **0.51 ms** | 2.85 ms *(Owned)*<br>4.27 ms *(View)* | **3.1×–4.6× faster than EnTT** |
-| **Wide Entity Simulation**<br>*(500,000 Entities: 8 Components)* | 1.04 ms | **0.78 ms** | 7.03 ms | **6.8× faster than EnTT** |
+### 1. Memory Footprint & Steady-State Zero Allocations (1,000,000 Entities)
 
-> **Why arche-ecs beats Flecs in Swarm Physics:**  
-> When compute loops contain realistic arithmetic density (e.g. Reynolds steering, boundary bouncing, vector clamps), `arche-ecs` chunks fit perfectly into CPU L1/L2 caches (128 KB on Apple Silicon), allowing Clang/GCC auto-vectorizers (NEON / AVX2) to saturate vector execution units without cache thrashing.
+Measuring exact heap bytes allocated for 1,000,000 entities possessing `Position` (8 B) + `Velocity` (8 B) = 16.00 MB data payload:
 
-### 2. Multi-Threaded Chunk Parallelism (8 Cores)
+| Engine & Architecture | Total Heap Allocated | Bytes / Entity | Overhead vs Payload (16 B) | Packing Efficiency | Steady-State Heap Allocs / Frame |
+| :--- | :---: | :---: | :---: | :---: | :---: |
+| **`arche-ecs (64KB Chunk Pages)`** | **38.73 MB** | **40.6 B** | **+24.6 B** | **39.4%** | **0 allocs (0 B)** ✅ |
+| **`EnTT (Dense Sparse Pools)`** | 50.79 MB | 53.3 B | +37.3 B | 30.0% | **0 allocs (0 B)** ✅ |
+| **`Flecs (Table Blocks)`** | 90.17 MB | 94.5 B | +78.5 B | 16.9% | **0 allocs (0 B)** ✅ |
 
-Traversing **2,000,000 entities** across 8 CPU worker threads using chunk-level work-stealing:
+> **Key Finding:** `arche-ecs` achieves the tightest memory packing of any tested engine, consuming **57% less memory than Flecs** and **24% less memory than EnTT**. All three engines guarantee zero steady-state heap allocations during gameplay.
 
-```
-|               ns/op |                op/s |    err% | Execution Strategy
-|--------------------:|--------------------:|--------:|:---------------------------------------------
-|          426,770.90 |            2,343.18 |   12.1% | arche-ecs (8-Thread query_parallel): 0.42 ms (2,343 FPS!)
-|          924,260.42 |            1,081.95 |    0.7% | arche-ecs (Single-Thread baseline) : 0.92 ms
-```
+### 2. Change Detection & Sparse Activity (500,000 Entities, 5% Active)
 
-### 3. Entity Lifecycle & Structural Mutations
+Querying 500,000 entities when only 25,000 (5%) have mutated since the previous tick:
 
-| Operation (20,000 Entities) | arche-ecs | EnTT | Flecs | Advantage |
-| :--- | :---: | :---: | :---: | :---: |
-| **Bulk Entity Spawning** | **68.4 µs** | 511.8 µs | 5,423.3 µs | **79× faster than Flecs**<br>**7.5× faster than EnTT** |
-| **Single Spawn Loop** | 728.2 µs | **511.8 µs** | 5,423.3 µs | **7.4× faster than Flecs** |
-| **Add Component (Archetype Migration)** | 1,037.7 µs | **469.4 µs** *(Sparse pool append)* | 5,540.8 µs | **5.3× faster than Flecs** |
-| **Entity Destruction (Despawn)** | **858.1 µs** | 950.1 µs | 5,299.0 µs | **6.2× faster than Flecs** |
+| Implementation Candidate | Latency / op | Throughput | Relative Speedup vs Full Scan |
+| :--- | :---: | :---: | :---: |
+| **`arche-ecs (Mutated<Position> chunk skip)`** | **1.0 µs** | **964,834 op/s** | **~135× faster** than full scan |
+| `arche-ecs (Full Scan baseline without filter)` | 139.7 µs | 7,158 op/s | 1.0× baseline |
+| `EnTT (ActiveFlag Sparse View 5%)` | 69.9 µs | 14,303 op/s | ~13× faster than full scan |
+| `Flecs (Filter iter.changed() table skipping)` | 779.1 µs | 1,284 op/s | Overhead of per-entity check |
+| `Flecs (Full Scan baseline without filter)` | 120.0 µs | 8,334 op/s | 1.0× baseline |
+| `EnTT (Full Scan baseline 500k)` | 901.9 µs | 1,109 op/s | 1.0× baseline |
 
-### 4. Random Entity Access
+> **Key Finding:** `arche-ecs` skips dormant chunks in $O(1)$ at the 64KB chunk boundary by checking the column modification tick header before touching entity data, executing in **1.0 µs**.
 
-100,000 component lookups across shuffled, random generational handles:
+### 3. Extreme Scale: 2,000,000 Entities Simulation
 
-```
-|               ns/op |                op/s |    err% | Engine & Architecture
-|--------------------:|--------------------:|--------:|:---------------------------------------------
-|          405,653.85 |            2,465.16 |    1.5% | arche-ecs (SlotMap Indirection) : 405.6 µs
-|          636,254.81 |            1,571.70 |    0.5% | EnTT (Direct Sparse Set Lookup) : 636.2 µs (1.5x slower)
-|        1,355,353.41 |              737.81 |    5.5% | Flecs (Entity Index Table)      : 1,355.3 µs (3.3x slower)
-```
+| Benchmark Scenario | arche-ecs (Chunked SoA) | Flecs (Archetype Table) | EnTT (Sparse Set) | Analysis |
+| :--- | :---: | :---: | :---: | :--- |
+| **Realistic Swarm Physics**<br>*(Euler + Boundary Clamps)* | **2.68 ms** | 3.12 ms | 5.21 ms | **arche-ecs is 1.16× faster than Flecs, 1.94× faster than EnTT** |
+| **Simple Streaming Iteration**<br>*(pos += vel \* dt)* | 962 µs | **515 µs** | 2,979 µs | Flecs leads pure trivial loops; both beat EnTT by 3×–5× |
+| **Wide Entity Simulation**<br>*(500,000 Entities: 8 Components)* | 978 µs | **741 µs** | 6,297 µs | **Archetypes beat Sparse Sets by 6.4× to 8.5×** |
 
-### 5. In-Place Entity Sorting (500k Entities)
+### 4. Multi-Threaded Query Scaling (1, 2, 4, 8 Threads)
 
-Sorting 500,000 entities in-place by spatial key to enforce hardware cache locality:
+Iterating **2,000,000 entities** across 1, 2, 4, and 8 worker threads:
 
-```
-|               ns/op |                op/s |    err% | Sorting Implementation
-|--------------------:|--------------------:|--------:|:---------------------------------------------
-|       51,264,550.00 |               19.51 |    2.2% | arche-ecs (In-place cycle chasing) : 51.2 ms
-|       90,105,680.67 |               11.10 |    3.7% | EnTT (registry.sort dense pool)    : 90.1 ms (1.75x slower)
-```
+| Threads | `arche-ecs (query_parallel)` | `Flecs (multi_threaded)` | arche-ecs Scaling Factor |
+| :---: | :---: | :---: | :---: |
+| **1 Thread** | 965.8 µs | 530.2 µs | 1.0× (Baseline) |
+| **2 Threads** | 369.4 µs | 538.5 µs | **2.61× speedup** |
+| **4 Threads** | **295.1 µs** | 998.7 µs | **3.27× speedup** |
+| **8 Threads** | 373.7 µs | 462.8 µs | Memory bandwidth saturation |
+
+### 5. Full-Frame 10-System Game Loop Simulation (100k Entities)
+
+Full frame execution: 10 interleaved read/write systems with resource access (`TimeStep`, `AudioQueue`), component mutations, death cleanup, and spawn:
+
+| Framework & Dispatch Model | Frame Latency | Frame Rate (FPS) |
+| :--- | :---: | :---: |
+| **`Flecs (Pipeline 1 Thread)`** | **315.8 µs** | **3,167 FPS** |
+| **`Flecs (Pipeline 8 Threads)`** | 349.6 µs | 2,861 FPS |
+| **`arche-ecs (Scheduler 1 Thread)`** | 755.5 µs | 1,324 FPS |
+| **`arche-ecs (Scheduler 8 Threads)`** | 767.2 µs | 1,303 FPS |
+| **`EnTT (Sequential 1 Thread)`** | 842.5 µs | 1,187 FPS |
+
+> **Key Finding:** `arche-ecs`'s automatic conflict-resolving DAG scheduler runs **10% faster than EnTT's manual sequential loop** while providing stage sorting, safety isolation, and deferred command playback.
+
+### 6. Entity Lifecycle & Structural Mutations (20k Entities)
+
+| Operation (20,000 Entities) | arche-ecs | EnTT | Flecs | Real-World Advantage |
+| :--- | :---: | :---: | :---: | :--- |
+| **Bulk Entity Spawning** | 807 µs | **359 µs** | 5,195 µs | arche-ecs is **6.4× faster than Flecs** |
+| **Single Spawn Loop** | 5,507 µs | **359 µs** | 5,195 µs | EnTT sparse sets excel at single-item creation |
+| **Add Component (Mutation)** | 8,697 µs | **342 µs** | 5,203 µs | Sparse pool appends beat table migrations |
+| **Entity Destruction (Despawn)** | 7,446 µs | **689 µs** | 5,165 µs | Swap-remove chunk compaction overhead |
+
+### 7. Dynamic Archetype Churn (50k Entities Buff/Tag Cycling)
+
+Continuously adding and removing temporary buffs/tags on 50,000 entities per frame:
+
+| Dynamic Churn Pattern | `arche-ecs` | `Flecs` | `EnTT` |
+| :--- | :---: | :---: | :---: |
+| **Add & Remove SpeedBuff (50k Entities)** | 22.97 ms | 8.27 ms | **0.83 ms** |
+| **Multi-Archetype 4-Way Alternating Cycle** | 23.04 ms | 8.04 ms | **0.87 ms** |
+
+---
+
+## Comparative Performance Analysis & Honest Diagnostic
+
+To keep `arche-ecs` accountable, we explicitly record where and why competitors currently win, and what is required to close the gap.
+
+### The Harsh Numbers: Where arche-ecs Lost
+
+| Benchmark Scenario | `arche-ecs` | `Flecs` | `EnTT` | Reality |
+| :--- | :---: | :---: | :---: | :--- |
+| **Simple Streaming (2M)** | 962 µs | **515 µs** | 2,979 µs | **Flecs is ~1.9× faster** |
+| **Idiomatic Range-For (2M)** | 4,418 µs | **536 µs** | 2,979 µs | **Flecs is ~8× faster; our iterator is horribly slow** |
+| **Game Loop (100k, 10 sys)** | 755 µs | **315 µs** | 842 µs | **Flecs is ~2.4× faster** |
+| **Random Component Lookup** | 2,444 µs | 986 µs | **492 µs** | **EnTT is 5× faster, Flecs is 2.5× faster** |
+| **Entity Creation (20k single)** | 5,515 µs | 5,270 µs | **359 µs** | **EnTT crushes both by 15×** |
+| **Add Component (20k)** | 8,737 µs | 5,321 µs | **342 µs** | **EnTT is 25× faster, Flecs is 1.6× faster** |
+| **Entity Destruction (20k)** | 7,452 µs | 5,182 µs | **691 µs** | **EnTT is 10× faster, Flecs is 1.4× faster** |
+| **Dynamic Churn (50k Add/Remove)**| 22.9 ms | 8.2 ms | **0.83 ms** | **EnTT is 27× faster, Flecs is ~3× faster** |
+
+### Why We Are Losing
+
+1. **Range-for Iterator is Broken Performance-Wise (4.4 ms vs Flecs 0.5 ms):**
+   - While `each_chunk` is fast, `for (auto [pos, vel] : query)` is 4.5× slower than our own chunk loop and 8× slower than Flecs. The iterator recalculates chunk pointers, row offsets, and boundaries on every `++` increment, preventing compiler auto-vectorization and causing pipeline stalls.
+2. **Random Access / `get<T>()` Indirection (2.4 ms vs EnTT 0.5 ms):**
+   - In EnTT, getting a component is a single direct array lookup (`pool[entity_id]`). In `arche-ecs`, `world.get<T>(e)` performs 4–5 memory hops (SlotMap $\to$ Archetype $\to$ linear search through `column_ids` $\to$ chunk offset).
+3. **Uncached Archetype Transitions (8.7 ms vs Flecs 5.3 ms vs EnTT 0.3 ms):**
+   - When calling `world.add<T>(e)`, `arche-ecs` takes the current bitmask, sets the bit, and searches the `ArchetypeIndex` hash map / list dynamically. Flecs uses a pre-linked graph (`archetype->edges[X].add`) for an $O(1)$ single pointer dereference.
+4. **Scheduler Dynamic Dispatch Overhead (755 µs vs Flecs 315 µs):**
+   - Flecs compiles systems down to flat arrays of matching tables. Our scheduler re-evaluates dependency rules, stage barriers, and command queues dynamically each frame, adding ~400 µs of dispatch overhead.
+
+### What Specifically Needs to Be Fixed (Optimization Roadmap)
+
+1. **Fix the Iterator (P0):** Redesign `QueryIterator` to hold a direct pointer span to the current chunk's slice. Advance to the next chunk only when the span ends. This allows compilers to auto-vectorize idiomatic range-for loops to match `each_chunk` speeds.
+2. **Add an Archetype Transition Graph (P0):** Add `std::vector<Archetype*> add_edges` and `remove_edges` inside each `Archetype` node to turn migrations into $O(1)$ pointer hops.
+3. **Cache Column Indices (P1):** Eliminate runtime column index searches in `get<T>()` by caching column indices in component accessors or indexing by compact ComponentIDs.
+4. **Pre-Bake Scheduler Dispatch Batches:** Pre-sort and pre-match system-table batches at registration time so `world.run()` executes a branchless loop of function pointers.
 
 ---
 
 ## Zero-Loss Integration Guide
 
-### Single Umbrella Header
+### C++20 Module Import
 
-Consume the entire library with zero header hunting:
+Consume `arche-ecs` directly as a native C++20 module:
 
 ```cpp
-#include <arche/arche.hpp>
+import arche;
 ```
 
 ### CMake Subproject Setup
@@ -162,438 +245,175 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(arche)
 
 add_executable(my_simulation src/main.cpp)
-target_link_libraries(my_simulation PRIVATE arche::arche)
-```
-
-### Crucial Compiler Flags for Maximum Performance
-
-Configure consumer targets with the following compiler flags:
-
-```cmake
-# 1. Enable Link-Time Optimization (LTO / IPO)
-set_property(TARGET my_simulation PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
-set_property(TARGET arche PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
-
-# 2. Enable Native SIMD Vectorization
-if (MSVC)
-    target_compile_options(my_simulation PRIVATE /O2 /arch:AVX2 /fp:fast)
-else()
-    target_compile_options(my_simulation PRIVATE -O3 -march=native -ffast-math)
-endif()
-
-# 3. Disable RTTI (arche-ecs uses zero dynamic_cast or runtime RTTI)
-if (NOT MSVC)
-    target_compile_options(my_simulation PRIVATE -fno-rtti)
-endif()
+target_link_libraries(my_simulation PRIVATE arche)
 ```
 
 ---
 
 ## Modern API Usage Guide
 
-### 1. Defining Components
+### 1. Defining Components & Resources
 
-Components are plain, unadorned C++ structs (Plain Old Data):
+Components and resources are strictly POD structs:
 
 ```cpp
-struct Position { float x{0.0f}, y{0.0f}, z{0.0f}; };
-struct Velocity { float vx{0.0f}, vy{0.0f}, vz{0.0f}; };
-struct BoidState { float hunger{0.0f}; uint32_t flock_id{0}; };
-struct MortonKey { uint32_t code{0}; };
+import arche;
 
-// Zero-sized tag components (occupy 0 bytes in chunk columns)
-struct TagBoid {};
-struct TagPredator {};
-struct TagDead {};
+struct Position { float x{0.0f}, y{0.0f}; };
+struct Velocity { float vx{0.0f}, vy{0.0f}; };
+struct Health { float hp{100.0f}; };
+
+// Singleton resource (global state)
+struct GameConfig {
+    float gravity{-9.81f};
+    float delta_time{0.016f};
+};
 ```
-
----
 
 ### 2. Initializing the World & Entity Lifecycle
 
-The `World` is the central coordinator managing archetypes, chunk allocation pools, and entity slot routing:
-
 ```cpp
-#include <arche/arche.hpp>
-
 arche::World world;
 
-// 1. Scalar spawn: Infers archetype and constructs components in-place
-arche::Entity boid = world.spawn(
-    Position{10.0f, 20.0f, 0.0f},
-    Velocity{1.0f, -0.5f, 0.0f},
-    TagBoid{}
-);
+// Register global resource
+world.add_resource<GameConfig>(GameConfig{-9.81f, 0.016f});
 
-// 2. Checking handle validity in O(1)
-if (world.is_alive(boid)) {
-    // 3. Direct component inspection
-    Position& pos = world.get<Position>(boid);
-    pos.x += 1.0f;
-}
+// Spawn entity (returns generational handle)
+arche::Entity e = world.spawn(Position{0.0f, 0.0f}, Velocity{1.0f, 2.0f}, Health{100.0f});
 
-// 4. Despawn entity (reclaims slot and executes O(1) chunk swap-and-pop)
-world.despawn(boid);
-assert(!world.is_alive(boid));
+// Inspect component
+assert(world.has<Position>(e));
+world.get<Position>(e).x += 5.0f;
+
+// Despawn (O(1) chunk swap-and-pop)
+world.despawn(e);
+assert(!world.entities.contains(e));
 ```
 
----
-
-### 3. High-Throughput Batch Spawning (Broadcasting & SoA Streaming)
-
-#### Approach A: Prototype Broadcasting
-Spawns $N$ entities sharing identical initial component values:
+### 3. Bulk Spawning (Broadcasting & SoA Ingestion)
 
 ```cpp
-// Spawns 100,000 boids in ~0.7 ms (> 140 Million entities/sec)
-std::vector<arche::Entity> entities = world.spawn_batch(
-    100'000,
-    Position{0.0f, 0.0f, 0.0f},
-    Velocity{1.0f, 0.0f, 0.0f},
-    TagBoid{}
+// A. Prototype broadcasting: spawns 100,000 identical entities
+std::vector<arche::Entity> handles = world.spawn(
+    {.count = 100'000},
+    Position{0.0f, 0.0f},
+    Velocity{1.0f, 1.0f}
 );
-```
 
-#### Approach B: Direct Structure-of-Arrays (SoA) Streaming
-Streams pre-computed unique column arrays directly into chunk columns via `std::memcpy` with **zero heap allocations**:
+// B. Direct SoA streaming: ingest pre-computed arrays with zero heap allocations
+std::vector<Position> positions(50'000);
+std::vector<Velocity> velocities(50'000);
+std::vector<arche::Entity> out_ents(50'000);
 
-```cpp
-std::vector<Position> positions(50'000, Position{...});
-std::vector<Velocity> velocities(50'000, Velocity{...});
-std::vector<arche::Entity> out_handles(50'000);
-
-// Ingests external arrays directly into cache-aligned chunks (> 250M entities/sec)
-world.spawn_batch(
-    50'000,
-    std::span<arche::Entity>(out_handles),
+world.spawn(
+    {.count = 50'000},
+    std::span<arche::Entity>(out_ents),
     positions.data(),
     velocities.data()
 );
-
-// Batch despawn: destroys 50,000 entities in a single cache-efficient pass
-world.despawn_batch(out_handles);
 ```
-
----
 
 ### 4. Component Access & Structural Mutation
 
-Entities migrate dynamically between archetypes via pre-cached DAG edges in $O(1)$ time:
-
 ```cpp
-arche::Entity e = world.spawn(Position{0.0f, 0.0f, 0.0f});
+arche::Entity e = world.spawn(Position{0.0f, 0.0f});
 
-// Test component presence in O(1) bitmask check
-assert(world.has<Position>(e));
-assert(!world.has<Velocity>(e));
+// Add component (moves entity to [Position, Velocity] archetype)
+world.add(e, Velocity{1.0f, 2.0f});
 
-// Add component: transitions entity to [Position, Velocity]
-world.add(e, Velocity{1.5f, 2.5f, 0.0f});
-
-// Remove component: transitions entity back to [Position]
+// Remove component (moves entity back to [Position] archetype)
 world.remove<Velocity>(e);
 ```
 
----
-
 ### 5. Querying & Iteration
 
-#### Range-Based For-Loops & Structured Bindings
-
 ```cpp
-// Superset matching: iterates any entity possessing AT LEAST [Position, Velocity]
-for (auto [pos, vel] : world.query<Position, Velocity>()) {
+// Idiomatic range-for iteration
+for (auto [pos, vel] : world.query<Position, const Velocity>()) {
     pos.x += vel.vx * 0.016f;
     pos.y += vel.vy * 0.016f;
 }
-```
 
-#### Querying Entity Handles
-
-Include `arche::Entity` as a template parameter to access the entity handle during iteration:
-
-```cpp
-for (auto [entity, pos, vel] : world.query<arche::Entity, Position, Velocity>()) {
-    if (pos.y < -100.0f) {
-        // Queue deferred destruction
-    }
-}
-```
-
-#### Compile-Time Tag Filters (`With` & `Without`)
-
-Filter archetypes in 1–2 CPU clock cycles using 128-bit bitwise AND operations:
-
-```cpp
-using arche::With;
-using arche::Without;
-
-// Iterates entities with Position & Velocity, tagged TagBoid, but NOT TagDead
-auto q = world.query<Position, Velocity>(
-    With<TagBoid>{},
-    Without<TagDead>{}
-);
-
-for (auto [pos, vel] : q) {
-    // Process active boids only
-}
-```
-
-#### Hot-Path SIMD Chunk Traversal (`for_each_chunk`)
-
-Bypasses iterator dereferencing overhead to process raw 64 KB component columns:
-
-```cpp
-auto q = world.query<Position, const Velocity>();
-constexpr float dt = 0.00833f;
-
-// Executes in ~0.85 CPU cycles per entity!
-q.for_each_chunk([dt](uint32_t count, Position* pos, const Velocity* vel) {
-    #pragma clang loop vectorize(enable) interleave(enable)
-    for (uint32_t i = 0; i < count; ++i) {
-        pos[i].x += vel[i].vx * dt;
-        pos[i].y += vel[i].vy * dt;
-        pos[i].z += vel[i].vz * dt;
-    }
-});
-```
-
----
-
-### 6. Multi-Threaded Work-Stealing Simulation (`query_parallel`)
-
-Because 64 KB memory chunks are completely independent, `arche-ecs` treats chunks as discrete parallel tasks:
-
-```cpp
-arche::ThreadPool pool(8);                      // 8 worker threads
-arche::ParallelCommandBuffer cmd_buffers(8);    // Thread-isolated mutation buffers
-
-world.query_parallel<Position, const Velocity>(
-    pool,
-    cmd_buffers,
-    [](uint32_t count, arche::CommandBuffer& cmd, Position* pos, const Velocity* vel) {
+// Hot-path cache-aligned SoA chunk iteration
+world.query<Position, const Velocity>().each_chunk(
+    [](uint32_t count, Position* pos, const Velocity* vel) {
+        #pragma clang loop vectorize(enable)
         for (uint32_t i = 0; i < count; ++i) {
-            pos[i].x += vel[i].vx * 0.00833f;
-            pos[i].y += vel[i].vy * 0.00833f;
-            
-            // Thread-safe deferred mutation recorded without mutex locks
-            if (pos[i].y > 1000.0f) {
-                cmd.add(ents[i], TagDead{});
-            }
+            pos[i].x += vel[i].vx * 0.016f;
+            pos[i].y += vel[i].vy * 0.016f;
         }
     }
 );
-
-// Replay deferred mutations deterministically on the main thread
-world.commit(cmd_buffers);
 ```
 
----
-
-### 7. Double-Buffered Physics Sub-Steps & O(1) Pointer Flipping
-
-In dense swarm simulations, reading and writing positions in the same buffer causes race conditions and order-dependent steering errors. `arche-ecs` provides native double-buffered component columns:
+### 6. Declarative Plugins & Conflict-Resolving DAG Scheduler
 
 ```cpp
-// 1. Enable dual read/write slices for Position
-world.enable_double_buffer<Position>();
+struct MovementPlugin {
+    static std::string_view name() { return "MovementPlugin"; }
 
-// 2. Query reading Step t (const Position*) and writing Step t+1 (Write<Position>)
-world.query_parallel<const Position, const Velocity, arche::Write<Position>>(
-    pool,
-    cmd_buffers,
-    [](uint32_t count, arche::CommandBuffer&, const Position* pos, const Velocity* vel, arche::Write<Position> next_pos) {
-        for (uint32_t i = 0; i < count; ++i) {
-            next_pos[i].x = pos[i].x + vel[i].vx * 0.00833f;
-            next_pos[i].y = pos[i].y + vel[i].vy * 0.00833f;
-            next_pos[i].z = pos[i].z + vel[i].vz * 0.00833f;
-        }
-    }
-);
-
-// 3. O(1) Pointer Flip: swaps chunk read/write slice offsets in constant time
-world.flip<Position>();
-```
-
----
-
-### 8. Dirty Version Ticking & Change Detection (`Mutated` & `Added`)
-
-Every chunk header maintains monotonic structure and column modification ticks:
-
-```cpp
-world.tick(); // Advances global simulation tick
-
-// Iterates only chunks where Position was modified since tick 42
-for (auto [pos, vel] : world.query<Position, Velocity>(arche::Mutated<Position>{42})) {
-    // Skips hundreds of unmutated chunks in 1 CPU cycle at the chunk boundary!
-}
-
-// Iterates only chunks with newly spawned or migrated entities
-for (auto [pos] : world.query<Position>(arche::Added{42})) {
-    // Process new arrivals
-}
-```
-
----
-
-### 9. In-Place Spatial Sorting & Cache Locality
-
-Improves CPU cache hit rates during neighbor searches by re-ordering entities into Morton Z-order curve alignment via **cycle chasing**:
-
-```cpp
-arche::Archetype* arch = world.get_record(boid).archetype;
-
-// In-place sort by Morton Key
-world.sort<MortonKey>(arch, [](const MortonKey& a, const MortonKey& b) {
-    return a.code < b.code;
-});
-
-// Or apply arbitrary permutations directly
-std::vector<uint32_t> permutation = { ... };
-world.permute(arch, permutation);
-```
-
----
-
-### 10. Direct GPU Ring Streaming & Draw Indirect Commands
-
-```cpp
-// Streams component column directly to mapped GPU VRAM ring buffer (17.5+ GB/s)
-size_t bytes_written = world.stream_gpu<Position>(
-    ring_slot_index,
-    mapped_vram_base,
-    slot_capacity_bytes
-);
-
-// Generate GPU DrawIndirectCommand buffers with frustum culling
-size_t draw_count = world.indirect_draw(
-    arch,
-    indirect_command_buffer,
-    max_commands,
-    [](const Position& pos) { return pos.z >= 0.0f; } // Culling predicate
-);
-```
-
----
-
-### 11. Instant World Snapshots & Deterministic Rollback
-
-Serializes and restores the complete ECS state (entity slot map, chunk memory, and dirty versions) in raw binary with zero translation overhead:
-
-```cpp
-std::vector<uint8_t> snapshot_buffer(16 * 1024 * 1024);
-
-// Save snapshot in ~0.5 ms
-size_t bytes = world.save_snapshot(snapshot_buffer.data(), snapshot_buffer.size());
-
-// Instant rollback
-world.load_snapshot(snapshot_buffer.data(), bytes);
-```
-
----
-
-## Full Simulation Frame Walkthrough (Colony Flocking Engine)
-
-From [examples/colony_simulation_loop.cpp](examples/colony_simulation_loop.cpp): a complete, production-grade 120 Hz lockstep frame simulating **100,000 boid entities**:
-
-```cpp
-#include <arche/arche.hpp>
-
-int main() {
-    arche::World world;
-    arche::ThreadPool pool(8);
-    arche::ParallelCommandBuffer cmd_buffers(8);
-
-    // 1. Configure Double-Buffered Physics
-    world.enable_double_buffer<Position>();
-
-    // 2. High-Throughput Bulk Spawn (100,000 Boids)
-    world.spawn_batch(100'000, Position{}, Velocity{1.0f, 0.5f, 0.0f}, BoidState{});
-
-    // 3. 120 Hz Simulation Loop (120 frames executed in 18.9 ms -> 158 µs/frame!)
-    for (uint32_t frame = 0; frame < 120; ++frame) {
-        // Step A: Advance simulation tick
-        world.tick();
-
-        // Step B: Concurrent Flocking (reading Step t, writing Step t+1)
-        world.query_parallel<const Position, const Velocity, BoidState, arche::Write<Position>>(
-            pool,
-            cmd_buffers,
-            [](uint32_t count, arche::CommandBuffer&, const Position* pos, const Velocity* vel, BoidState* state, arche::Write<Position> next_pos) {
-                for (uint32_t i = 0; i < count; ++i) {
-                    next_pos[i].x = pos[i].x + vel[i].vx * 0.00833f;
-                    next_pos[i].y = pos[i].y + vel[i].vy * 0.00833f;
-                    next_pos[i].z = pos[i].z + vel[i].vz * 0.00833f;
-                    state[i].hunger += 0.01f;
-                }
+    void build(arche::World&, arche::PluginContext& ctx) {
+        ctx.add_system(
+            "MovementSystem",
+            arche::Access{}.writes<Position>().reads<Velocity>().build(),
+            [](arche::SystemContext& ctx) {
+                // System runs safely in parallel batch based on access footprint
             }
         );
-
-        // Step C: Replay deferred mutations on main thread
-        world.commit(cmd_buffers);
-
-        // Step D: O(1) Double-buffer flip
-        world.flip<Position>();
     }
+};
 
-    return 0;
-}
+world.add_plugin<MovementPlugin>();
+world.set_threads(8); // Multi-threaded worker pool
+world.run();          // Advances tick, dispatches parallel batches, commits commands
+```
+
+### 7. Change Detection via Dirty Ticks (`Mutated` & `Added`)
+
+```cpp
+world.run(); // Advances world version
+const uint32_t baseline_tick = world.version();
+
+// Modify one entity
+world.get_mut<Position>(e).x += 10.0f; // Stamps column modification tick
+
+// Skips dormant chunks in O(1) at chunk boundary (1.0 µs across 500k entities)
+world.query<Position>(arche::Mutated<Position>{baseline_tick})
+    .each_chunk([](uint32_t count, Position* p) {
+        // Only executes for chunks mutated since baseline_tick
+    });
+```
+
+### 8. In-Place Spatial Sorting & Cache Locality
+
+```cpp
+// Sort entities in-place via cycle chasing permutation to maximize cache hits
+world.sort<Position>(
+    archetype_ptr,
+    [](const Position& a, const Position& b) { return a.x < b.x; }
+);
 ```
 
 ---
 
-## Architectural Roadmap & The Generality Tax
+## Building, Testing & Visualizing
 
-```mermaid
-flowchart LR
-    S1["Stage 1: Core Storage<br>(100% COMPLETE)"] --> S2["Stage 2: Concurrency & Scale<br>(100% COMPLETE)"]
-    S2 -.-> S3["Stage 3: Relational Graphs<br>(DELIBERATELY EXCLUDED)"]
-    S3 -.-> S4["Stage 4: Distributed Compute<br>(OUT OF SCOPE)"]
-
-    style S1 fill:#1b4731,stroke:#3fb950,stroke-width:2px,color:#fff
-    style S2 fill:#1b4731,stroke:#3fb950,stroke-width:2px,color:#fff
-    style S3 fill:#4d2d18,stroke:#d29922,stroke-width:1px,stroke-dasharray: 5 5,color:#fff
-    style S4 fill:#3b1e1e,stroke:#f85149,stroke-width:1px,stroke-dasharray: 5 5,color:#fff
-```
-
-### Why Stage 1 & Stage 2 are Complete
-- **Stage 1 (Storage):** Cache-aligned 64 KB SoA chunk pages, generational `SlotMap` routing, and transition DAG commutativity.
-- **Stage 2 (Concurrency & Scale):** Multi-threaded work-stealing parallelism (`query_parallel`), double-buffered columns (`Write<T>`, `flip`), dirty version ticking (`Mutated<T>`), in-place sorting (`sort`), and bulk SoA streaming. Tested to **2,000,000 entities**.
-
-### Why Stage 3 & Stage 4 are Deliberately Excluded ("The Generality Tax")
-More features in an ECS do not equate to better performance:
-1. **The Archetype Fragmentation Penalty:** Dynamic entity relationships (`ChildOf`, `TargetOf`) fragment dense chunks into hundreds of tiny, partially filled tables. CPU queries spend more cycles pointer chasing across fragmented archetypes than executing vector arithmetic.
-2. **GPU Synchronization Stalls:** Heterogeneous compute graphs require CPU-GPU synchronization barriers, destroying throughput compared to our linear DMA uploads (> 17.5 GB/s).
-
----
-
-## Building & Testing
-
-### Requirements
-- **C++ Compiler:** Modern C++20 compiler (`AppleClang 13+`, `Clang 13+`, `GCC 11+`, or `MSVC 2019+`)
-- **Build System:** `CMake 3.20+`
-
-### Build & Run Test Suites
 ```bash
-# 1. Configure build
-cmake -B build -DCMAKE_BUILD_TYPE=Release
+# 1. Build the library and test suite
+make build
 
-# 2. Build all targets
-cmake --build build -j8
+# 2. Run Architecture-as-Code linter and test suite (25/25 tests)
+make lint
+make test
 
-# 3. Run all 19 unit test suites via CTest
-ctest --test-dir build --output-on-failure
+# 3. Run hardware & comparative benchmarks
+make benchmark
 
-# 4. Run the Colony 100k Boid Simulation example
-./build/colony_simulation_loop
-
-# 5. Run the Stage 2 Hardware Benchmark profiler
-./build/arche_benchmarks
-
-# 6. Run the Comparative Benchmark against Flecs and EnTT
-./build/comparative_ecs_benchmarks
+# 4. Generate interactive HTML dashboard and markdown charts
+make charts
 ```
+
+Interactive charts are generated to [docs/benchmarks/benchmark_dashboard.html](docs/benchmarks/benchmark_dashboard.html).
 
 ---
 
@@ -601,125 +421,57 @@ ctest --test-dir build --output-on-failure
 
 ```text
 arche-ecs/
-├── CMakeLists.txt                      # CMake build definitions
-├── include/
-│   └── arche/
-│       ├── arche.hpp                   # Single umbrella public header
-│       ├── world.hpp                   # Central World facade (spawn, get, tick, commit)
-│       ├── entity.hpp                  # Generational entity handle
-│       ├── query.hpp                   # Queries, iterators, and filter tags (With/Without/Write)
-│       ├── command_buffer.hpp          # CommandBuffer & ParallelCommandBuffer
-│       ├── type_registry.hpp           # TypeID & TypeRegistry component reflection
-│       ├── component_mask.hpp          # 128-bit component presence bitset
-│       ├── archetype.hpp               # Archetype definition & column layouts
-│       ├── chunk.hpp                   # 64 KB SoA chunk memory geometry
-│       ├── gpu_reflection.hpp          # VRAM ring buffer & draw indirect commands
-│       ├── hardware.hpp                # CPU cache line & page size topology probe
-│       ├── thread_pool.hpp             # Work-stealing concurrency pool
-│       └── detail/                     # Engine internals (isolated plumbing)
-│           ├── archetype_graph.hpp     # Transition DAG edges
-│           ├── chunk_pool.hpp          # 64 KB slab allocation pool
-│           ├── math_utils.hpp          # SIMD bounds & alignment math
-│           ├── query_cache.hpp         # Cached archetype queries
-│           ├── query_iterator.hpp      # Range-for structured binding iterator
-│           └── slot_map.hpp            # Entity-to-chunk index routing table
-├── src/
-│   ├── arche.cpp                       # Library symbol root
-│   ├── chunk.cpp                       # Chunk memory slice logic
-│   ├── command_buffer.cpp              # Deferred mutation playback
-│   └── world.cpp                       # World lifecycle management
-├── tests/                              # 19 Dedicated unit test suites
+├── CMakeLists.txt                      # CMake build definitions (C++20 modules)
+├── Makefile                            # Ergonomic build, lint, benchmark & charts targets
+├── src/                                # Layered C++20 Module Partitions (AaC Verified)
+│   ├── arche.cppm                      # Root umbrella module interface
+│   ├── foundation/                     # Layer 0: Hardware, types, entity, component ID & mask
+│   ├── storage/                        # Layer 1: 64KB chunk page memory, slot_map, resource, command
+│   ├── archetype/                      # Layer 2: Archetype tables, index & graph
+│   ├── mutation/                       # Layer 3: Immediate transitions & command buffer playback
+│   ├── runtime/
+│   │   ├── concurrency/                # Layer 4: Barrier work-stealing thread pool
+│   │   ├── query/                      # Layer 5: Queries, iterators, filters (With/Without)
+│   │   ├── sort/                       # Layer 5: In-place cycle-chasing permutation
+│   │   ├── access/                     # Layer 6: Declarative read/write access footprints
+│   │   ├── system/                     # Layer 7: SystemContext & system signatures
+│   │   ├── scheduler/                  # Layer 8: Conflict DAG compilation & batch dispatch
+│   │   └── plugin/                     # Layer 9: Modular plugin lifecycle
+│   ├── views/                          # Layer 10: Domain facades (entity, archetype, resource, snapshot)
+│   └── world/                          # Layer 11: World storage assembly & facade composition
+├── tests/                              # 25 Dedicated Unit Test Suites (100% passing)
 │   ├── entity_tests.cpp                # Generational handle integrity
-│   ├── type_tests.cpp                  # TypeRegistry & reflection
-│   ├── archetype_tests.cpp             # DAG commutativity & edge caching
-│   ├── chunk_storage_tests.cpp         # 64 KB chunk SoA alignment
-│   ├── structural_mutation_tests.cpp   # Add/remove & swap-and-pop
+│   ├── component_id_tests.cpp          # ComponentID assignment & reflection
+│   ├── archetype_tests.cpp             # Archetype creation & commutativity
+│   ├── chunk_storage_tests.cpp         # 64KB chunk memory layout & alignment
+│   ├── structural_mutation_tests.cpp   # Add/remove & swap-and-pop compaction
 │   ├── query_tests.cpp                 # Superset queries & SIMD iteration
-│   ├── gpu_reflection_tests.cpp        # std430 traits & VRAM streaming
-│   ├── arche_tests.cpp                 # Integration regression suite
-│   ├── handles_and_snapshots_tests.cpp # SlotMap & snapshot serialization
-│   ├── batch_lifecycle_tests.cpp       # Bulk spawn & SoA streaming
-│   ├── simd_and_hardware_tests.cpp     # SIMD bounds & topology
-│   ├── dirty_ticks_tests.cpp           # Monotonic version tracking
 │   ├── query_caching_tests.cpp         # Event-driven query caching
-│   ├── archetype_permutation_tests.cpp # In-place cycle chasing permutation
+│   ├── batch_lifecycle_tests.cpp       # Bulk spawn & SoA streaming
+│   ├── dirty_ticks_tests.cpp           # Monotonic version tracking & chunk skipping
+│   ├── archetype_permutation_tests.cpp # In-place cycle-chasing sort
 │   ├── double_buffered_tests.cpp       # Dual-slice double buffering
 │   ├── multithreaded_query_tests.cpp   # Multi-threaded query dispatch
+│   ├── work_stealing_tests.cpp         # Barrier thread pool & task stealing
+│   ├── scheduler_tests.cpp             # DAG conflict resolution & dispatch
+│   ├── plugin_tests.cpp                # Plugin installation & system wiring
+│   ├── world_facade_tests.cpp          # Facade views & encapsulation
+│   ├── resource_tests.cpp              # Singleton resources
+│   ├── access_tests.cpp                # Access footprint declarations
+│   ├── simd_and_hardware_tests.cpp     # SIMD bounds & CPU topology
 │   ├── stage2_validation_tests.cpp     # Stage 2 validation integration
-│   └── public_api_tests.cpp            # Modern clean API test suite
+│   ├── handles_and_snapshots_tests.cpp # SlotMap & binary snapshots
+│   └── public_api_tests.cpp            # Public API regression suite
+├── docs/benchmarks/                    # Visualizations & Telemetry
+│   ├── benchmark_dashboard.html        # Interactive responsive SVG dashboard
+│   └── BENCHMARK_RESULTS.md            # Generated Markdown telemetry tables
 └── scripts/
-    ├── benchmarks/
-    │   ├── arche_benchmarks.cpp        # Cycle-accurate TSC hardware profiler
-    │   └── comparative_benchmarks.cpp  # 2M scale head-to-head vs Flecs & EnTT
     ├── check_architecture.py           # Architecture-as-Code boundary validator
-    └── lint.py                         # AST and semantic module linter
+    └── benchmarks/
+        ├── arche_benchmarks.cpp        # Cycle-accurate TSC hardware profiler
+        ├── comparative_benchmarks.cpp  # Head-to-head vs Flecs & EnTT (2M scale)
+        └── benchmark_charts.py         # Reusable chart & dashboard generator
 ```
-
----
-
-## Comparative Performance Analysis & Future Roadmap
-
-To keep `arche-ecs` accountable and brutally honest, the repository features comprehensive comparative benchmarks measuring `arche-ecs` against two industry standards—**Flecs** (archetype engine) and **EnTT** (sparse-set engine)—across 2,000,000 entities, multi-threading scaling, full 10-system game loops, and dynamic archetype churn.
-
-All microbenchmarks export directly to [build/benchmark_results.json](build/benchmark_results.json) and render via `make charts` into an interactive dashboard at [docs/benchmarks/benchmark_dashboard.html](docs/benchmarks/benchmark_dashboard.html) and [docs/benchmarks/BENCHMARK_RESULTS.md](docs/benchmarks/BENCHMARK_RESULTS.md).
-
-### The Harsh Numbers: Where `arche-ecs` Lost
-
-| Benchmark Scenario | `arche-ecs` | `Flecs` | `EnTT` | Reality |
-| :--- | :---: | :---: | :---: | :--- |
-| **Simple Streaming (2M)** | 962 µs | **515 µs** | 2,979 µs | **Flecs is ~1.9× faster** |
-| **Idiomatic Range-For (2M)** | 4,418 µs | **536 µs** | 2,979 µs | **Flecs is ~8× faster; our iterator is horribly slow** |
-| **Game Loop (100k, 10 sys)** | 755 µs | **315 µs** | 842 µs | **Flecs is ~2.4× faster** |
-| **Random Component Lookup** | 2,444 µs | 986 µs | **492 µs** | **EnTT is 5× faster, Flecs is 2.5× faster** |
-| **Entity Creation (20k single)** | 5,515 µs | 5,270 µs | **359 µs** | **EnTT crushes both by 15×** |
-| **Add Component (20k)** | 8,737 µs | 5,321 µs | **342 µs** | **EnTT is 25× faster, Flecs is 1.6× faster** |
-| **Entity Destruction (20k)** | 7,452 µs | 5,182 µs | **691 µs** | **EnTT is 10× faster, Flecs is 1.4× faster** |
-| **Dynamic Churn (50k Add/Remove)**| 22.9 ms | 8.2 ms | **0.83 ms** | **EnTT is 27× faster, Flecs is ~3× faster** |
-
-*(Note: Where `arche-ecs` won: Lowest memory footprint at **40.6 B/entity** vs Flecs 94.5 B and EnTT 53.3 B, and 64KB chunk-level change detection at **1.0 µs** vs EnTT 69.9 µs and Flecs 779 µs).*
-
----
-
-### Why We Are Losing
-
-#### 1. Range-for Iterator is Broken Performance-Wise (4.4 ms vs Flecs 0.5 ms)
-Our `each_chunk` is competitive, but nobody wants to write verbose chunk lambdas with raw pointers every day. Our idiomatic `for (auto [pos, vel] : query)` is **4.5× slower** than our own chunk loop and **8× slower** than Flecs.
-* **Why:** The iterator stores entity state and recalculates row offsets, chunk pointers, and bounds on every single `++` increment. The compiler completely fails to auto-vectorize it, causing pipeline stalls on every entity step.
-
-#### 2. Random Access / `get<T>()` is Clunky (2.4 ms vs EnTT 0.5 ms)
-* **Why:** In EnTT, getting a component is literally `pool[entity_id]`—a single direct array lookup.
-* In `arche-ecs`, `world.get<T>(e)`:
-  1. Looks up the entity record in the `SlotMap` (layer 1).
-  2. Resolves its archetype pointer (layer 2).
-  3. Performs a linear/binary search through `archetype->column_ids` to locate the column index for `T`.
-  4. Multiplies by type size, finds the chunk, and offsets into the row.
-* That represents 4 to 5 memory hops and an inner search per lookup, which is why Flecs and EnTT outperform us on single-entity queries.
-
-#### 3. Archetype Transitions are Heavy and Uncached (8.7 ms vs Flecs 5.3 ms vs EnTT 0.3 ms)
-* **Why:** In `world.add<T>(e, ...)`, `arche-ecs` currently lacks an Archetype Graph with pre-cached edge lookups. Every time a component is added:
-  1. We take the current archetype's bitmask.
-  2. We set the new bit.
-  3. We search the global `ArchetypeIndex` hash map / list to find the destination archetype.
-  4. We re-register and migrate the columns one by one.
-* Flecs utilizes a pre-linked graph: adding component `X` simply follows `archetype->edges[X].add` directly to the destination table in a single pointer dereference. EnTT doesn’t migrate anything; it just pushes 16 bytes into an isolated dense vector.
-
-#### 4. The Scheduler Has Dispatch Overhead (755 µs vs Flecs 315 µs)
-* **Why:** Flecs compiles systems down to flat arrays of matching tables. When `flecs::world::progress()` runs, it iterates already-matched table pointers with minimal graph traversal or command overhead.
-* Our `arche::Scheduler` performs barrier synchronizations, command buffer handoffs, and DAG stage traversal dynamically every frame, introducing ~400 µs of pure scheduler/dispatch overhead across 10 systems.
-
----
-
-### What Specifically Needs to Be Fixed to Close the Gap (Next Steps)
-
-1. **Fix the Iterator (P0 for Ergonomics & Idiomatic Speed):**
-   * Redesign `QueryIterator` so it does not step entity-by-entity in pure abstraction. It should maintain an inner pointer span to the current chunk's slice. When the span is exhausted, it advances to the next chunk. This enables Clang/GCC to auto-vectorize idiomatic range-for loops to match `each_chunk` speeds.
-2. **Implement an Archetype Transition Graph (P0 for Structural Mutation):**
-   * Introduce `std::vector<Archetype*> add_edges` and `remove_edges` inside each `Archetype`.
-   * After the first transition, `world.add(e, T{})` becomes an $O(1)$ pointer hop with zero bitmask lookups or index searches, cutting migration time down to match or beat Flecs (~5 ms or lower).
-3. **Cache Column Indices in Queries & Accessors (P1 for Lookup Speed):**
-   * Eliminate runtime column index searches in `get<T>()`. Cache the column index directly in component accessors or use a compact lookup table indexed by small component IDs.
-4. **Pre-Bake Scheduler Dispatch Batches:**
-   * Pre-compile the execution schedule at registration time instead of evaluating dependency rules dynamically. Pre-sort systems into fixed worker job batches so `world.run()` executes a tight, branchless loop over pre-matched chunk spans.
 
 ---
 
