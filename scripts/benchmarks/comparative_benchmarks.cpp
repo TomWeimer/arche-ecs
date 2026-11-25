@@ -2054,6 +2054,143 @@ int main() {
     }
   }
 
+  // ===========================================================================
+  // SECTION VIII: Sparse Activity & Change Detection (500k Entities, 5% Active)
+  // ===========================================================================
+  std::cout << "\n>>> Running Section VIII: Sparse Activity & Change Detection (500k Entities, 5% Active)...\n";
+  {
+    constexpr size_t TOTAL_ENTITIES = 500'000;
+    constexpr size_t ACTIVE_PERCENT = 5; // 5% active = 25,000 entities
+    constexpr size_t ACTIVE_ENTITIES = (TOTAL_ENTITIES * ACTIVE_PERCENT) / 100;
+
+    // Benchmark 16: Naive Full Scan vs Change Detection (Mutated<T> / ChangedSince)
+    // Setup 500,000 entities in both engines.
+    // Modify only the first 25,000 entities.
+    // arche-ecs uses Mutated<Position>{last_tick} to skip 95% of chunk pages in O(1).
+    // Flecs uses query or filter (table-level / changed column tracking) or iter.changed().
+    // EnTT scans dense pool / tests changed flag.
+
+    arche::World arche_world;
+    std::vector<arche::Entity> arche_ents = arche_world.spawn(
+        {.count = TOTAL_ENTITIES}, Position{0.0f, 0.0f}, Velocity{1.0f, 1.0f}
+    );
+    // Warmup frame to establish baseline tick
+    arche_world.run(); // tick = 2
+    const uint32_t baseline_tick = arche_world.version();
+
+    // Mutate 5% of entities (entities 0 to ACTIVE_ENTITIES-1)
+    for (size_t i = 0; i < ACTIVE_ENTITIES; ++i) {
+      arche_world.get_mut<Position>(arche_ents[i]).x += 1.0f;
+    }
+
+    // Flecs setup
+    flecs::world flecs_world;
+    std::vector<flecs::entity> flecs_ents;
+    flecs_ents.reserve(TOTAL_ENTITIES);
+    for (size_t i = 0; i < TOTAL_ENTITIES; ++i) {
+      flecs_ents.push_back(
+          flecs_world.entity().set<Position>({0.0f, 0.0f}).set<Velocity>({1.0f, 1.0f})
+      );
+    }
+    // Modify 5% in Flecs
+    for (size_t i = 0; i < ACTIVE_ENTITIES; ++i) {
+      auto *p = flecs_ents[i].get_mut<Position>();
+      p->x += 1.0f;
+      flecs_ents[i].modified<Position>();
+    }
+
+    // EnTT setup with explicit dirty/active flag component for fair comparison
+    struct ActiveFlag {
+      uint8_t dummy{1};
+    };
+    entt::registry entt_reg;
+    std::vector<entt::entity> entt_ents;
+    entt_ents.reserve(TOTAL_ENTITIES);
+    for (size_t i = 0; i < TOTAL_ENTITIES; ++i) {
+      const auto e = entt_reg.create();
+      entt_reg.emplace<Position>(e, 0.0f, 0.0f);
+      entt_reg.emplace<Velocity>(e, 1.0f, 1.0f);
+      entt_ents.push_back(e);
+    }
+    for (size_t i = 0; i < ACTIVE_ENTITIES; ++i) {
+      entt_reg.emplace<ActiveFlag>(entt_ents[i]);
+      entt_reg.get<Position>(entt_ents[i]).x += 1.0f;
+    }
+
+    ankerl::nanobench::Bench bench_sparse;
+    bench_sparse.warmup(1).minEpochIterations(5).maxEpochTime(
+        std::chrono::milliseconds(150)
+    );
+
+    bench_sparse.title("16. Sparse Activity (500k Entities, 5% Mutated)")
+        .run("arche-ecs (Mutated<Position> chunk skipping)", [&] {
+          size_t processed = 0;
+          arche_world.query<Position, const Velocity>(arche::Mutated<Position>{baseline_tick})
+              .each_chunk([&](uint32_t count, Position *p, const Velocity *v) {
+                for (uint32_t i = 0; i < count; ++i) {
+                  p[i].x += v[i].vx * 0.016f;
+                  p[i].y += v[i].vy * 0.016f;
+                }
+                processed += count;
+              });
+          ankerl::nanobench::doNotOptimizeAway(processed);
+        })
+        .run("arche-ecs (Full Scan baseline without filter)", [&] {
+          size_t processed = 0;
+          arche_world.query<Position, const Velocity>()
+              .each_chunk([&](uint32_t count, Position *p, const Velocity *v) {
+                for (uint32_t i = 0; i < count; ++i) {
+                  p[i].x += v[i].vx * 0.016f;
+                  p[i].y += v[i].vy * 0.016f;
+                }
+                processed += count;
+              });
+          ankerl::nanobench::doNotOptimizeAway(processed);
+        })
+        .run("Flecs (Filter iter.changed() table skipping)", [&] {
+          size_t processed = 0;
+          auto q = flecs_world.query<Position, const Velocity>();
+          q.each([&](flecs::iter &it, size_t, Position &p, const Velocity &v) {
+            if (it.changed()) {
+              p.x += v.vx * 0.016f;
+              p.y += v.vy * 0.016f;
+              processed++;
+            }
+          });
+          ankerl::nanobench::doNotOptimizeAway(processed);
+        })
+        .run("Flecs (Full Scan baseline without filter)", [&] {
+          size_t processed = 0;
+          auto q = flecs_world.query<Position, const Velocity>();
+          q.each([&](Position &p, const Velocity &v) {
+            p.x += v.vx * 0.016f;
+            p.y += v.vy * 0.016f;
+            processed++;
+          });
+          ankerl::nanobench::doNotOptimizeAway(processed);
+        })
+        .run("EnTT (ActiveFlag Sparse View 5%)", [&] {
+          size_t processed = 0;
+          auto view = entt_reg.view<Position, const Velocity, const ActiveFlag>();
+          view.each([&](Position &p, const Velocity &v, const ActiveFlag &) {
+            p.x += v.vx * 0.016f;
+            p.y += v.vy * 0.016f;
+            processed++;
+          });
+          ankerl::nanobench::doNotOptimizeAway(processed);
+        })
+        .run("EnTT (Full Scan baseline 500k)", [&] {
+          size_t processed = 0;
+          auto view = entt_reg.view<Position, const Velocity>();
+          view.each([&](Position &p, const Velocity &v) {
+            p.x += v.vx * 0.016f;
+            p.y += v.vy * 0.016f;
+            processed++;
+          });
+          ankerl::nanobench::doNotOptimizeAway(processed);
+        });
+  }
+
   std::cout << "\n============================================================="
                "=================\n";
   std::cout << "  Comprehensive 2M Comparative Benchmark Suite Completed "
