@@ -76,6 +76,7 @@ inline SystemExecutionTarget World::system_execution_target() noexcept {
       .slot_map = storage_->slot_map,
       .current_version = storage_->current_version,
       .previous_version = storage_->previous_version,
+      .parallel_cmd = storage_->parallel_cmd.get(),
       .cache_ctx = this,
       .get_cache_fn =
           [](void *ctx,

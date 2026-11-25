@@ -153,6 +153,18 @@ void Scheduler::partition_batches() {
         break;
       }
 
+      // Sequential systems must execute isolated on thread 0 (main thread)
+      if (systems_[i].scale == SystemScale::Sequential) {
+        if (current_batch.system_indices.empty()) {
+          current_batch.system_indices.push_back(i);
+          current_batch.is_sequential = true;
+          current_batch.access = systems_[i].access;
+          scheduled[i] = true;
+          scheduled_count++;
+        }
+        break;
+      }
+
       // Check conflict against everything already admitted into current_batch
       if (!batch_access.conflicts_with(systems_[i].access)) {
         current_batch.system_indices.push_back(i);
@@ -198,7 +210,25 @@ void Scheduler::execute_batch(
     ThreadPool &pool,
     ParallelCommandBuffer &parallel_cmd
 ) {
-  if (batch.is_wide) {
+  if (batch.is_sequential) {
+    const size_t idx = batch.system_indices[0];
+    if (systems_[idx].enabled) {
+      CommandBuffer &cmd = parallel_cmd.get(0);
+      SystemContext ctx(
+          cmd,
+          target.resources,
+          target.cache_ctx,
+          target.get_cache_fn,
+          target.current_version,
+          target.previous_version
+      );
+      if (systems_[idx].stage_fn) {
+        systems_[idx].stage_fn(target, ctx);
+      } else if (systems_[idx].fn) {
+        systems_[idx].fn(ctx);
+      }
+    }
+  } else if (batch.is_wide) {
     const size_t idx = batch.system_indices[0];
     if (systems_[idx].enabled) {
       CommandBuffer &cmd = parallel_cmd.get(0);
@@ -267,9 +297,17 @@ void Scheduler::run(
     compile(target);
   }
 
-  ParallelCommandBuffer parallel_cmd(pool.worker_count() + 1);
+  ParallelCommandBuffer *cmd_ptr = target.parallel_cmd;
+  if (!cmd_ptr) {
+    const uint32_t required = pool.worker_count() + 1;
+    if (!fallback_parallel_cmd_ || fallback_parallel_cmd_->thread_count() < required) {
+      fallback_parallel_cmd_ = std::make_unique<ParallelCommandBuffer>(required);
+    }
+    cmd_ptr = fallback_parallel_cmd_.get();
+  }
+
   for (const auto &batch : batches_) {
-    execute_batch(batch, target, pool, parallel_cmd);
+    execute_batch(batch, target, pool, *cmd_ptr);
   }
 }
 
@@ -281,13 +319,20 @@ void Scheduler::run(const SystemExecutionTarget &target) {
     compile(target);
   }
 
-  ParallelCommandBuffer parallel_cmd(1);
+  ParallelCommandBuffer *cmd_ptr = target.parallel_cmd;
+  if (!cmd_ptr) {
+    if (!fallback_parallel_cmd_) {
+      fallback_parallel_cmd_ = std::make_unique<ParallelCommandBuffer>(1);
+    }
+    cmd_ptr = fallback_parallel_cmd_.get();
+  }
+
   for (const auto &batch : batches_) {
     for (size_t sys_idx : batch.system_indices) {
       if (!systems_[sys_idx].enabled) {
         continue;
       }
-      CommandBuffer &cmd = parallel_cmd.get(0);
+      CommandBuffer &cmd = cmd_ptr->get(0);
       SystemContext ctx(
           cmd,
           target.resources,
@@ -296,7 +341,11 @@ void Scheduler::run(const SystemExecutionTarget &target) {
           target.current_version,
           target.previous_version
       );
-      systems_[sys_idx].fn(ctx);
+      if (systems_[sys_idx].stage_fn) {
+        systems_[sys_idx].stage_fn(target, ctx);
+      } else if (systems_[sys_idx].fn) {
+        systems_[sys_idx].fn(ctx);
+      }
     }
 
     for (uint32_t id = 0; id < 128; ++id) {
@@ -308,9 +357,9 @@ void Scheduler::run(const SystemExecutionTarget &target) {
     }
 
     if (target.commit_parallel_cmd) {
-      target.commit_parallel_cmd(parallel_cmd, target.world_ptr);
+      target.commit_parallel_cmd(*cmd_ptr, target.world_ptr);
     }
-    parallel_cmd.clear();
+    cmd_ptr->clear();
   }
 }
 

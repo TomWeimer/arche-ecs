@@ -52,6 +52,9 @@ struct SystemExecutionTarget {
   /// Previous world simulation tick sequence.
   uint32_t &previous_version;
 
+  /// Optional preallocated parallel command buffer pool.
+  ParallelCommandBuffer *parallel_cmd{nullptr};
+
   /// Type-erased query cache provider context pointer.
   void *cache_ctx{nullptr};
 
@@ -110,12 +113,14 @@ public:
     std::vector<size_t> system_indices;
     AccessDescriptor access{};
     bool is_wide{false};
+    bool is_sequential{false};
   };
 
 private:
   std::vector<SystemNode> systems_;
   std::vector<Batch> batches_;
   bool dirty_{true};
+  std::unique_ptr<ParallelCommandBuffer> fallback_parallel_cmd_{nullptr};
 
   void validate_system_resources(const ResourceContainer &resources);
   void partition_batches();
@@ -129,8 +134,19 @@ private:
 public:
   Scheduler() = default;
   ~Scheduler() = default;
-  Scheduler(const Scheduler &) = default;
-  Scheduler &operator=(const Scheduler &) = default;
+  Scheduler(const Scheduler &other)
+      : systems_(other.systems_),
+        batches_(other.batches_),
+        dirty_(other.dirty_) {}
+  Scheduler &operator=(const Scheduler &other) {
+    if (this != &other) {
+      systems_ = other.systems_;
+      batches_ = other.batches_;
+      dirty_ = other.dirty_;
+      fallback_parallel_cmd_.reset();
+    }
+    return *this;
+  }
   Scheduler(Scheduler &&) noexcept = default;
   Scheduler &operator=(Scheduler &&) noexcept = default;
 

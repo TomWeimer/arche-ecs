@@ -6,6 +6,7 @@ import arche;
 #include <cassert>
 #include <iostream>
 #include <stdexcept>
+#include <thread>
 #include <vector>
 
 namespace {
@@ -575,6 +576,72 @@ void test_scheduled_sort_stage() {
 }
 
 // =============================================================================
+// Unit Test 13: Sequential System Main-Thread Isolation & Buffer Reuse
+// =============================================================================
+
+void test_sequential_system_main_thread_isolation() {
+  std::cout << "Testing Sequential System Main-Thread Isolation & Persistent Buffers... ";
+
+  World world;
+  ThreadPool pool(4);
+
+  const std::thread::id main_thread = std::this_thread::get_id();
+  std::atomic<bool> sequential_ran{false};
+  std::atomic<bool> narrow1_ran{false};
+  std::atomic<bool> narrow2_ran{false};
+  std::thread::id sequential_thread{};
+
+  Scheduler scheduler;
+
+  // Narrow system 1
+  scheduler.add_system(
+      "Narrow1",
+      Access{}.build(),
+      [&](SystemContext &) {
+        narrow1_ran.store(true, std::memory_order_relaxed);
+      },
+      SystemScale::Narrow
+  );
+
+  // Sequential system: MUST execute on thread 0 (main thread)
+  scheduler.add_system(
+      "SequentialMain",
+      Access{}.build(),
+      [&](SystemContext &) {
+        sequential_thread = std::this_thread::get_id();
+        sequential_ran.store(true, std::memory_order_relaxed);
+      },
+      SystemScale::Sequential
+  );
+
+  // Narrow system 2
+  scheduler.add_system(
+      "Narrow2",
+      Access{}.build(),
+      [&](SystemContext &) {
+        narrow2_ran.store(true, std::memory_order_relaxed);
+      },
+      SystemScale::Narrow
+  );
+
+  // Run across multiple frames to verify persistent ParallelCommandBuffer reuse without allocation
+  for (int frame = 0; frame < 5; ++frame) {
+    sequential_ran.store(false);
+    narrow1_ran.store(false);
+    narrow2_ran.store(false);
+
+    scheduler.run(WorldTestProbe::execution_target(world), pool);
+
+    assert(narrow1_ran.load());
+    assert(sequential_ran.load());
+    assert(narrow2_ran.load());
+    assert(sequential_thread == main_thread && "Sequential system must execute on main thread!");
+  }
+
+  std::cout << "PASSED\n";
+}
+
+// =============================================================================
 // Main Test Runner
 // =============================================================================
 
@@ -595,6 +662,7 @@ int main() {
   test_wide_system_single_threaded_fallback();
   test_narrow_systems_exceeding_worker_count();
   test_scheduled_sort_stage();
+  test_sequential_system_main_thread_isolation();
 
   std::cout << "\nAll Scheduler unit tests passed successfully!\n";
   return 0;
