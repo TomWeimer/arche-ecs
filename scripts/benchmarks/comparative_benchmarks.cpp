@@ -57,6 +57,28 @@ struct FrozenTag {
   uint32_t reason{1};
 };
 
+struct Health {
+  float hp{100.0f};
+};
+
+struct Damage {
+  float amount{0.0f};
+};
+
+struct SpatialGridCell {
+  int32_t cell_x{0};
+  int32_t cell_y{0};
+};
+
+struct TimeStepResource {
+  float dt{0.016f};
+  uint64_t frame{0};
+};
+
+struct AudioQueueResource {
+  uint32_t sound_events{0};
+};
+
 // 20 distinct tag components for deep fragmentation testing
 struct Tag0 {
   uint32_t id{0};
@@ -121,6 +143,192 @@ struct Tag19 {
 
 struct ExtraData {
   float values[4]{1.0f, 2.0f, 3.0f, 4.0f};
+};
+
+struct FullFrameSimulationPlugin {
+  static constexpr std::string_view name() noexcept {
+    return "FullFrameSimulationPlugin";
+  }
+
+  void build(arche::World &world, arche::PluginContext &ctx) const {
+    world.resources.insert<TimeStepResource>(0.016f, 0ULL);
+    world.resources.insert<AudioQueueResource>(0U);
+
+    // 1. TimeStepSystem (Narrow)
+    ctx.add_system(
+        "TimeStepSystem",
+        arche::Access{}.writes_resource<TimeStepResource>().build(),
+        [](arche::SystemContext &ctx) {
+          auto &ts = ctx.write_resource<TimeStepResource>();
+          ts.frame++;
+          ts.dt = 0.016f;
+        },
+        arche::SystemScale::Narrow
+    );
+
+    // 2. InputPollingSystem (Narrow)
+    ctx.add_system(
+        "InputPollingSystem",
+        arche::Access{}.reads_resource<TimeStepResource>().build(),
+        [](arche::SystemContext &ctx) {
+          const auto &ts = ctx.read_resource<TimeStepResource>();
+          ankerl::nanobench::doNotOptimizeAway(ts.frame);
+        },
+        arche::SystemScale::Narrow
+    );
+
+    // 3. AudioSyncSystem (Narrow)
+    ctx.add_system(
+        "AudioSyncSystem",
+        arche::Access{}
+            .reads_resource<TimeStepResource>()
+            .writes_resource<AudioQueueResource>()
+            .build(),
+        [](arche::SystemContext &ctx) {
+          auto &audio = ctx.write_resource<AudioQueueResource>();
+          audio.sound_events = 0;
+        },
+        arche::SystemScale::Narrow
+    );
+
+    // 4. StatsLoggingSystem (Narrow)
+    ctx.add_system(
+        "StatsLoggingSystem",
+        arche::Access{}.reads_resource<TimeStepResource>().build(),
+        [](arche::SystemContext &ctx) {
+          const auto &ts = ctx.read_resource<TimeStepResource>();
+          ankerl::nanobench::doNotOptimizeAway(ts.frame);
+        },
+        arche::SystemScale::Narrow
+    );
+
+    // 5. GravitySystem (Wide)
+    ctx.add_system(
+        "GravitySystem",
+        arche::Access{}
+            .reads_resource<TimeStepResource>()
+            .reads<Acceleration>()
+            .writes<Velocity>()
+            .build(),
+        [](arche::SystemContext &ctx) {
+          const auto &ts = ctx.read_resource<TimeStepResource>();
+          const float dt = ts.dt;
+          ctx.query<Velocity, const Acceleration>().each_parallel(
+              [dt](uint32_t count, Velocity *vel, const Acceleration *acc) {
+                for (uint32_t i = 0; i < count; ++i) {
+                  vel[i].vx += acc[i].ax * dt;
+                  vel[i].vy += acc[i].ay * dt;
+                }
+              }
+          );
+        },
+        arche::SystemScale::Wide
+    );
+
+    // 6. MovementSystem (Wide)
+    ctx.add_system(
+        "MovementSystem",
+        arche::Access{}
+            .reads_resource<TimeStepResource>()
+            .reads<Velocity>()
+            .writes<Position>()
+            .build(),
+        [](arche::SystemContext &ctx) {
+          const auto &ts = ctx.read_resource<TimeStepResource>();
+          const float dt = ts.dt;
+          ctx.query<Position, const Velocity>().each_parallel(
+              [dt](uint32_t count, Position *pos, const Velocity *vel) {
+                for (uint32_t i = 0; i < count; ++i) {
+                  pos[i].x += vel[i].vx * dt;
+                  pos[i].y += vel[i].vy * dt;
+                }
+              }
+          );
+        },
+        arche::SystemScale::Wide
+    );
+
+    // 7. SpatialHashingSystem (Wide)
+    ctx.add_system(
+        "SpatialHashingSystem",
+        arche::Access{}.reads<Position>().writes<SpatialGridCell>().build(),
+        [](arche::SystemContext &ctx) {
+          ctx.query<SpatialGridCell, const Position>().each_parallel(
+              [](uint32_t count, SpatialGridCell *cell, const Position *pos) {
+                for (uint32_t i = 0; i < count; ++i) {
+                  cell[i].cell_x = static_cast<int32_t>(pos[i].x) / 64;
+                  cell[i].cell_y = static_cast<int32_t>(pos[i].y) / 64;
+                }
+              }
+          );
+        },
+        arche::SystemScale::Wide
+    );
+
+    // 8. DamageSystem (Wide)
+    ctx.add_system(
+        "DamageSystem",
+        arche::Access{}.reads<Damage>().writes<Health>().build(),
+        [](arche::SystemContext &ctx) {
+          ctx.query<Health, const Damage>().each_parallel(
+              [](uint32_t count, Health *hp, const Damage *dmg) {
+                for (uint32_t i = 0; i < count; ++i) {
+                  hp[i].hp -= dmg[i].amount;
+                }
+              }
+          );
+        },
+        arche::SystemScale::Wide
+    );
+
+    // 9. HealthCleanupSystem (Narrow, deferred despawn + respawn)
+    ctx.add_system(
+        "HealthCleanupSystem",
+        arche::Access{}.reads<Health>().build(),
+        [](arche::SystemContext &ctx) {
+          ctx.query<arche::Entity, const Health>().each_chunk(
+              [&](uint32_t count,
+                  arche::Entity *entities,
+                  const Health *healths) {
+                for (uint32_t i = 0; i < count; ++i) {
+                  if (healths[i].hp <= 0.0f) {
+                    ctx.cmd.despawn(entities[i]);
+                    ctx.cmd.spawn(
+                        Position{0.0f, 0.0f},
+                        Velocity{1.0f, 1.0f},
+                        Acceleration{0.0f, -9.81f},
+                        SpatialGridCell{0, 0},
+                        Health{100.0f},
+                        Damage{100.0f}
+                    );
+                  }
+                }
+              }
+          );
+        },
+        arche::SystemScale::Narrow
+    );
+
+    // 10. RenderPrepSystem (Narrow)
+    ctx.add_system(
+        "RenderPrepSystem",
+        arche::Access{}.reads<Position>().reads<Health>().build(),
+        [](arche::SystemContext &ctx) {
+          float total_pos = 0.0f;
+          ctx.query<const Position, const Health>().each_chunk(
+              [&](uint32_t count, const Position *pos, const Health *hp) {
+                for (uint32_t i = 0; i < count; ++i) {
+                  if (hp[i].hp > 0.0f) {
+                    total_pos += pos[i].x;
+                  }
+                }
+              }
+          );
+          ankerl::nanobench::doNotOptimizeAway(total_pos);
+        },
+        arche::SystemScale::Narrow
+    );
+  }
 };
 
 int main() {
@@ -1143,6 +1351,390 @@ int main() {
             }
           });
     }
+  }
+
+  // ---------------------------------------------------------------------------
+  // SECTION VI: FULL-FRAME 10-SYSTEM GAME LOOP SIMULATION
+  // ---------------------------------------------------------------------------
+  std::cout << "\n>>> Running Section VI: Full-Frame 10-System Game Loop Simulation (100k Entities)...\n\n";
+  {
+    ankerl::nanobench::Bench bench_frame;
+    bench_frame.warmup(2).minEpochIterations(5).maxEpochTime(
+        std::chrono::milliseconds(250)
+    );
+
+    constexpr size_t GAME_LOOP_ENTITIES = 100'000;
+    constexpr size_t LETHAL_COUNT = 100;
+    const size_t ALIVE_COUNT = GAME_LOOP_ENTITIES - LETHAL_COUNT;
+
+    // 1. Setup arche-ecs 8 Threads
+    arche::World arche_8t;
+    arche_8t.set_threads(8);
+    arche_8t.spawn(
+        {.count = ALIVE_COUNT},
+        Position{0.0f, 0.0f},
+        Velocity{1.0f, 1.0f},
+        Acceleration{0.0f, -9.81f},
+        SpatialGridCell{0, 0},
+        Health{100.0f},
+        Damage{0.0f}
+    );
+    arche_8t.spawn(
+        {.count = LETHAL_COUNT},
+        Position{0.0f, 0.0f},
+        Velocity{1.0f, 1.0f},
+        Acceleration{0.0f, -9.81f},
+        SpatialGridCell{0, 0},
+        Health{100.0f},
+        Damage{100.0f}
+    );
+    arche_8t.add_plugin<FullFrameSimulationPlugin>();
+
+    // 2. Setup arche-ecs 1 Thread
+    arche::World arche_1t;
+    arche_1t.set_threads(1);
+    arche_1t.spawn(
+        {.count = ALIVE_COUNT},
+        Position{0.0f, 0.0f},
+        Velocity{1.0f, 1.0f},
+        Acceleration{0.0f, -9.81f},
+        SpatialGridCell{0, 0},
+        Health{100.0f},
+        Damage{0.0f}
+    );
+    arche_1t.spawn(
+        {.count = LETHAL_COUNT},
+        Position{0.0f, 0.0f},
+        Velocity{1.0f, 1.0f},
+        Acceleration{0.0f, -9.81f},
+        SpatialGridCell{0, 0},
+        Health{100.0f},
+        Damage{100.0f}
+    );
+    arche_1t.add_plugin<FullFrameSimulationPlugin>();
+
+    // 3. Setup Flecs 8 Threads
+    flecs::world flecs_8t;
+    flecs_8t.set_threads(8);
+    flecs_8t.set<TimeStepResource>({0.016f, 0});
+    flecs_8t.set<AudioQueueResource>({0});
+
+    for (size_t i = 0; i < ALIVE_COUNT; ++i) {
+      flecs_8t.entity()
+          .set<Position>({0.0f, 0.0f})
+          .set<Velocity>({1.0f, 1.0f})
+          .set<Acceleration>({0.0f, -9.81f})
+          .set<SpatialGridCell>({0, 0})
+          .set<Health>({100.0f})
+          .set<Damage>({0.0f});
+    }
+    for (size_t i = 0; i < LETHAL_COUNT; ++i) {
+      flecs_8t.entity()
+          .set<Position>({0.0f, 0.0f})
+          .set<Velocity>({1.0f, 1.0f})
+          .set<Acceleration>({0.0f, -9.81f})
+          .set<SpatialGridCell>({0, 0})
+          .set<Health>({100.0f})
+          .set<Damage>({100.0f});
+    }
+
+    flecs_8t.system<>()
+        .kind(flecs::PreUpdate)
+        .run([](flecs::iter &it) {
+          auto *ts = it.world().get_mut<TimeStepResource>();
+          if (ts) {
+            ts->frame++;
+            ts->dt = 0.016f;
+          }
+        });
+    flecs_8t.system<>()
+        .kind(flecs::PreUpdate)
+        .run([](flecs::iter &it) {
+          const auto *ts = it.world().get<TimeStepResource>();
+          if (ts) {
+            ankerl::nanobench::doNotOptimizeAway(ts->frame);
+          }
+        });
+    flecs_8t.system<>()
+        .kind(flecs::PreUpdate)
+        .run([](flecs::iter &it) {
+          auto *audio = it.world().get_mut<AudioQueueResource>();
+          if (audio) {
+            audio->sound_events = 0;
+          }
+        });
+    flecs_8t.system<>()
+        .kind(flecs::PreUpdate)
+        .run([](flecs::iter &it) {
+          const auto *ts = it.world().get<TimeStepResource>();
+          if (ts) {
+            ankerl::nanobench::doNotOptimizeAway(ts->frame);
+          }
+        });
+    flecs_8t.system<Velocity, const Acceleration>("GravitySystem")
+        .kind(flecs::OnUpdate)
+        .multi_threaded()
+        .each([](Velocity &vel, const Acceleration &acc) {
+          vel.vx += acc.ax * 0.016f;
+          vel.vy += acc.ay * 0.016f;
+        });
+    flecs_8t.system<Position, const Velocity>("MovementSystem")
+        .kind(flecs::OnUpdate)
+        .multi_threaded()
+        .each([](Position &pos, const Velocity &vel) {
+          pos.x += vel.vx * 0.016f;
+          pos.y += vel.vy * 0.016f;
+        });
+    flecs_8t.system<SpatialGridCell, const Position>("SpatialHashingSystem")
+        .kind(flecs::OnUpdate)
+        .multi_threaded()
+        .each([](SpatialGridCell &cell, const Position &pos) {
+          cell.cell_x = static_cast<int32_t>(pos.x) / 64;
+          cell.cell_y = static_cast<int32_t>(pos.y) / 64;
+        });
+    flecs_8t.system<Health, const Damage>("DamageSystem")
+        .kind(flecs::OnUpdate)
+        .multi_threaded()
+        .each([](Health &hp, const Damage &dmg) {
+          hp.hp -= dmg.amount;
+        });
+    flecs_8t.system<Health>("HealthCleanupSystem")
+        .kind(flecs::PostUpdate)
+        .each([](flecs::iter &it, size_t i, Health &hp) {
+          if (hp.hp <= 0.0f) {
+            it.entity(i).destruct();
+            it.world().entity()
+                .set<Position>({0.0f, 0.0f})
+                .set<Velocity>({1.0f, 1.0f})
+                .set<Acceleration>({0.0f, -9.81f})
+                .set<SpatialGridCell>({0, 0})
+                .set<Health>({100.0f})
+                .set<Damage>({100.0f});
+          }
+        });
+    flecs_8t.system<const Position, const Health>("RenderPrepSystem")
+        .kind(flecs::OnStore)
+        .multi_threaded()
+        .each([](const Position &pos, const Health &hp) {
+          if (hp.hp > 0.0f) {
+            ankerl::nanobench::doNotOptimizeAway(pos.x);
+          }
+        });
+
+    // 4. Setup Flecs 1 Thread
+    flecs::world flecs_1t;
+    flecs_1t.set_threads(1);
+    flecs_1t.set<TimeStepResource>({0.016f, 0});
+    flecs_1t.set<AudioQueueResource>({0});
+
+    for (size_t i = 0; i < ALIVE_COUNT; ++i) {
+      flecs_1t.entity()
+          .set<Position>({0.0f, 0.0f})
+          .set<Velocity>({1.0f, 1.0f})
+          .set<Acceleration>({0.0f, -9.81f})
+          .set<SpatialGridCell>({0, 0})
+          .set<Health>({100.0f})
+          .set<Damage>({0.0f});
+    }
+    for (size_t i = 0; i < LETHAL_COUNT; ++i) {
+      flecs_1t.entity()
+          .set<Position>({0.0f, 0.0f})
+          .set<Velocity>({1.0f, 1.0f})
+          .set<Acceleration>({0.0f, -9.81f})
+          .set<SpatialGridCell>({0, 0})
+          .set<Health>({100.0f})
+          .set<Damage>({100.0f});
+    }
+
+    flecs_1t.system<>()
+        .kind(flecs::PreUpdate)
+        .run([](flecs::iter &it) {
+          auto *ts = it.world().get_mut<TimeStepResource>();
+          if (ts) {
+            ts->frame++;
+            ts->dt = 0.016f;
+          }
+        });
+    flecs_1t.system<>()
+        .kind(flecs::PreUpdate)
+        .run([](flecs::iter &it) {
+          const auto *ts = it.world().get<TimeStepResource>();
+          if (ts) {
+            ankerl::nanobench::doNotOptimizeAway(ts->frame);
+          }
+        });
+    flecs_1t.system<>()
+        .kind(flecs::PreUpdate)
+        .run([](flecs::iter &it) {
+          auto *audio = it.world().get_mut<AudioQueueResource>();
+          if (audio) {
+            audio->sound_events = 0;
+          }
+        });
+    flecs_1t.system<>()
+        .kind(flecs::PreUpdate)
+        .run([](flecs::iter &it) {
+          const auto *ts = it.world().get<TimeStepResource>();
+          if (ts) {
+            ankerl::nanobench::doNotOptimizeAway(ts->frame);
+          }
+        });
+    flecs_1t.system<Velocity, const Acceleration>("GravitySystem")
+        .kind(flecs::OnUpdate)
+        .each([](Velocity &vel, const Acceleration &acc) {
+          vel.vx += acc.ax * 0.016f;
+          vel.vy += acc.ay * 0.016f;
+        });
+    flecs_1t.system<Position, const Velocity>("MovementSystem")
+        .kind(flecs::OnUpdate)
+        .each([](Position &pos, const Velocity &vel) {
+          pos.x += vel.vx * 0.016f;
+          pos.y += vel.vy * 0.016f;
+        });
+    flecs_1t.system<SpatialGridCell, const Position>("SpatialHashingSystem")
+        .kind(flecs::OnUpdate)
+        .each([](SpatialGridCell &cell, const Position &pos) {
+          cell.cell_x = static_cast<int32_t>(pos.x) / 64;
+          cell.cell_y = static_cast<int32_t>(pos.y) / 64;
+        });
+    flecs_1t.system<Health, const Damage>("DamageSystem")
+        .kind(flecs::OnUpdate)
+        .each([](Health &hp, const Damage &dmg) {
+          hp.hp -= dmg.amount;
+        });
+    flecs_1t.system<Health>("HealthCleanupSystem")
+        .kind(flecs::PostUpdate)
+        .each([](flecs::iter &it, size_t i, Health &hp) {
+          if (hp.hp <= 0.0f) {
+            it.entity(i).destruct();
+            it.world().entity()
+                .set<Position>({0.0f, 0.0f})
+                .set<Velocity>({1.0f, 1.0f})
+                .set<Acceleration>({0.0f, -9.81f})
+                .set<SpatialGridCell>({0, 0})
+                .set<Health>({100.0f})
+                .set<Damage>({100.0f});
+          }
+        });
+    flecs_1t.system<const Position, const Health>("RenderPrepSystem")
+        .kind(flecs::OnStore)
+        .each([](const Position &pos, const Health &hp) {
+          if (hp.hp > 0.0f) {
+            ankerl::nanobench::doNotOptimizeAway(pos.x);
+          }
+        });
+
+    // 5. Setup EnTT Sequential
+    entt::registry entt_reg;
+    for (size_t i = 0; i < ALIVE_COUNT; ++i) {
+      const auto e = entt_reg.create();
+      entt_reg.emplace<Position>(e, 0.0f, 0.0f);
+      entt_reg.emplace<Velocity>(e, 1.0f, 1.0f);
+      entt_reg.emplace<Acceleration>(e, 0.0f, -9.81f);
+      entt_reg.emplace<SpatialGridCell>(e, 0, 0);
+      entt_reg.emplace<Health>(e, 100.0f);
+      entt_reg.emplace<Damage>(e, 0.0f);
+    }
+    for (size_t i = 0; i < LETHAL_COUNT; ++i) {
+      const auto e = entt_reg.create();
+      entt_reg.emplace<Position>(e, 0.0f, 0.0f);
+      entt_reg.emplace<Velocity>(e, 1.0f, 1.0f);
+      entt_reg.emplace<Acceleration>(e, 0.0f, -9.81f);
+      entt_reg.emplace<SpatialGridCell>(e, 0, 0);
+      entt_reg.emplace<Health>(e, 100.0f);
+      entt_reg.emplace<Damage>(e, 100.0f);
+    }
+    TimeStepResource entt_ts{0.016f, 0};
+    AudioQueueResource entt_audio{0};
+    std::vector<entt::entity> entt_to_despawn;
+    entt_to_despawn.reserve(LETHAL_COUNT * 2);
+
+    bench_frame.title("13. Full-Frame 10-System Game Loop (100k Entities)")
+        .run("arche-ecs (Scheduler 8 Threads)", [&] {
+          arche_8t.run();
+        })
+        .run("arche-ecs (Scheduler 1 Thread)", [&] {
+          arche_1t.run();
+        })
+        .run("Flecs (Pipeline 8 Threads)", [&] {
+          flecs_8t.progress();
+        })
+        .run("Flecs (Pipeline 1 Thread)", [&] {
+          flecs_1t.progress();
+        })
+        .run("EnTT (Sequential 1 Thread)", [&] {
+          // 1. TimeStep
+          entt_ts.frame++;
+          entt_ts.dt = 0.016f;
+          // 2. Input
+          ankerl::nanobench::doNotOptimizeAway(entt_ts.frame);
+          // 3. Audio
+          entt_audio.sound_events = 0;
+          // 4. Stats
+          ankerl::nanobench::doNotOptimizeAway(entt_ts.frame);
+          // 5. Gravity
+          {
+            auto v = entt_reg.view<Velocity, const Acceleration>();
+            v.each([&](Velocity &vel, const Acceleration &acc) {
+              vel.vx += acc.ax * entt_ts.dt;
+              vel.vy += acc.ay * entt_ts.dt;
+            });
+          }
+          // 6. Movement
+          {
+            auto v = entt_reg.view<Position, const Velocity>();
+            v.each([&](Position &pos, const Velocity &vel) {
+              pos.x += vel.vx * entt_ts.dt;
+              pos.y += vel.vy * entt_ts.dt;
+            });
+          }
+          // 7. SpatialHashing
+          {
+            auto v = entt_reg.view<SpatialGridCell, const Position>();
+            v.each([](SpatialGridCell &cell, const Position &pos) {
+              cell.cell_x = static_cast<int32_t>(pos.x) / 64;
+              cell.cell_y = static_cast<int32_t>(pos.y) / 64;
+            });
+          }
+          // 8. Damage
+          {
+            auto v = entt_reg.view<Health, const Damage>();
+            v.each([](Health &hp, const Damage &dmg) {
+              hp.hp -= dmg.amount;
+            });
+          }
+          // 9. HealthCleanup (deferred despawn + spawn)
+          {
+            entt_to_despawn.clear();
+            auto v = entt_reg.view<Health>();
+            v.each([&](entt::entity e, Health &hp) {
+              if (hp.hp <= 0.0f) {
+                entt_to_despawn.push_back(e);
+              }
+            });
+            for (auto e : entt_to_despawn) {
+              entt_reg.destroy(e);
+              auto fresh = entt_reg.create();
+              entt_reg.emplace<Position>(fresh, 0.0f, 0.0f);
+              entt_reg.emplace<Velocity>(fresh, 1.0f, 1.0f);
+              entt_reg.emplace<Acceleration>(fresh, 0.0f, -9.81f);
+              entt_reg.emplace<SpatialGridCell>(fresh, 0, 0);
+              entt_reg.emplace<Health>(fresh, 100.0f);
+              entt_reg.emplace<Damage>(fresh, 100.0f);
+            }
+          }
+          // 10. RenderPrep
+          {
+            float total_pos = 0.0f;
+            auto v = entt_reg.view<const Position, const Health>();
+            v.each([&](const Position &pos, const Health &hp) {
+              if (hp.hp > 0.0f) {
+                total_pos += pos.x;
+              }
+            });
+            ankerl::nanobench::doNotOptimizeAway(total_pos);
+          }
+        });
   }
 
   std::cout << "\n============================================================="

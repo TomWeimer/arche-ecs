@@ -61,18 +61,19 @@ inline void execute_parallel_narrow_nodes(
   }
 
   if (total_systems == 1 || pool.worker_count() <= 1) {
-    const size_t sys_idx = system_indices[0];
-    if (systems[sys_idx].enabled) {
-      CommandBuffer &cmd = parallel_cmd.get(0);
-      SystemContext ctx(
-          cmd,
-          target.resources,
-          target.cache_ctx,
-          target.get_cache_fn,
-          target.current_version,
-          target.previous_version
-      );
-      systems[sys_idx].fn(ctx);
+    for (size_t sys_idx : system_indices) {
+      if (systems[sys_idx].enabled) {
+        CommandBuffer &cmd = parallel_cmd.get(0);
+        SystemContext ctx(
+            cmd,
+            target.resources,
+            target.cache_ctx,
+            target.get_cache_fn,
+            target.current_version,
+            target.previous_version
+        );
+        systems[sys_idx].fn(ctx);
+      }
     }
     return;
   }

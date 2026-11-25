@@ -104,6 +104,11 @@ World::~World() {
 void World::run() {
   assert(storage_ != nullptr);
   assert(storage_->execution_target != nullptr);
+  if (storage_->execution_target) {
+    storage_->execution_target->current_version = storage_->current_version;
+    storage_->execution_target->previous_version = storage_->previous_version;
+    storage_->execution_target->parallel_cmd = storage_->parallel_cmd.get();
+  }
   if (storage_->thread_pool) {
     storage_->scheduler.run(*storage_->execution_target, *storage_->thread_pool);
   } else {
@@ -128,6 +133,9 @@ void World::set_threads(uint32_t count) {
   const uint32_t threads = count > 0 ? count : Hardware::core_count();
   storage_->thread_pool = std::make_unique<ThreadPool>(threads);
   storage_->parallel_cmd = std::make_unique<ParallelCommandBuffer>(threads + 1);
+  if (storage_->execution_target) {
+    storage_->execution_target->parallel_cmd = storage_->parallel_cmd.get();
+  }
 }
 
 uint32_t World::thread_count() const noexcept {
