@@ -69,11 +69,7 @@
 
 ## Layered Architecture & Strict Dependency Flow
 
-Dependencies flow strictly top-down. Lower layers never depend on or include higher layers. Validated by `make lint` (`scripts/check_architecture.py`).
-
-<p align="center">
-  <img src="docs/images/architecture_schema.svg" alt="Arche ECS Architectural & Dependency Flow" width="700">
-</p>
+Dependencies flow strictly top-down. Lower layers never depend on or include higher layers. Validated by `make lint` (`scripts/check_architecture.py`). Interactive SVG schema available at [docs/architecture/architecture_schema.html](docs/architecture/architecture_schema.html).
 
 | Layer | Subsystem / Tier | Contents | Permitted Dependencies |
 | :---: | :--- | :--- | :--- |
@@ -406,39 +402,13 @@ Interactive charts are generated to [docs/benchmarks/benchmark_dashboard.html](d
 
 ---
 
-## Project Layout
+## Project Layout & Architecture Flow
 
-```text
-arche-ecs/
-├── CMakeLists.txt                      # CMake build definitions (C++20 modules)
-├── Makefile                            # Build, lint, test, benchmark & charts targets
-├── src/                                # Layered C++20 Module Partitions (AaC Verified)
-│   ├── arche.cppm                      # Root umbrella module interface
-│   ├── foundation/                     # Layer 0: Hardware, types, entity, component ID & mask
-│   ├── storage/                        # Layer 1: 64KB chunk page memory, slot_map, resource, command
-│   ├── archetype/                      # Layer 2: Archetype tables, index & graph
-│   ├── mutation/                       # Layer 3: Immediate transitions & command buffer playback
-│   ├── runtime/
-│   │   ├── concurrency/                # Layer 4: Barrier work-stealing thread pool
-│   │   ├── query/                      # Layer 5: Queries, iterators, filters
-│   │   ├── sort/                       # Layer 5: In-place cycle-chasing permutation
-│   │   ├── access/                     # Layer 6: Declarative access footprints
-│   │   ├── system/                     # Layer 7: SystemContext & signatures
-│   │   ├── scheduler/                  # Layer 8: Conflict DAG compilation & batch dispatch
-│   │   └── plugin/                     # Layer 9: Modular plugin lifecycle
-│   ├── views/                          # Layer 10: Domain facades (entity, archetype, resource, snapshot)
-│   └── world/                          # Layer 11: World storage assembly & facade composition
-├── tests/                              # 25 Unit Test Suites
-├── docs/benchmarks/                    # Visualizations & Telemetry
-│   ├── benchmark_dashboard.html        # Interactive responsive SVG dashboard
-│   └── BENCHMARK_RESULTS.md            # Generated Markdown telemetry tables
-└── scripts/
-    ├── check_architecture.py           # Architecture-as-Code boundary validator
-    └── benchmarks/
-        ├── arche_benchmarks.cpp        # Cycle-accurate TSC hardware profiler
-        ├── comparative_benchmarks.cpp  # Head-to-head vs Flecs & EnTT (2M scale)
-        └── benchmark_charts.py         # Reusable chart & dashboard generator
-```
+Dependencies flow strictly top-down. Lower layers never depend on or include higher layers. Validated by `make lint` (`scripts/check_architecture.py`).
+
+| Architectural Dependency Flow | Repository Directory Layout |
+| :---: | :--- |
+| <img src="docs/images/architecture_schema.svg" alt="Arche ECS Architectural & Dependency Flow" width="460"> | <pre>arche-ecs/<br>├── CMakeLists.txt                      # C++20 modules build definitions<br>├── Makefile                            # Build, lint, benchmark &amp; charts<br>├── src/                                # Layered C++20 Partitions (AaC)<br>│   ├── arche.cppm                      # Layer 12: Root umbrella interface<br>│   ├── foundation/                     # Layer 0: Hardware, types, entity<br>│   │   ├── entity/<br>│   │   ├── component/<br>│   │   ├── hardware/<br>│   │   └── types/<br>│   ├── storage/                        # Layer 1: Chunk pages, slot_map<br>│   │   ├── chunk/<br>│   │   ├── slot_map/<br>│   │   ├── resource/<br>│   │   └── command/<br>│   ├── archetype/                      # Layer 2: Archetype tables &amp; graph<br>│   ├── mutation/                       # Layer 3: Immediate transitions<br>│   ├── runtime/                        # Layers 4–9: Concurrency &amp; logic<br>│   │   ├── concurrency/                # Layer 4: Work-stealing pool<br>│   │   ├── query/                      # Layer 5: Queries &amp; iterators<br>│   │   ├── sort/                       # Layer 5: In-place cycle chasing<br>│   │   ├── access/                     # Layer 6: Declarative access<br>│   │   ├── system/                     # Layer 7: SystemContext &amp; scope<br>│   │   ├── scheduler/                  # Layer 8: Conflict DAG batching<br>│   │   └── plugin/                     # Layer 9: Modular plugins<br>│   ├── views/                          # Layer 10: Domain sub-facades<br>│   └── world/                          # Layer 11: World storage assembly<br>├── tests/                              # 25 Dedicated Unit Test Suites<br>├── docs/benchmarks/                    # Visualizations &amp; Telemetry<br>│   ├── benchmark_dashboard.html        # Interactive SVG dashboard<br>│   └── BENCHMARK_RESULTS.md            # Markdown telemetry tables<br>└── scripts/<br>    ├── check_architecture.py           # Strict AaC DAG boundary validator<br>    └── benchmarks/<br>        ├── comparative_benchmarks.cpp  # Head-to-head vs Flecs &amp; EnTT<br>        ├── arche_benchmarks.cpp        # Hardware cycle TSC profiler<br>        └── benchmark_charts.py         # Reusable chart &amp; HTML builder</pre> |
 
 ---
 
