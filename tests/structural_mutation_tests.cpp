@@ -235,7 +235,7 @@ void test_deferred_command_buffer() {
   assert(world.entities.contains(entities[2]));
 
   // 4. Flush commands at synchronization boundary
-  cmd.commit(world);
+  world.commit(cmd);
   assert(cmd.empty());
 
   // 5. After playback: even entities must be destroyed, odd entities must

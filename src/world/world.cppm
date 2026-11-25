@@ -123,6 +123,12 @@ public:
   /// pool.
   void clear();
 
+  /// Commits all deferred mutations recorded in a CommandBuffer to this World.
+  void commit(CommandBuffer &cmd);
+
+  /// Commits all deferred mutations recorded in a ParallelCommandBuffer to this World.
+  void commit(internal::ParallelCommandBuffer &cmd);
+
   // --- Plugin Management -----------------------------------------------------
 
   /// Installs an autonomous Plugin struct with lifecycle initialization.

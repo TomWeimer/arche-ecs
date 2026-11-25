@@ -167,7 +167,7 @@ void test_command_buffer_batch_destruction() {
   cmd.despawn(std::span<const Entity>(entities.data(), 5000));
   assert(world.entities.count() == COUNT); // Deferred until playback
 
-  cmd.commit(world);
+  world.commit(cmd);
   assert(world.entities.count() == 5000);
 
   std::cout << "PASSED\n";

@@ -435,7 +435,7 @@ void test_wide_system_single_threaded_fallback() {
   }
 
   // Commit manual command buffer
-  cmd.commit(world);
+  world.commit(cmd);
   assert(world.archetypes.count_with<Marker>() == 1);
 
   std::cout << "PASSED\n";

@@ -35,19 +35,19 @@ target_sources(arche
       src/storage/slot_map/slot_map.cppm
       src/storage/slot_map/slot_map_impl.cppm
       src/storage/slot_map/entity_record.cppm
-      # Layer 2: Structure
-      src/structure/archetype/archetype.cppm
-      src/structure/archetype/archetype_impl.cppm
-      src/structure/archetype/archetype_index.cppm
-      src/structure/archetype/archetype_graph.cppm
-      src/structure/archetype/archetype_graph_impl.cppm
-      # Layer 3: Lifecycle
-      src/lifecycle/mutation/mutation.cppm
-      src/lifecycle/mutation/mutation_impl.cppm
-      src/lifecycle/mutation/command.cppm
-      src/lifecycle/mutation/command_impl.cppm
-      src/lifecycle/resource/resource.cppm
-      src/lifecycle/resource/resource_impl.cppm
+      src/storage/resource/resource.cppm
+      src/storage/resource/resource_impl.cppm
+      src/storage/command/command_buffer.cppm
+      src/storage/command/command_buffer_impl.cppm
+      # Layer 2: Archetype
+      src/archetype/archetype.cppm
+      src/archetype/archetype_impl.cppm
+      src/archetype/archetype_index.cppm
+      src/archetype/archetype_graph.cppm
+      src/archetype/archetype_graph_impl.cppm
+      # Layer 3: Mutation
+      src/mutation/mutation.cppm
+      src/mutation/mutation_impl.cppm
       # Layer 4: Concurrency
       src/runtime/concurrency/thread_pool.cppm
       src/runtime/concurrency/thread_pool_impl.cppm

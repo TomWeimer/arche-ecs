@@ -89,7 +89,9 @@ inline SystemExecutionTarget World::system_execution_target() noexcept {
       },
       .commit_parallel_cmd =
           [](ParallelCommandBuffer &p_cmd, void *world_ptr) {
-        p_cmd.commit(*static_cast<World *>(world_ptr));
+        auto *world = static_cast<World *>(world_ptr);
+        auto ctx = world->mutation_context();
+        Mutation::commit(ctx, p_cmd);
       },
       .advance_version_fn =
           [](void *world_ptr) {
@@ -101,6 +103,16 @@ inline SystemExecutionTarget World::system_execution_target() noexcept {
 
 inline World::operator SystemExecutionTarget() noexcept {
   return system_execution_target();
+}
+
+inline void World::commit(CommandBuffer &cmd) {
+  auto ctx = mutation_context();
+  internal::Mutation::apply(ctx, cmd);
+}
+
+inline void World::commit(internal::ParallelCommandBuffer &cmd) {
+  auto ctx = mutation_context();
+  internal::Mutation::commit(ctx, cmd);
 }
 
 inline SystemContext World::create_system_context(
@@ -268,7 +280,8 @@ inline void permute(World &world, std::span<const uint32_t> target_indices) {
 
 inline void WorldTestAccessor::commit_commands(World &w) {
   assert(w.storage() != nullptr && w.storage()->parallel_cmd != nullptr);
-  w.storage()->parallel_cmd->commit(w);
+  auto ctx = w.mutation_context();
+  Mutation::commit(ctx, *w.storage()->parallel_cmd);
 }
 
 inline void WorldTestAccessor::permute(

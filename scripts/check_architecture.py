@@ -65,6 +65,22 @@ SUBSYSTEM_RULES: Dict[str, Dict] = {
         "description": "Reactive matching archetype cache (alias for archetype_index)",
         "allowed_targets": ["core_component", "types", "query_cache", "archetype"],
     },
+    "command": {
+        "layer": 1,
+        "description": "Lock-free command buffer recording",
+        "allowed_targets": [
+            "core_component",
+            "sparse_entity",
+            "hardware",
+            "types",
+            "command",
+        ],
+    },
+    "resource": {
+        "layer": 1,
+        "description": "Global singleton resource registry and container",
+        "allowed_targets": ["types", "hardware", "resource", "core_component"],
+    },
     "archetype": {
         "layer": 2,
         "description": "Archetype node, transition graph, and migration",
@@ -92,26 +108,6 @@ SUBSYSTEM_RULES: Dict[str, Dict] = {
             "mutation",
             "command",
         ],
-    },
-    "command": {
-        "layer": 3,
-        "description": "Lock-free command buffer recording and playback",
-        "allowed_targets": [
-            "archetype",
-            "chunk",
-            "sparse_entity",
-            "public_entities",
-            "core_component",
-            "hardware",
-            "types",
-            "mutation",
-            "command",
-        ],
-    },
-    "resource": {
-        "layer": 3,
-        "description": "Global singleton resource registry and container",
-        "allowed_targets": ["types", "hardware", "resource"],
     },
     "entity_lifecycle": {
         "layer": 3,
@@ -334,23 +330,18 @@ def classify_subsystem(file_path: str) -> Tuple[str, int]:
         or p.startswith("src/entity/")
     ):
         return "sparse_entity", SUBSYSTEM_RULES["sparse_entity"]["layer"]
-
-    # Tier 2: structure
-    if p.startswith("src/structure/archetype/") or p.startswith("src/archetype/"):
-        return "archetype", SUBSYSTEM_RULES["archetype"]["layer"]
-    if (
-        p.startswith("src/structure/query_cache/")
-        or p.startswith("src/query/query_cache")
-    ):
-        return "archetype", SUBSYSTEM_RULES["archetype"]["layer"]
-
-    # Tier 3: lifecycle
-    if p.startswith("src/lifecycle/mutation/") or p.startswith("src/mutation/"):
-        return "mutation", SUBSYSTEM_RULES["mutation"]["layer"]
-    if p.startswith("src/lifecycle/command/") or p.startswith("src/command/"):
-        return "mutation", SUBSYSTEM_RULES["mutation"]["layer"]
-    if p.startswith("src/lifecycle/resource/") or p.startswith("src/resource/"):
+    if p.startswith("src/storage/resource/") or p.startswith("src/resource/"):
         return "resource", SUBSYSTEM_RULES["resource"]["layer"]
+    if p.startswith("src/storage/command/") or p.startswith("src/command/"):
+        return "command", SUBSYSTEM_RULES["command"]["layer"]
+
+    # Tier 2: archetype
+    if p.startswith("src/archetype/"):
+        return "archetype", SUBSYSTEM_RULES["archetype"]["layer"]
+
+    # Tier 3: mutation
+    if p.startswith("src/mutation/"):
+        return "mutation", SUBSYSTEM_RULES["mutation"]["layer"]
 
     # Tier 4: concurrency
     if p.startswith("src/runtime/concurrency/") or p.startswith("src/concurrency/"):

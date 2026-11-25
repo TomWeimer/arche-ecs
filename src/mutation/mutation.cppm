@@ -14,6 +14,7 @@ export import :slot_map;
 export import :chunk_pool;
 export import :archetype;
 export import :archetype_graph;
+export import :command;
 
 export namespace arche::internal {
 
@@ -272,6 +273,22 @@ struct Mutation {
       ComponentID mutated_type,
       const void *added_component_data
   );
+
+  /**
+   * @brief Applies all deferred mutation bytecode recorded in a CommandBuffer.
+   *
+   * @param ctx Mutation context supplying storage and version facilities.
+   * @param cmd Target CommandBuffer containing recorded bytecode.
+   */
+  static void apply(MutationContext &ctx, CommandBuffer &cmd);
+
+  /**
+   * @brief Sequentially commits all per-thread CommandBuffers in a ParallelCommandBuffer.
+   *
+   * @param ctx Mutation context supplying storage and version facilities.
+   * @param parallel_cmd ParallelCommandBuffer collection.
+   */
+  static void commit(MutationContext &ctx, ParallelCommandBuffer &parallel_cmd);
 };
 
 } // namespace arche

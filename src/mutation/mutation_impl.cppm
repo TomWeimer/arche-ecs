@@ -17,6 +17,7 @@ module;
 export module arche:mutation.detail.impl;
 
 import :mutation;
+import :command;
 
 export namespace arche::internal {
 
@@ -499,6 +500,96 @@ void Mutation::migrate(
   // 6. Recycle source chunk if empty and archetype holds multiple chunks.
   if (src_chunk->is_empty() && src_arch->chunks().size() > 1) {
     src_arch->recycle_chunk(ctx.chunk_pool, src_chunk);
+  }
+}
+
+// =============================================================================
+// Deferred Command Playback
+// =============================================================================
+
+inline void Mutation::apply(MutationContext &ctx, CommandBuffer &cmd) {
+  size_t offset = 0;
+  const size_t total_size = cmd.size_bytes();
+
+  while (offset < total_size) {
+    const auto type = cmd.read<CommandType>(offset);
+    switch (type) {
+    case CommandType::CreateEntity: {
+      const auto comp_count = cmd.read<uint32_t>(offset);
+      std::vector<ComponentID> comp_ids(comp_count);
+      std::vector<uint32_t> sizes(comp_count);
+      std::vector<uint32_t> aligns(comp_count);
+      std::vector<const void *> comp_ptrs(comp_count);
+
+      for (uint32_t c = 0; c < comp_count; ++c) {
+        comp_ids[c] = cmd.read<ComponentID>(offset);
+        sizes[c] = cmd.read<uint32_t>(offset);
+        aligns[c] = cmd.read<uint32_t>(offset);
+        comp_ptrs[c] = cmd.read_bytes(offset, sizes[c]);
+        ctx.registry.register_pod(comp_ids[c], sizes[c], aligns[c]);
+      }
+
+      Archetype *arch = ctx.graph.get_or_create(comp_ids);
+      Entity entity = ctx.slot_map.allocate();
+      Chunk *chunk = arch->ensure_writable_chunk(ctx.chunk_pool);
+      uint32_t row = chunk->append_entity(entity);
+
+      for (size_t c = 0; c < comp_count; ++c) {
+        int16_t col_idx = arch->column_index(comp_ids[c]);
+        assert(col_idx >= 0);
+        const auto &layout = arch->column_layout(static_cast<size_t>(col_idx));
+        void *dst = chunk->component_element(layout, row);
+        std::memcpy(dst, comp_ptrs[c], layout.size);
+        chunk->set_column_version(static_cast<uint16_t>(col_idx), ctx.current_version);
+      }
+      arch->set_entity_count(arch->entity_count() + 1);
+      ctx.slot_map.update_location(entity, arch, chunk, row);
+      break;
+    }
+    case CommandType::DestroyEntity: {
+      const auto entity = cmd.read<Entity>(offset);
+      destroy_entity(ctx, entity);
+      break;
+    }
+    case CommandType::DestroyEntities: {
+      const auto count = cmd.read<uint32_t>(offset);
+      const auto *ents = static_cast<const Entity *>(
+          cmd.read_bytes(offset, count * sizeof(Entity))
+      );
+      destroy_entities(ctx, {ents, count});
+      break;
+    }
+    case CommandType::AddComponent: {
+      const auto entity = cmd.read<Entity>(offset);
+      const auto tid = cmd.read<ComponentID>(offset);
+      const auto size = cmd.read<uint32_t>(offset);
+      const auto align = cmd.read<uint32_t>(offset);
+      const void *data = cmd.read_bytes(offset, size);
+      ctx.registry.register_pod(tid, size, align);
+      add_component(ctx, entity, tid, data);
+      break;
+    }
+    case CommandType::RemoveComponent: {
+      const auto entity = cmd.read<Entity>(offset);
+      const auto tid = cmd.read<ComponentID>(offset);
+      remove_component(ctx, entity, tid);
+      break;
+    }
+    default:
+      assert(false && "Corrupted CommandBuffer bytecode encountered!");
+      return;
+    }
+  }
+
+  cmd.clear();
+}
+
+inline void Mutation::commit(
+    MutationContext &ctx,
+    ParallelCommandBuffer &parallel_cmd
+) {
+  for (auto &buf : parallel_cmd.buffers()) {
+    apply(ctx, buf);
   }
 }
 

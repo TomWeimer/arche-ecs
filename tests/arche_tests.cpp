@@ -283,7 +283,7 @@ void test_deferred_command_buffer() {
   assert(world.entities.contains(e));
 
   // 4. Flush and execute command buffer
-  cmd.commit(world);
+  world.commit(cmd);
 
   // 5. Verify entity is successfully destroyed
   assert(!world.entities.contains(e));
