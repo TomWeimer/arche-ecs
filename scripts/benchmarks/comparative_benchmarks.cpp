@@ -6,11 +6,135 @@ import arche;
 #include <nanobench.h>
 
 #include <algorithm>
+#include <atomic>
 #include <cstdint>
+#include <cstdlib>
+#include <iomanip>
 #include <iostream>
+#include <new>
 #include <random>
 #include <thread>
 #include <vector>
+
+#if defined(__APPLE__)
+#include <mach/mach.h>
+#elif defined(__linux__)
+#include <sys/resource.h>
+#include <unistd.h>
+#endif
+
+// =============================================================================
+// Memory & Heap Allocation Tracking Telemetry
+// =============================================================================
+
+static std::atomic<bool> g_track_allocations{false};
+static std::atomic<size_t> g_alloc_count{0};
+static std::atomic<size_t> g_alloc_bytes{0};
+
+void *operator new(std::size_t size) {
+  if (g_track_allocations.load(std::memory_order_relaxed)) {
+    g_alloc_count.fetch_add(1, std::memory_order_relaxed);
+    g_alloc_bytes.fetch_add(size, std::memory_order_relaxed);
+  }
+  void *ptr = std::malloc(size);
+  if (!ptr) {
+    throw std::bad_alloc();
+  }
+  return ptr;
+}
+
+void *operator new[](std::size_t size) {
+  if (g_track_allocations.load(std::memory_order_relaxed)) {
+    g_alloc_count.fetch_add(1, std::memory_order_relaxed);
+    g_alloc_bytes.fetch_add(size, std::memory_order_relaxed);
+  }
+  void *ptr = std::malloc(size);
+  if (!ptr) {
+    throw std::bad_alloc();
+  }
+  return ptr;
+}
+
+void operator delete(void *ptr) noexcept {
+  std::free(ptr);
+}
+
+void operator delete[](void *ptr) noexcept {
+  std::free(ptr);
+}
+
+void operator delete(void *ptr, std::size_t) noexcept {
+  std::free(ptr);
+}
+
+void operator delete[](void *ptr, std::size_t) noexcept {
+  std::free(ptr);
+}
+
+static ecs_os_api_malloc_t g_orig_flecs_malloc = nullptr;
+static ecs_os_api_calloc_t g_orig_flecs_calloc = nullptr;
+static ecs_os_api_realloc_t g_orig_flecs_realloc = nullptr;
+
+static void *flecs_malloc_hook(ecs_size_t size) {
+  if (g_track_allocations.load(std::memory_order_relaxed)) {
+    g_alloc_count.fetch_add(1, std::memory_order_relaxed);
+    g_alloc_bytes.fetch_add(static_cast<size_t>(size), std::memory_order_relaxed);
+  }
+  return g_orig_flecs_malloc(size);
+}
+
+static void *flecs_calloc_hook(ecs_size_t size) {
+  if (g_track_allocations.load(std::memory_order_relaxed)) {
+    g_alloc_count.fetch_add(1, std::memory_order_relaxed);
+    g_alloc_bytes.fetch_add(static_cast<size_t>(size), std::memory_order_relaxed);
+  }
+  return g_orig_flecs_calloc(size);
+}
+
+static void *flecs_realloc_hook(void *ptr, ecs_size_t size) {
+  if (g_track_allocations.load(std::memory_order_relaxed)) {
+    g_alloc_count.fetch_add(1, std::memory_order_relaxed);
+    g_alloc_bytes.fetch_add(static_cast<size_t>(size), std::memory_order_relaxed);
+  }
+  return g_orig_flecs_realloc(ptr, size);
+}
+
+inline void init_flecs_alloc_hooks() {
+  if (!g_orig_flecs_malloc) {
+    g_orig_flecs_malloc = ecs_os_api.malloc_;
+    g_orig_flecs_calloc = ecs_os_api.calloc_;
+    g_orig_flecs_realloc = ecs_os_api.realloc_;
+    ecs_os_api.malloc_ = flecs_malloc_hook;
+    ecs_os_api.calloc_ = flecs_calloc_hook;
+    ecs_os_api.realloc_ = flecs_realloc_hook;
+  }
+}
+
+inline size_t get_current_rss_bytes() {
+#if defined(__APPLE__)
+  struct mach_task_basic_info info;
+  mach_msg_type_number_t count = MACH_TASK_BASIC_INFO_COUNT;
+  if (task_info(
+          mach_task_self(), MACH_TASK_BASIC_INFO, (task_info_t)&info, &count
+      ) == KERN_SUCCESS) {
+    return info.resident_size;
+  }
+  return 0;
+#elif defined(__linux__)
+  long rss = 0L;
+  FILE *fp = fopen("/proc/self/statm", "r");
+  if (fp) {
+    if (fscanf(fp, "%*s%ld", &rss) == 1) {
+      fclose(fp);
+      return static_cast<size_t>(rss) * static_cast<size_t>(sysconf(_SC_PAGESIZE));
+    }
+    fclose(fp);
+  }
+  return 0;
+#else
+  return 0;
+#endif
+}
 
 // =============================================================================
 // Benchmark Component Definitions (Standard Plain-Old-Data)
@@ -1735,6 +1859,199 @@ int main() {
             ankerl::nanobench::doNotOptimizeAway(total_pos);
           }
         });
+  }
+
+  // ---------------------------------------------------------------------------
+  // SECTION VII: MEMORY FOOTPRINT & HEAP ALLOCATION TELEMETRY
+  // ---------------------------------------------------------------------------
+  std::cout << "\n>>> Running Section VII: Memory Footprint & Steady-State Allocation Telemetry...\n\n";
+  {
+    init_flecs_alloc_hooks();
+
+    // 14. Steady-State Zero-Allocation Audit (50 Simulation Frames, 100k Entities)
+    std::cout << "--- 14. Steady-State Heap Allocation Audit (50 Frames, 100k Entities) ---\n";
+    {
+      // A. arche-ecs Steady-State
+      size_t arche_allocs = 0;
+      size_t arche_bytes = 0;
+      {
+        arche::World world;
+        world.spawn(
+            {.count = 100'000}, Position{0.0f, 0.0f}, Velocity{1.0f, 1.0f}
+        );
+        auto query = world.query<Position, const Velocity>();
+
+        // Warmup frame
+        for (auto [pos, vel] : query) {
+          pos.x += vel.vx * 0.016f;
+        }
+
+        // Measure 50 steady-state frames
+        g_alloc_count = 0;
+        g_alloc_bytes = 0;
+        g_track_allocations = true;
+        for (int frame = 0; frame < 50; ++frame) {
+          query.each_chunk([](uint32_t count, Position *pos, const Velocity *vel) {
+            for (uint32_t i = 0; i < count; ++i) {
+              pos[i].x += vel[i].vx * 0.016f;
+            }
+          });
+        }
+        g_track_allocations = false;
+        arche_allocs = g_alloc_count.load();
+        arche_bytes = g_alloc_bytes.load();
+      }
+
+      // B. Flecs Steady-State
+      size_t flecs_allocs = 0;
+      size_t flecs_bytes = 0;
+      {
+        flecs::world ecs;
+        for (size_t i = 0; i < 100'000; ++i) {
+          ecs.entity().set<Position>({0.0f, 0.0f}).set<Velocity>({1.0f, 1.0f});
+        }
+        auto query = ecs.query<Position, const Velocity>();
+
+        // Warmup frame
+        query.each([](Position &pos, const Velocity &vel) {
+          pos.x += vel.vx * 0.016f;
+        });
+
+        // Measure 50 steady-state frames
+        g_alloc_count = 0;
+        g_alloc_bytes = 0;
+        g_track_allocations = true;
+        for (int frame = 0; frame < 50; ++frame) {
+          query.run([](flecs::iter &it) {
+            while (it.next()) {
+              auto pos = it.field<Position>(0);
+              auto vel = it.field<Velocity>(1);
+              for (size_t i = 0; i < it.count(); ++i) {
+                pos[i].x += vel[i].vx * 0.016f;
+              }
+            }
+          });
+        }
+        g_track_allocations = false;
+        flecs_allocs = g_alloc_count.load();
+        flecs_bytes = g_alloc_bytes.load();
+      }
+
+      // C. EnTT Steady-State
+      size_t entt_allocs = 0;
+      size_t entt_bytes = 0;
+      {
+        entt::registry registry;
+        for (size_t i = 0; i < 100'000; ++i) {
+          const auto e = registry.create();
+          registry.emplace<Position>(e, 0.0f, 0.0f);
+          registry.emplace<Velocity>(e, 1.0f, 1.0f);
+        }
+        auto view = registry.view<Position, const Velocity>();
+
+        // Warmup frame
+        view.each([](Position &pos, const Velocity &vel) {
+          pos.x += vel.vx * 0.016f;
+        });
+
+        // Measure 50 steady-state frames
+        g_alloc_count = 0;
+        g_alloc_bytes = 0;
+        g_track_allocations = true;
+        for (int frame = 0; frame < 50; ++frame) {
+          view.each([](Position &pos, const Velocity &vel) {
+            pos.x += vel.vx * 0.016f;
+          });
+        }
+        g_track_allocations = false;
+        entt_allocs = g_alloc_count.load();
+        entt_bytes = g_alloc_bytes.load();
+      }
+
+      std::cout << "  " << std::left << std::setw(30) << "arche-ecs (Chunked SoA)"
+                << " | Allocations: " << std::setw(3) << arche_allocs
+                << " | Total Bytes: " << std::setw(6) << arche_bytes << " B (Zero-Allocation Guarantee: "
+                << (arche_allocs == 0 ? "PASSED" : "FAILED") << ")\n";
+      std::cout << "  " << std::left << std::setw(30) << "Flecs (Table Batch)"
+                << " | Allocations: " << std::setw(3) << flecs_allocs
+                << " | Total Bytes: " << std::setw(6) << flecs_bytes << " B (Zero-Allocation Guarantee: "
+                << (flecs_allocs == 0 ? "PASSED" : "FAILED") << ")\n";
+      std::cout << "  " << std::left << std::setw(30) << "EnTT (Standard View)"
+                << " | Allocations: " << std::setw(3) << entt_allocs
+                << " | Total Bytes: " << std::setw(6) << entt_bytes << " B (Zero-Allocation Guarantee: "
+                << (entt_allocs == 0 ? "PASSED" : "FAILED") << ")\n";
+    }
+
+    // 15. Memory Footprint & Overhead per Entity (1,000,000 Entities: Pos + Vel)
+    std::cout << "\n--- 15. Memory Footprint & Overhead per Entity (1,000,000 Entities) ---\n";
+    std::cout << "  Component Data Payload: 16.00 MB (16 bytes/entity: Position + Velocity)\n\n";
+    {
+      constexpr size_t ENTITY_COUNT = 1'000'000;
+      constexpr double PAYLOAD_BYTES_PER_ENTITY = 16.0;
+
+      // arche-ecs
+      size_t arche_heap_bytes = 0;
+      {
+        g_alloc_bytes = 0;
+        g_track_allocations = true;
+        auto world = std::make_unique<arche::World>();
+        world->spawn(
+            {.count = ENTITY_COUNT}, Position{0.0f, 0.0f}, Velocity{1.0f, 1.0f}
+        );
+        g_track_allocations = false;
+        arche_heap_bytes = g_alloc_bytes.load();
+        ankerl::nanobench::doNotOptimizeAway(world->entities.count());
+      }
+
+      // Flecs
+      size_t flecs_heap_bytes = 0;
+      {
+        g_alloc_bytes = 0;
+        g_track_allocations = true;
+        auto ecs = std::make_unique<flecs::world>();
+        for (size_t i = 0; i < ENTITY_COUNT; ++i) {
+          ecs->entity().set<Position>({0.0f, 0.0f}).set<Velocity>({1.0f, 1.0f});
+        }
+        g_track_allocations = false;
+        flecs_heap_bytes = g_alloc_bytes.load();
+        ankerl::nanobench::doNotOptimizeAway(ecs->count<Position>());
+      }
+
+      // EnTT
+      size_t entt_heap_bytes = 0;
+      {
+        g_alloc_bytes = 0;
+        g_track_allocations = true;
+        auto registry = std::make_unique<entt::registry>();
+        for (size_t i = 0; i < ENTITY_COUNT; ++i) {
+          const auto e = registry->create();
+          registry->emplace<Position>(e, 0.0f, 0.0f);
+          registry->emplace<Velocity>(e, 1.0f, 1.0f);
+        }
+        g_track_allocations = false;
+        entt_heap_bytes = g_alloc_bytes.load();
+        ankerl::nanobench::doNotOptimizeAway(registry->view<Position>().size());
+      }
+
+      auto print_mem_row = [](const char *name, size_t alloc_bytes, size_t count, double payload_per_entity) {
+        const double total_mb = static_cast<double>(alloc_bytes) / (1024.0 * 1024.0);
+        const double bytes_per_entity = static_cast<double>(alloc_bytes) / static_cast<double>(count);
+        const double overhead_bytes = bytes_per_entity - payload_per_entity;
+        const double packing_efficiency = (payload_per_entity / bytes_per_entity) * 100.0;
+
+        std::cout << "  " << std::left << std::setw(28) << name << " | Allocated: "
+                  << std::right << std::setw(7) << std::fixed << std::setprecision(2) << total_mb << " MB"
+                  << " | " << std::setw(5) << std::setprecision(1) << bytes_per_entity << " B/entity"
+                  << " | Overhead: +" << std::setw(4) << std::setprecision(1) << overhead_bytes << " B"
+                  << " | Efficiency: " << std::setw(5) << std::setprecision(1) << packing_efficiency << "%\n";
+      };
+
+      std::cout << "  " << std::string(88, '-') << "\n";
+      print_mem_row("arche-ecs (64KB Chunk Pages)", arche_heap_bytes, ENTITY_COUNT, PAYLOAD_BYTES_PER_ENTITY);
+      print_mem_row("Flecs (Table Blocks)", flecs_heap_bytes, ENTITY_COUNT, PAYLOAD_BYTES_PER_ENTITY);
+      print_mem_row("EnTT (Dense Sparse Pools)", entt_heap_bytes, ENTITY_COUNT, PAYLOAD_BYTES_PER_ENTITY);
+      std::cout << "  " << std::string(88, '-') << "\n";
+    }
   }
 
   std::cout << "\n============================================================="
