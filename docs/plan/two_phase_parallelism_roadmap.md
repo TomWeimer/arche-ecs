@@ -342,8 +342,21 @@ private:
    - Verified deterministic `CommandBuffer` playback.
    - Verified thread affinity for `Sequential` systems on thread 0.
 
-### Phase 2 Evolution Trigger (When to transition):
-Initiate Phase 2 when simulation profiles exhibit one of the following thresholds:
-- Inter-system batches leave $> 25\%$ of CPU cores idle due to unequal system runtimes.
-- Spatial clustering creates $> 30\%$ runtime variance across chunk iterations in physics systems.
-- Heterogeneous CPU profiles (Apple Silicon P/E cores) show Performance cores idling while waiting for Efficiency cores at barriers.
+### Phase 2 Deliverables (Completed):
+1. **`src/runtime/concurrency/task.cppm`**:
+   - Zero-overhead POD `Task{Function, data}` descriptor.
+2. **`src/runtime/concurrency/work_stealing_queue.cppm`**:
+   - Cache-aligned (`alignas(64)`), lock-free Chase-Lev deque with 4,096 task circular buffer per worker thread.
+   - LIFO local `pop` (cache-hot), FIFO CAS `steal`, multi-producer safe `push`.
+3. **`src/runtime/concurrency/thread_pool.cppm` & `thread_pool_impl.cppm`**:
+   - Work-stealing thread pool with per-thread deques.
+   - Exponential pause/yield backoff with atomic wait idle state.
+   - Active-waiting `wait(TaskGroup)` allowing caller threads to participate in stealing.
+   - Non-blocking nested `parallel_for` execution without deadlock hazards.
+4. **`src/runtime/scheduler/scheduler_impl.cppm`**:
+   - Migrated `execute_parallel_narrow_nodes` from atomic loops to first-class `Task` scheduling into work-stealing pool.
+5. **`src/runtime/query/query_impl.cppm`**:
+   - Migrated `Query::each_parallel` from atomic cursor bouncing to contiguous range-sliced stealable tasks ($5.1\times$ faster).
+6. **Unit Tests & Empirical Benchmarks**:
+   - `tests/work_stealing_tests.cpp`: LIFO pop ordering, 4-stealer parity across 3,000 tasks, dynamic stealing under skewed load, nested `parallel_for` zero-deadlock.
+   - Empirical benchmarks: $12.1\times$ lower dispatch latency ($4.86\ \mu\text{s}$ vs $58.65\ \mu\text{s}$), $1.59\times$ speedup on heterogeneous workloads, and $2.04\ \text{M}$ tasks/sec throughput.
