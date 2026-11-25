@@ -143,7 +143,9 @@ int main() {
   std::cout << ">>> Running Section I: 2,000,000 (2M) Entity Benchmarks...\n\n";
   {
     ankerl::nanobench::Bench bench_2m;
-    bench_2m.warmup(3).minEpochIterations(10);
+    bench_2m.warmup(1).minEpochIterations(3).maxEpochTime(
+        std::chrono::milliseconds(250)
+    );
 
     // 1A. 2,000,000 Entities: Simple Streaming (Pos += Vel * dt)
     {
@@ -325,7 +327,9 @@ int main() {
                "(500k)...\n\n";
   {
     ankerl::nanobench::Bench bench_wide;
-    bench_wide.warmup(5).minEpochIterations(15);
+    bench_wide.warmup(1).minEpochIterations(3).maxEpochTime(
+        std::chrono::milliseconds(250)
+    );
 
     arche::World world;
     world.spawn(
@@ -460,9 +464,43 @@ int main() {
   // ---------------------------------------------------------------------------
   std::cout << "\n>>> Running Section III: Spatial Sorting & Cache Locality "
                "(500k)...\n\n";
+
+  struct PositionSorterPlugin {
+    static std::string_view name() { return "PositionSorterPlugin"; }
+    void build(arche::World &, arche::PluginContext &ctx) {
+      ctx.add_sort_stage<Position>(
+          "PositionSort",
+          [](const arche::SystemContext &) { return true; },
+          [](arche::ColumnView<Position> columns, std::vector<uint32_t> &out_perm) {
+            struct Item {
+              float x;
+              uint32_t idx;
+            };
+            std::vector<Item> items;
+            items.reserve(columns.total_count());
+            uint32_t gid = 0;
+            for (std::span<const Position> span : columns) {
+              for (const auto &p : span) {
+                items.push_back({p.x, gid++});
+              }
+            }
+            std::sort(items.begin(), items.end(), [](const Item &a, const Item &b) {
+              return a.x < b.x;
+            });
+            out_perm.resize(items.size());
+            for (size_t i = 0; i < items.size(); ++i) {
+              out_perm[i] = items[i].idx;
+            }
+          }
+      );
+    }
+  };
+
   {
     ankerl::nanobench::Bench bench_sort;
-    bench_sort.warmup(2).minEpochIterations(5);
+    bench_sort.warmup(1).minEpochIterations(3).maxEpochTime(
+        std::chrono::milliseconds(250)
+    );
 
     // 5A. In-Place Entity Sorting Speed (500k Entities sorted by Position.x)
     bench_sort.title("5. In-Place Entity Sorting Speed (500k Entities)")
@@ -483,10 +521,8 @@ int main() {
                   positions.data()
               );
 
-              arche::sort<Position>(
-                  world,
-                  [](const Position &a, const Position &b) { return a.x < b.x; }
-              );
+              world.add_plugin<PositionSorterPlugin>();
+              world.run();
             }
         )
         .run("EnTT (registry.sort in-place dense pool)", [&] {
@@ -534,9 +570,8 @@ int main() {
           });
 
       // Now sort entities in-place by X coordinate
-      arche::sort<Position>(world, [](const Position &a, const Position &b) {
-        return a.x < b.x;
-      });
+      world.add_plugin<PositionSorterPlugin>();
+      world.run();
 
       bench_sort.run("arche-ecs (After Sort: Spatially Monotonic)", [&] {
         query.each_chunk([](uint32_t count, Position *p, const Velocity *v) {
@@ -556,7 +591,9 @@ int main() {
                "Filters...\n\n";
   {
     ankerl::nanobench::Bench bench_frag;
-    bench_frag.warmup(5).minEpochIterations(20);
+    bench_frag.warmup(1).minEpochIterations(3).maxEpochTime(
+        std::chrono::milliseconds(250)
+    );
 
     // 7A. 200,000 Entities across 20 Distinct Archetypes
     {
@@ -806,7 +843,9 @@ int main() {
       << "\n>>> Running Section V: Lifecycle, Mutation & Random Access...\n\n";
   {
     ankerl::nanobench::Bench bench_life;
-    bench_life.warmup(5).minEpochIterations(25);
+    bench_life.warmup(1).minEpochIterations(3).maxEpochTime(
+        std::chrono::milliseconds(250)
+    );
 
     // 8. Random Component Lookup (100k Shuffled Entity Handles)
     {
