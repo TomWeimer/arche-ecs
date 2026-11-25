@@ -3,71 +3,57 @@ module;
 #include <cassert>
 #include <cstddef>
 #include <string>
-#include <utility>
 
 export module arche:domain.system;
 
-import :access;
-import :system_types;
 import :scheduler;
 
 export namespace arche {
 
-namespace internal {
-class ThreadPool;
-}
-
-class World;
-
 // =============================================================================
-// Systems & Scheduler Domain Sub-Facade
+// Individual System Domain Sub-Facade
 // =============================================================================
 
 /**
  * @class SystemFacade
- * @brief Domain sub-facade for registering execution stages and systems.
+ * @brief Domain sub-facade providing introspection and control over a single registered system.
  *
- * Provides high-level registration for simulation systems with declarative
- * access descriptors and compiles conflict-free parallel DAG execution stages.
- *
- * Accessible via `world.systems`.
+ * Accessible via `world.system("system_name")`.
  */
 class SystemFacade {
 public:
   constexpr SystemFacade() noexcept = default;
   explicit constexpr SystemFacade(
       internal::Scheduler &scheduler,
-      internal::SystemExecutionTarget (*get_target)(void *ctx),
-      internal::ThreadPool *pool = nullptr,
-      void *world_ptr = nullptr
+      size_t system_index,
+      void *world_ptr = nullptr,
+      internal::SystemExecutionTarget (*get_target)(void *ctx) = nullptr
   ) noexcept
       : scheduler_(&scheduler),
-        get_target_(get_target),
-        pool_(pool),
-        world_ptr_(world_ptr) {}
+        system_index_(system_index),
+        world_ptr_(world_ptr),
+        get_target_(get_target) {}
 
-  /// Executes all compiled scheduler stages in parallel using the World's internal ThreadPool.
-  void run();
+  /// Returns whether this system is active in the scheduler.
+  [[nodiscard]] bool is_enabled() const noexcept;
 
-  /// Executes all compiled scheduler stages sequentially on the calling thread.
-  void run_sequential();
+  /// Enables this system for subsequent world.run() iterations.
+  void enable() noexcept;
 
-  /// Compiles system stages, resolving parallel dependencies and access descriptors.
-  void compile();
+  /// Disables this system (skipped during world.run()).
+  void disable() noexcept;
 
-  /// Adds an individual system function with its data access declaration.
-  SystemFacade &add_system(
-      std::string name,
-      AccessDescriptor access,
-      SystemFunction fn,
-      SystemScale scale = SystemScale::Narrow
-  );
+  /// Explicitly runs this individual system immediately outside the main DAG.
+  void run_now();
+
+  /// Returns a formatted string displaying the data access of the system.
+  [[nodiscard]] std::string show_access() const;
 
 private:
   internal::Scheduler *scheduler_{nullptr};
-  internal::SystemExecutionTarget (*get_target_)(void *ctx){nullptr};
-  internal::ThreadPool *pool_{nullptr};
+  size_t system_index_{0};
   void *world_ptr_{nullptr};
+  internal::SystemExecutionTarget (*get_target_)(void *ctx){nullptr};
 };
 
 } // namespace arche

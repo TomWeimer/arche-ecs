@@ -90,6 +90,7 @@ public:
     AccessDescriptor access;
     SystemFunction fn{nullptr};
     SystemScale scale{SystemScale::Narrow};
+    bool enabled{true};
   };
 
   /**
@@ -159,6 +160,33 @@ public:
    * @brief Executes all compiled system batches sequentially in the current thread.
    */
   void run(const SystemExecutionTarget &target);
+
+  /**
+   * @brief Looks up a system index by diagnostic name.
+   */
+  [[nodiscard]] std::optional<size_t> find_system_index(
+      std::string_view name
+  ) const noexcept;
+
+  /**
+   * @brief Checks whether the system at the specified index is enabled.
+   */
+  [[nodiscard]] bool is_system_enabled(size_t index) const noexcept;
+
+  /**
+   * @brief Enables or disables the system at the specified index.
+   */
+  void set_system_enabled(size_t index, bool enabled) noexcept;
+
+  /**
+   * @brief Retrieves the SystemNode at the specified index.
+   */
+  [[nodiscard]] const SystemNode &get_system(size_t index) const noexcept;
+
+  /**
+   * @brief Executes a single system immediately on the calling thread.
+   */
+  void run_system(size_t index, const SystemExecutionTarget &target);
 };
 
 } // namespace arche

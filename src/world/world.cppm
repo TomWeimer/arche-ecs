@@ -83,8 +83,21 @@ public:
   /// Low-level archetype graph metrics and chunk memory layout inspection.
   ArchetypeFacade archetypes;
 
-  /// Stage-based system scheduler: register stages, systems, and execution pipelines.
-  SystemFacade systems;
+  // --- Simulation Execution --------------------------------------------------
+
+  /// Executes all compiled scheduler stages in parallel using the World's worker threads.
+  void run();
+
+  /// Executes all compiled scheduler stages sequentially on the calling thread.
+  void run_sequential();
+
+  /// Compiles system stages, resolving parallel dependencies and access descriptors.
+  void compile();
+
+  // --- System Introspection --------------------------------------------------
+
+  /// Looks up a registered simulation system by name.
+  [[nodiscard]] std::optional<SystemFacade> system(std::string_view name) noexcept;
 
   // --- Constructors & Lifecycle ----------------------------------------------
 

@@ -46,27 +46,36 @@ void test_world_ticking_and_stamping() {
   Entity e = world.spawn(Position{1.0f, 2.0f}, Velocity{3.0f, 4.0f});
   assert(world.entities.contains(e));
 
-  // Register a system that declares write access to Position
+  // Register a system via plugin that declares write access to Position
   uint32_t observed_tick = 0;
-  world.systems.add_system(
-      "PositionMutator",
-      arche::Access{}.writes<Position>().build(),
-      [&](arche::SystemContext &ctx) {
-        observed_tick = ctx.tick();
-        assert(ctx.current_tick() == ctx.tick());
-        assert(ctx.version() == ctx.tick());
-      }
-  );
+  struct PositionMutatorPlugin {
+    uint32_t *tick_ptr{nullptr};
+    static constexpr std::string_view name() noexcept {
+      return "PositionMutatorPlugin";
+    }
+    void build(World &, arche::PluginContext &ctx) const {
+      ctx.add_system(
+          "PositionMutator",
+          arche::Access{}.writes<Position>().build(),
+          [observed = tick_ptr](arche::SystemContext &ctx) {
+            *observed = ctx.tick();
+            assert(ctx.current_tick() == ctx.tick());
+            assert(ctx.version() == ctx.tick());
+          }
+      );
+    }
+  };
+  world.add_plugin(PositionMutatorPlugin{&observed_tick});
 
-  // Frame 1: run_systems() advances version to 2 and auto-stamps Position
-  world.systems.run();
+  // Frame 1: run() advances version to 2 and auto-stamps Position
+  world.run();
   assert(world.version() == 2);
   assert(observed_tick == 2);
 
   // Frames 2, 3, 4: advances version to 5 and auto-stamps Position
-  world.systems.run(); // 3
-  world.systems.run(); // 4
-  world.systems.run(); // 5
+  world.run(); // 3
+  world.run(); // 4
+  world.run(); // 5
   assert(world.version() == 5);
   assert(observed_tick == 5);
 
@@ -107,7 +116,7 @@ void test_skip_dormant_chunks() {
 
   // Advance simulation to version 100
   for (int i = 0; i < 99; ++i) {
-    world.systems.run();
+    world.run();
   }
   assert(world.version() == 100);
 
@@ -155,7 +164,7 @@ void test_added_filter() {
 
   // Advance version to 10
   for (int i = 0; i < 9; ++i) {
-    world.systems.run();
+    world.run();
   }
   assert(world.version() == 10);
 
@@ -265,8 +274,8 @@ void test_auto_default_and_inline_mutation_filters() {
   assert(count == 1);
 
   // 2. Advance world ticks without modifying Position
-  world.systems.run(); // tick 2
-  world.systems.run(); // tick 3
+  world.run(); // tick 2
+  world.run(); // tick 3
 
   // Now current_version is >= 3. Auto-defaulting checks against version >= 2.
   // Position was stamped at version 1 <= 2 -> dormant chunk skipped!

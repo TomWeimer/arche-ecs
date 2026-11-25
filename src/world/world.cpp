@@ -96,33 +96,52 @@ World::World(size_t chunk_size, uint32_t thread_count)
           this
       ),
       resources(storage_->resources),
-      archetypes(storage_->graph),
-      systems(
-          storage_->scheduler,
-          [](void *ctx) -> SystemExecutionTarget {
-            return static_cast<World *>(ctx)->system_execution_target();
-          },
-          storage_->thread_pool.get(),
-          this
-      ) {}
+      archetypes(storage_->graph) {}
 
 World::~World() {
   clear();
   delete storage_;
 }
 
+void World::run() {
+  assert(storage_ != nullptr);
+  if (storage_->thread_pool) {
+    storage_->scheduler.run(system_execution_target(), *storage_->thread_pool);
+  } else {
+    storage_->scheduler.run(system_execution_target());
+  }
+}
+
+void World::run_sequential() {
+  assert(storage_ != nullptr);
+  storage_->scheduler.run(system_execution_target());
+}
+
+void World::compile() {
+  assert(storage_ != nullptr);
+  storage_->scheduler.compile(system_execution_target());
+}
+
+std::optional<SystemFacade> World::system(std::string_view name) noexcept {
+  assert(storage_ != nullptr);
+  auto idx = storage_->scheduler.find_system_index(name);
+  if (!idx) {
+    return std::nullopt;
+  }
+  return SystemFacade(
+      storage_->scheduler,
+      *idx,
+      this,
+      [](void *ctx) -> SystemExecutionTarget {
+        return static_cast<World *>(ctx)->system_execution_target();
+      }
+  );
+}
+
 void World::set_threads(uint32_t count) {
   const uint32_t threads = count > 0 ? count : Hardware::core_count();
   storage_->thread_pool = std::make_unique<ThreadPool>(threads);
   storage_->parallel_cmd = std::make_unique<ParallelCommandBuffer>(threads + 1);
-  systems = SystemFacade(
-      storage_->scheduler,
-      [](void *ctx) -> SystemExecutionTarget {
-        return static_cast<World *>(ctx)->system_execution_target();
-      },
-      storage_->thread_pool.get(),
-      this
-  );
 }
 
 uint32_t World::thread_count() const noexcept {

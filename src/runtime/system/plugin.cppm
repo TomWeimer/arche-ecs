@@ -1,15 +1,53 @@
 module;
 
+#include <cassert>
 #include <concepts>
 #include <cstdint>
+#include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 export module arche:plugin;
 
+import :access;
+import :system_types;
+import :scheduler;
+
 export namespace arche {
 
 class World;
+
+// =============================================================================
+// Plugin Registration Context
+// =============================================================================
+
+/**
+ * @class PluginContext
+ * @brief Scoped builder passed to plugins during installation to register systems.
+ *
+ * Enforces that systems can only be registered through autonomous plugins.
+ */
+class PluginContext {
+public:
+  explicit PluginContext(internal::Scheduler &scheduler) noexcept
+      : scheduler_(&scheduler) {}
+
+  /// Adds a system function to the execution schedule with data access declarations.
+  PluginContext &add_system(
+      std::string name,
+      AccessDescriptor access,
+      SystemFunction fn,
+      SystemScale scale = SystemScale::Narrow
+  ) {
+    assert(scheduler_ != nullptr);
+    scheduler_->add_system(std::move(name), access, std::move(fn), scale);
+    return *this;
+  }
+
+private:
+  internal::Scheduler *scheduler_{nullptr};
+};
 
 // =============================================================================
 // Plugin Lifecycle Concept
@@ -23,9 +61,10 @@ class World;
 template <typename P>
 concept Plugin = requires(
     P plugin,
-    World &world
+    World &world,
+    PluginContext &ctx
 ) {
-  { plugin.build(world) } -> std::same_as<void>;
+  { plugin.build(world, ctx) } -> std::same_as<void>;
   { P::name() } -> std::convertible_to<std::string_view>;
 };
 

@@ -262,15 +262,17 @@ inline void World::spawn(
 template <Plugin P> inline World &World::add_plugin() {
   assert(storage_ != nullptr);
   storage_->installed_plugins.register_plugin(P::name());
+  PluginContext ctx(storage_->scheduler);
   P plugin{};
-  plugin.build(*this);
+  plugin.build(*this, ctx);
   return *this;
 }
 
 template <Plugin P> inline World &World::add_plugin(P &&plugin) {
   assert(storage_ != nullptr);
   storage_->installed_plugins.register_plugin(std::decay_t<P>::name());
-  plugin.build(*this);
+  PluginContext ctx(storage_->scheduler);
+  plugin.build(*this, ctx);
   return *this;
 }
 

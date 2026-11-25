@@ -64,6 +64,9 @@ inline void execute_parallel_narrow_nodes(
         break;
       }
       const size_t sys_idx = system_indices[idx];
+      if (!systems[sys_idx].enabled) {
+        continue;
+      }
       CommandBuffer &cmd = parallel_cmd.get(thread_id);
       SystemContext ctx(
           cmd,
@@ -190,30 +193,34 @@ void Scheduler::execute_batch(
 ) {
   if (batch.is_wide) {
     const size_t idx = batch.system_indices[0];
-    CommandBuffer &cmd = parallel_cmd.get(0);
-    SystemContext ctx(
-        cmd,
-        target.resources,
-        target.cache_ctx,
-        target.get_cache_fn,
-        target.current_version,
-        target.previous_version,
-        &pool,
-        &parallel_cmd
-    );
-    systems_[idx].fn(ctx);
+    if (systems_[idx].enabled) {
+      CommandBuffer &cmd = parallel_cmd.get(0);
+      SystemContext ctx(
+          cmd,
+          target.resources,
+          target.cache_ctx,
+          target.get_cache_fn,
+          target.current_version,
+          target.previous_version,
+          &pool,
+          &parallel_cmd
+      );
+      systems_[idx].fn(ctx);
+    }
   } else if (batch.system_indices.size() == 1) {
     const size_t idx = batch.system_indices[0];
-    CommandBuffer &cmd = parallel_cmd.get(0);
-    SystemContext ctx(
-        cmd,
-        target.resources,
-        target.cache_ctx,
-        target.get_cache_fn,
-        target.current_version,
-        target.previous_version
-    );
-    systems_[idx].fn(ctx);
+    if (systems_[idx].enabled) {
+      CommandBuffer &cmd = parallel_cmd.get(0);
+      SystemContext ctx(
+          cmd,
+          target.resources,
+          target.cache_ctx,
+          target.get_cache_fn,
+          target.current_version,
+          target.previous_version
+      );
+      systems_[idx].fn(ctx);
+    }
   } else {
     detail::scheduler::execute_parallel_narrow_nodes(
         batch.system_indices, systems_, target, pool, parallel_cmd
@@ -262,6 +269,9 @@ void Scheduler::run(const SystemExecutionTarget &target) {
   ParallelCommandBuffer parallel_cmd(1);
   for (const auto &batch : batches_) {
     for (size_t sys_idx : batch.system_indices) {
+      if (!systems_[sys_idx].enabled) {
+        continue;
+      }
       CommandBuffer &cmd = parallel_cmd.get(0);
       SystemContext ctx(
           cmd,
@@ -286,6 +296,62 @@ void Scheduler::run(const SystemExecutionTarget &target) {
       target.commit_parallel_cmd(parallel_cmd, target.world_ptr);
     }
     parallel_cmd.clear();
+  }
+}
+
+std::optional<size_t> Scheduler::find_system_index(
+    std::string_view name
+) const noexcept {
+  for (size_t i = 0; i < systems_.size(); ++i) {
+    if (systems_[i].name == name) {
+      return i;
+    }
+  }
+  return std::nullopt;
+}
+
+bool Scheduler::is_system_enabled(size_t index) const noexcept {
+  assert(index < systems_.size());
+  return systems_[index].enabled;
+}
+
+void Scheduler::set_system_enabled(size_t index, bool enabled) noexcept {
+  assert(index < systems_.size());
+  systems_[index].enabled = enabled;
+}
+
+const Scheduler::SystemNode &Scheduler::get_system(size_t index) const noexcept {
+  assert(index < systems_.size());
+  return systems_[index];
+}
+
+void Scheduler::run_system(
+    size_t index,
+    const SystemExecutionTarget &target
+) {
+  assert(index < systems_.size());
+  ParallelCommandBuffer parallel_cmd(1);
+  CommandBuffer &cmd = parallel_cmd.get(0);
+  SystemContext ctx(
+      cmd,
+      target.resources,
+      target.cache_ctx,
+      target.get_cache_fn,
+      target.current_version,
+      target.previous_version
+  );
+  systems_[index].fn(ctx);
+
+  for (uint32_t id = 0; id < 128; ++id) {
+    if (systems_[index].access.write_components.test(id)) {
+      detail::scheduler::stamp_component_version(
+          target.graph, static_cast<ComponentID>(id), target.current_version
+      );
+    }
+  }
+
+  if (target.commit_parallel_cmd) {
+    target.commit_parallel_cmd(parallel_cmd, target.world_ptr);
   }
 }
 
