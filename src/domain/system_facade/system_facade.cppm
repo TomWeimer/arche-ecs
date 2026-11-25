@@ -10,10 +10,12 @@ export module arche:domain.system;
 import :access;
 import :system_types;
 import :scheduler;
-import :plugin;
-import :thread_pool;
 
 export namespace arche {
+
+namespace internal {
+class ThreadPool;
+}
 
 class World;
 
@@ -23,11 +25,10 @@ class World;
 
 /**
  * @class SystemFacade
- * @brief Domain sub-facade for registering execution stages, systems, and plugins.
+ * @brief Domain sub-facade for registering execution stages and systems.
  *
  * Provides high-level registration for simulation systems with declarative
- * access descriptors, compiles conflict-free parallel DAG execution stages, and
- * manages autonomous engine plugins.
+ * access descriptors and compiles conflict-free parallel DAG execution stages.
  *
  * Accessible via `world.systems`.
  */
@@ -37,19 +38,19 @@ public:
   explicit constexpr SystemFacade(
       internal::Scheduler &scheduler,
       internal::SystemExecutionTarget (*get_target)(void *ctx),
-      PluginRegistry &plugins,
+      internal::ThreadPool *pool = nullptr,
       void *world_ptr = nullptr
   ) noexcept
       : scheduler_(&scheduler),
         get_target_(get_target),
-        plugins_(&plugins),
+        pool_(pool),
         world_ptr_(world_ptr) {}
 
-  /// Executes all compiled scheduler stages in parallel using the provided ThreadPool.
-  void run(internal::ThreadPool &pool);
-
-  /// Executes all compiled scheduler stages sequentially on the current thread.
+  /// Executes all compiled scheduler stages in parallel using the World's internal ThreadPool.
   void run();
+
+  /// Executes all compiled scheduler stages sequentially on the calling thread.
+  void run_sequential();
 
   /// Compiles system stages, resolving parallel dependencies and access descriptors.
   void compile();
@@ -62,27 +63,10 @@ public:
       SystemScale scale = SystemScale::Narrow
   );
 
-  /// Registers a plugin name identifier for tracking and duplicate prevention.
-  template <typename P>
-  void register_plugin_name();
-
-  /// Installs an autonomous Plugin struct with lifecycle initialization.
-  template <Plugin P>
-  World &add_plugin();
-
-  template <Plugin P>
-  World &add_plugin(P &&plugin);
-
-  template <Plugin P>
-  World &add_plugin(internal::Scheduler &ext_scheduler);
-
-  template <Plugin P>
-  World &add_plugin(P &&plugin, internal::Scheduler &ext_scheduler);
-
 private:
   internal::Scheduler *scheduler_{nullptr};
   internal::SystemExecutionTarget (*get_target_)(void *ctx){nullptr};
-  PluginRegistry *plugins_{nullptr};
+  internal::ThreadPool *pool_{nullptr};
   void *world_ptr_{nullptr};
 };
 

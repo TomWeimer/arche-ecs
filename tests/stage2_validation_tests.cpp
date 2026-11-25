@@ -6,18 +6,6 @@ import arche;
 #include <iostream>
 #include <vector>
 
-namespace arche {
-struct WorldTestAccessor {
-  static void permute(
-      World &w,
-      arche::Archetype *arch,
-      std::span<const uint32_t> indices
-  ) {
-    arche::permute(w, arch, indices);
-  }
-};
-} // namespace arche
-
 namespace {
 using arche::Entity;
 using arche::internal::ParallelCommandBuffer;
@@ -144,7 +132,7 @@ void test_parallel_mutation_churn() {
         }
       }
   );
-  world.commands.commit();
+  WorldTestAccessor::commit_commands(world);
 
   // Total entity count must remain exactly COUNT
   assert(world.entities.count() == COUNT);

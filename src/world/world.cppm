@@ -20,7 +20,6 @@ export module arche:world;
 export import :entity;
 export import :entity_view;
 export import :domain.archetype;
-export import :domain.command;
 export import :domain.entity;
 export import :domain.resource;
 export import :domain.snapshot;
@@ -87,9 +86,6 @@ public:
   /// Stage-based system scheduler: register stages, systems, and execution pipelines.
   SystemFacade systems;
 
-  /// Deferred command buffer management: commit or clear world-level command buffers.
-  CommandFacade commands;
-
   // --- Constructors & Lifecycle ----------------------------------------------
 
   /// Constructs an ECS World with the specified chunk memory page size
@@ -108,16 +104,21 @@ public:
   /// Reconfigures the world's internal worker thread pool.
   void set_threads(uint32_t count);
 
-  /// Retrieves a reference to the world's internal worker thread pool.
-  [[nodiscard]] internal::ThreadPool &thread_pool() noexcept;
-  [[nodiscard]] const internal::ThreadPool &thread_pool() const noexcept;
-
   /// Returns the number of worker threads in the world's thread pool.
   [[nodiscard]] uint32_t thread_count() const noexcept;
 
   /// Destroys all active entities and recycles all allocated chunks back to the
   /// pool.
   void clear();
+
+  // --- Plugin Management -----------------------------------------------------
+
+  /// Installs an autonomous Plugin struct with lifecycle initialization.
+  template <Plugin P>
+  World &add_plugin();
+
+  template <Plugin P>
+  World &add_plugin(P &&plugin);
 
   // --- Entity Lifecycle (Creation & Destruction) -----------------------------
 
@@ -219,7 +220,6 @@ public:
   /// Creates a bounded execution context for a system.
   [[nodiscard]] SystemContext create_system_context(
       CommandBuffer &cmd,
-      ThreadPool *pool = nullptr,
       ParallelCommandBuffer *parallel_cmd = nullptr
   );
 
@@ -286,5 +286,18 @@ public:
  */
 template <typename Component, typename... Filters, typename Compare>
 void sort(World &world, Compare &&comp);
+
+// =============================================================================
+// WorldTestAccessor (Internal White-Box Testing Harness)
+// =============================================================================
+
+struct WorldTestAccessor {
+  static void commit_commands(World &w);
+  static void permute(
+      World &w,
+      internal::Archetype *arch,
+      std::span<const uint32_t> indices
+  );
+};
 
 } // namespace arche

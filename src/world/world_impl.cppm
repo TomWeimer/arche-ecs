@@ -21,8 +21,6 @@ export module arche:world.detail.impl;
 import :world;
 import :domain.archetype;
 import :domain.archetype_impl;
-import :domain.command;
-import :domain.command_impl;
 import :domain.entity;
 import :domain.entity_impl;
 import :domain.resource;
@@ -170,7 +168,6 @@ inline World::operator SystemExecutionTarget() noexcept {
 
 inline SystemContext World::create_system_context(
     CommandBuffer &cmd,
-    ThreadPool *pool,
     ParallelCommandBuffer *parallel_cmd
 ) {
   return SystemContext{
@@ -185,7 +182,7 @@ inline SystemContext World::create_system_context(
       },
       version(),
       previous_version(),
-      pool != nullptr ? pool : storage_->thread_pool.get(),
+      storage_->thread_pool.get(),
       parallel_cmd != nullptr ? parallel_cmd : storage_->parallel_cmd.get()
   };
 }
@@ -258,40 +255,23 @@ inline void World::spawn(
 // SystemFacade::add_plugin Implementations
 // =============================================================================
 
-template <Plugin P> inline World &SystemFacade::add_plugin() {
-  assert(world_ptr_ != nullptr && scheduler_ != nullptr);
-  register_plugin_name<P>();
+// =============================================================================
+// World::add_plugin Implementations
+// =============================================================================
+
+template <Plugin P> inline World &World::add_plugin() {
+  assert(storage_ != nullptr);
+  storage_->installed_plugins.register_plugin(P::name());
   P plugin{};
-  World *w = static_cast<World *>(world_ptr_);
-  plugin.build(*w, *scheduler_);
-  return *w;
+  plugin.build(*this);
+  return *this;
 }
 
-template <Plugin P> inline World &SystemFacade::add_plugin(P &&plugin) {
-  assert(world_ptr_ != nullptr && scheduler_ != nullptr);
-  register_plugin_name<std::decay_t<P>>();
-  World *w = static_cast<World *>(world_ptr_);
-  plugin.build(*w, *scheduler_);
-  return *w;
-}
-
-template <Plugin P>
-inline World &SystemFacade::add_plugin(Scheduler &ext_scheduler) {
-  assert(world_ptr_ != nullptr);
-  register_plugin_name<P>();
-  P plugin{};
-  World *w = static_cast<World *>(world_ptr_);
-  plugin.build(*w, ext_scheduler);
-  return *w;
-}
-
-template <Plugin P>
-inline World &SystemFacade::add_plugin(P &&plugin, Scheduler &ext_scheduler) {
-  assert(world_ptr_ != nullptr);
-  register_plugin_name<std::decay_t<P>>();
-  World *w = static_cast<World *>(world_ptr_);
-  plugin.build(*w, ext_scheduler);
-  return *w;
+template <Plugin P> inline World &World::add_plugin(P &&plugin) {
+  assert(storage_ != nullptr);
+  storage_->installed_plugins.register_plugin(std::decay_t<P>::name());
+  plugin.build(*this);
+  return *this;
 }
 
 // =============================================================================
@@ -345,6 +325,19 @@ inline void permute(World &world, std::span<const uint32_t> target_indices) {
   std::vector<ComponentID> types = {component_id<std::decay_t<Components>>()...};
   Archetype *arch = world.storage()->graph.get_or_create(types);
   permute(world, arch, target_indices);
+}
+
+inline void WorldTestAccessor::commit_commands(World &w) {
+  assert(w.storage() != nullptr && w.storage()->parallel_cmd != nullptr);
+  w.storage()->parallel_cmd->commit(w);
+}
+
+inline void WorldTestAccessor::permute(
+    World &w,
+    internal::Archetype *arch,
+    std::span<const uint32_t> indices
+) {
+  arche::permute(w, arch, indices);
 }
 
 template <typename Component, typename Compare>

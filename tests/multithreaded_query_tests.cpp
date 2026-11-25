@@ -90,7 +90,7 @@ void test_parallel_command_buffers() {
         }
       }
   );
-  world.commands.commit();
+  arche::WorldTestAccessor::commit_commands(world);
 
   assert(world.entities.count() == COUNT / 2);
 

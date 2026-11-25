@@ -102,14 +102,7 @@ World::World(size_t chunk_size, uint32_t thread_count)
           [](void *ctx) -> SystemExecutionTarget {
             return static_cast<World *>(ctx)->system_execution_target();
           },
-          storage_->installed_plugins,
-          this
-      ),
-      commands(
-          *storage_->parallel_cmd,
-          [](ParallelCommandBuffer &cmd, void *ctx) {
-            cmd.commit(*static_cast<World *>(ctx));
-          },
+          storage_->thread_pool.get(),
           this
       ) {}
 
@@ -122,14 +115,14 @@ void World::set_threads(uint32_t count) {
   const uint32_t threads = count > 0 ? count : Hardware::core_count();
   storage_->thread_pool = std::make_unique<ThreadPool>(threads);
   storage_->parallel_cmd = std::make_unique<ParallelCommandBuffer>(threads + 1);
-}
-
-ThreadPool &World::thread_pool() noexcept {
-  return *storage_->thread_pool;
-}
-
-const ThreadPool &World::thread_pool() const noexcept {
-  return *storage_->thread_pool;
+  systems = SystemFacade(
+      storage_->scheduler,
+      [](void *ctx) -> SystemExecutionTarget {
+        return static_cast<World *>(ctx)->system_execution_target();
+      },
+      storage_->thread_pool.get(),
+      this
+  );
 }
 
 uint32_t World::thread_count() const noexcept {

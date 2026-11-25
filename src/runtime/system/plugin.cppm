@@ -11,10 +11,6 @@ export namespace arche {
 
 class World;
 
-namespace internal {
-class Scheduler;
-}
-
 // =============================================================================
 // Plugin Lifecycle Concept
 // =============================================================================
@@ -27,10 +23,9 @@ class Scheduler;
 template <typename P>
 concept Plugin = requires(
     P plugin,
-    World &world,
-    internal::Scheduler &scheduler
+    World &world
 ) {
-  { plugin.build(world, scheduler) } -> std::same_as<void>;
+  { plugin.build(world) } -> std::same_as<void>;
   { P::name() } -> std::convertible_to<std::string_view>;
 };
 

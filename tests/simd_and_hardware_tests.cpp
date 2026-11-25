@@ -215,7 +215,6 @@ void test_hardware_core_count() {
 
   World world;
   assert(world.thread_count() == cores);
-  assert(world.thread_pool().worker_count() == cores);
 
   world.set_threads(2);
   assert(world.thread_count() == 2);

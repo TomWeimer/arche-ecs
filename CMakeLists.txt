@@ -77,8 +77,6 @@ target_sources(arche
       # Layer 5: Domain Sub-Facades
       src/domain/archetype_facade/archetype_facade.cppm
       src/domain/archetype_facade/archetype_facade_impl.cppm
-      src/domain/command_facade/command_facade.cppm
-      src/domain/command_facade/command_facade_impl.cppm
       src/domain/entity_facade/entity_facade.cppm
       src/domain/entity_facade/entity_facade_impl.cppm
       src/domain/resource_facade/resource_facade.cppm

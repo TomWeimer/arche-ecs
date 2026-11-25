@@ -8,18 +8,6 @@ import arche;
 #include <numeric>
 #include <vector>
 
-namespace arche {
-struct WorldTestAccessor {
-  static void permute(
-      World &w,
-      Archetype *arch,
-      std::span<const uint32_t> indices
-  ) {
-    arche::permute(w, arch, indices);
-  }
-};
-} // namespace arche
-
 namespace {
 using arche::internal::Archetype;
 using arche::Entity;
