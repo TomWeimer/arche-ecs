@@ -21,6 +21,7 @@ target_sources(arche
       src/arche.cppm
       # Layer 0: Foundation
       src/foundation/entity/entity.cppm
+      src/foundation/types/snapshot_header.cppm
       src/foundation/component/component_mask.cppm
       src/foundation/component/component_id.cppm
       src/foundation/component/component_id_impl.cppm
@@ -45,9 +46,6 @@ target_sources(arche
       src/lifecycle/mutation/mutation_impl.cppm
       src/lifecycle/mutation/command.cppm
       src/lifecycle/mutation/command_impl.cppm
-      src/lifecycle/snapshot/snapshot.cppm
-      src/lifecycle/snapshot/snapshot_header.cppm
-      src/lifecycle/snapshot/snapshot_impl.cppm
       src/lifecycle/resource/resource.cppm
       src/lifecycle/resource/resource_impl.cppm
       # Layer 4: Concurrency

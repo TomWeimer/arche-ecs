@@ -46,8 +46,10 @@ void World::set_version(uint32_t v) noexcept {
 SnapshotStorageView World::snapshot_storage_view() const noexcept {
   return SnapshotStorageView{
       .slot_map = storage_->slot_map,
-      .archetypes = storage_->graph.archetypes(),
+      .graph = storage_->graph,
       .chunk_pool = storage_->chunk_pool,
+      .registry = storage_->registry,
+      .resources = storage_->resources,
       .chunk_size = storage_->chunk_size,
       .version = storage_->current_version,
   };

@@ -108,19 +108,6 @@ SUBSYSTEM_RULES: Dict[str, Dict] = {
             "command",
         ],
     },
-    "snapshot": {
-        "layer": 3,
-        "description": "Binary snapshot serialization engine and file I/O",
-        "allowed_targets": [
-            "archetype",
-            "chunk",
-            "sparse_entity",
-            "core_component",
-            "hardware",
-            "types",
-            "snapshot",
-        ],
-    },
     "resource": {
         "layer": 3,
         "description": "Global singleton resource registry and container",
@@ -258,7 +245,6 @@ SUBSYSTEM_RULES: Dict[str, Dict] = {
             "query_cache",
             "mutation",
             "command",
-            "snapshot",
             "resource",
             "query",
             "concurrency",
@@ -286,7 +272,6 @@ SUBSYSTEM_RULES: Dict[str, Dict] = {
             "query_cache",
             "mutation",
             "command",
-            "snapshot",
             "resource",
             "query",
             "concurrency",
@@ -364,8 +349,6 @@ def classify_subsystem(file_path: str) -> Tuple[str, int]:
         return "mutation", SUBSYSTEM_RULES["mutation"]["layer"]
     if p.startswith("src/lifecycle/command/") or p.startswith("src/command/"):
         return "mutation", SUBSYSTEM_RULES["mutation"]["layer"]
-    if p.startswith("src/lifecycle/snapshot/") or p.startswith("src/snapshot/"):
-        return "snapshot", SUBSYSTEM_RULES["snapshot"]["layer"]
     if p.startswith("src/lifecycle/resource/") or p.startswith("src/resource/"):
         return "resource", SUBSYSTEM_RULES["resource"]["layer"]
 
@@ -566,7 +549,6 @@ def run_checks(root_dir: str) -> int:
                                     "types" in src_dir
                                     or "world" in src_dir
                                     or "system" in src_dir
-                                    or "snapshot" in src_dir
                                     or "resource" in src_dir
                                 )
                             )

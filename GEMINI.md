@@ -22,7 +22,7 @@ Dependencies flow strictly **top-down**. Lower layers must NEVER depend on or in
 | **0** | `foundation` (`entity`, `hardware`, `component`) | Entity handle, POD types, bitmasks, CPU intrinsics, ColumnLayout, ComponentID | Only Layer 0 |
 | **1** | `storage` (`chunk`, `slot_map`) | 64KB chunk page memory, SlotMap routing table (independent peers) | Layer 0 only |
 | **2** | `structure` (`archetype`, `archetype_index`) | Archetype tables, transition graph, reactive table index | Layers 0 and 1 |
-| **3** | `lifecycle` (`mutation`, `snapshot`, `resource`) | Archetype transitions & command buffers, snapshot I/O, singleton resources (independent peers) | Layers 0, 1, and 2 |
+| **3** | `lifecycle` (`mutation`, `resource`) | Archetype transitions & command buffers, singleton resources (independent peers) | Layers 0, 1, and 2 |
 | **4** | `concurrency` (`thread_pool`) | Barrier-synchronized worker thread pool | Layer 0 only |
 | **5** | `query` (`query`, `sort`) | Query iterators, SIMD tail padding, each_parallel, sort / permute | Layers 0..4 (storage, structure, mutation, concurrency) |
 | **6** | `access` | Declarative component and resource access footprints | Layers 0 and 3 (`resource`) |

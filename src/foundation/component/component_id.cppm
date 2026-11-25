@@ -212,6 +212,17 @@ public:
   [[nodiscard]] const ComponentDescriptor &get_descriptor() const;
 
   /**
+   * @brief Registers a raw POD component type by ID, size, and alignment.
+   *
+   * Used for restoring archetypes from snapshots without static type instantiation.
+   */
+  const ComponentDescriptor &register_pod(
+      ComponentID id,
+      size_t size,
+      size_t alignment
+  );
+
+  /**
    * @brief Retrieves the descriptor for a runtime ComponentID.
    *
    * @param id Component identifier.

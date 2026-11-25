@@ -93,6 +93,7 @@ class ResourceContainer {
 private:
   struct ResourceSlot {
     void *ptr{nullptr};
+    size_t size{0};
     void (*destructor)(void *){nullptr};
   };
 
@@ -120,6 +121,20 @@ public:
 
   /// Destroys all active resources and clears slot allocations.
   void clear();
+
+  // --- Snapshot Serialization ------------------------------------------------
+
+  /// Computes the exact byte capacity needed to serialize all active resources.
+  [[nodiscard]] size_t snapshot_byte_size() const noexcept;
+
+  /// Returns the number of currently active resources.
+  [[nodiscard]] uint32_t active_resource_count() const noexcept;
+
+  /// Serializes all active resources into a contiguous destination buffer.
+  size_t write_snapshot_data(void *dest) const noexcept;
+
+  /// Restores resources from serialized snapshot data.
+  void read_snapshot_data(const void *src, uint32_t count);
 
   // --- Insertion & Modification ----------------------------------------------
 

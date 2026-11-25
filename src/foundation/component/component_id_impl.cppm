@@ -126,6 +126,27 @@ inline const ComponentDescriptor &ComponentRegistry::register_component() {
   return descriptors[id];
 }
 
+const ComponentDescriptor &ComponentRegistry::register_pod(
+    ComponentID id,
+    size_t size,
+    size_t alignment
+) {
+  if (id >= descriptors.size()) {
+    descriptors.resize(id + 1);
+  }
+  if (descriptors[id].id == INVALID_COMPONENT_ID) {
+    ComponentDescriptor desc;
+    desc.id = id;
+    desc.size = size;
+    desc.alignment = alignment;
+    desc.name = "POD";
+    desc.is_trivially_copyable = true;
+    desc.is_trivially_destructible = true;
+    descriptors[id] = desc;
+  }
+  return descriptors[id];
+}
+
 template <typename T>
 [[nodiscard]] inline const ComponentDescriptor &ComponentRegistry::get_descriptor() const {
   const ComponentID id = component_id<T>();
