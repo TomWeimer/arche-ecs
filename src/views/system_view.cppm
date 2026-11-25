@@ -23,8 +23,8 @@ export namespace arche {
  * Accessible via `world.system("system_name")`.
  */
 class SystemView {
-public:
-  constexpr SystemView() noexcept = default;
+private:
+  friend class World;
   explicit constexpr SystemView(
       internal::Scheduler &scheduler,
       size_t system_index,
@@ -33,6 +33,13 @@ public:
       : scheduler_(&scheduler),
         system_index_(system_index),
         target_(target) {}
+
+public:
+  SystemView(const SystemView &) noexcept = default;
+  SystemView &operator=(const SystemView &) noexcept = default;
+  SystemView(SystemView &&) noexcept = default;
+  SystemView &operator=(SystemView &&) noexcept = default;
+  ~SystemView() = default;
 
   /// Returns whether this system is active in the scheduler.
   [[nodiscard]] bool is_enabled() const noexcept {

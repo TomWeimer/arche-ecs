@@ -26,10 +26,17 @@ export namespace arche {
  * Accessible via `world.archetypes`.
  */
 class ArchetypeView {
-public:
-  constexpr ArchetypeView() noexcept = default;
+private:
+  friend class World;
   explicit constexpr ArchetypeView(internal::ArchetypeGraph &graph) noexcept
       : graph_(&graph) {}
+
+public:
+  ArchetypeView(const ArchetypeView &) noexcept = default;
+  ArchetypeView &operator=(const ArchetypeView &) noexcept = default;
+  ArchetypeView(ArchetypeView &&) noexcept = default;
+  ArchetypeView &operator=(ArchetypeView &&) noexcept = default;
+  ~ArchetypeView() = default;
 
   /// Returns the total number of distinct structural archetypes in the world.
   [[nodiscard]] size_t count() const noexcept {

@@ -251,6 +251,15 @@ void test_public_encapsulation_boundary() {
   static_assert(std::is_same_v<arche::internal::ThreadPool, arche::internal::ThreadPool>);
   static_assert(std::is_same_v<arche::internal::ParallelCommandBuffer, arche::internal::ParallelCommandBuffer>);
 
+  // Verify that views cannot be default-constructed by external users
+  static_assert(!std::is_default_constructible_v<arche::ArchetypeView>);
+  static_assert(!std::is_default_constructible_v<arche::EntityTableView>);
+  static_assert(!std::is_default_constructible_v<arche::EntityRef>);
+  static_assert(!std::is_default_constructible_v<arche::EntityMut>);
+  static_assert(!std::is_default_constructible_v<arche::ResourceView>);
+  static_assert(!std::is_default_constructible_v<arche::SnapshotView>);
+  static_assert(!std::is_default_constructible_v<arche::SystemView>);
+
   std::cout << "PASSED\n";
 }
 

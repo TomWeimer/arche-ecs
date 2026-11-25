@@ -24,10 +24,17 @@ export namespace arche {
  * Accessible via `world.resources`.
  */
 class ResourceView {
-public:
-  constexpr ResourceView() noexcept = default;
+private:
+  friend class World;
   explicit constexpr ResourceView(internal::ResourceContainer &resources) noexcept
       : resources_(&resources) {}
+
+public:
+  ResourceView(const ResourceView &) noexcept = default;
+  ResourceView &operator=(const ResourceView &) noexcept = default;
+  ResourceView(ResourceView &&) noexcept = default;
+  ResourceView &operator=(ResourceView &&) noexcept = default;
+  ~ResourceView() = default;
 
   /// Inserts or replaces a global singleton resource of type T.
   template <typename T, typename... Args>

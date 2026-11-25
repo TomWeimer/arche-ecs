@@ -28,10 +28,17 @@ export namespace arche {
  * Accessible via `world.entities`.
  */
 class EntityTableView {
-public:
-  constexpr EntityTableView() noexcept = default;
+private:
+  friend class World;
   explicit constexpr EntityTableView(internal::SlotMap &slot_map) noexcept
       : slot_map_(&slot_map) {}
+
+public:
+  EntityTableView(const EntityTableView &) noexcept = default;
+  EntityTableView &operator=(const EntityTableView &) noexcept = default;
+  EntityTableView(EntityTableView &&) noexcept = default;
+  EntityTableView &operator=(EntityTableView &&) noexcept = default;
+  ~EntityTableView() = default;
 
   /// Returns true if the entity handle is alive and matches its current generation.
   [[nodiscard]] bool contains(Entity entity) const noexcept {
@@ -81,10 +88,18 @@ using EntityFacade = EntityTableView;
  * upward dependencies on World.
  */
 class EntityRef {
-public:
-  constexpr EntityRef() noexcept = default;
+private:
+  friend class World;
+  friend class EntityMut;
   constexpr EntityRef(const internal::SlotMap *slot_map, Entity entity) noexcept
       : slot_map_(slot_map), entity_(entity) {}
+
+public:
+  EntityRef(const EntityRef &) noexcept = default;
+  EntityRef &operator=(const EntityRef &) noexcept = default;
+  EntityRef(EntityRef &&) noexcept = default;
+  EntityRef &operator=(EntityRef &&) noexcept = default;
+  ~EntityRef() = default;
 
   /// Returns the underlying 64-bit Entity identifier.
   [[nodiscard]] constexpr Entity id() const noexcept { return entity_; }
@@ -131,9 +146,17 @@ private:
  * removing components, and despawning the entity directly through the handle.
  */
 class EntityMut {
-public:
+private:
+  friend class World;
   constexpr EntityMut(internal::MutationContext ctx, Entity entity) noexcept
       : ctx_(ctx), entity_(entity) {}
+
+public:
+  EntityMut(const EntityMut &) noexcept = default;
+  EntityMut &operator=(const EntityMut &) = delete;
+  EntityMut(EntityMut &&) noexcept = default;
+  EntityMut &operator=(EntityMut &&) = delete;
+  ~EntityMut() = default;
 
   /// Implicit conversion to a read-only EntityRef view.
   [[nodiscard]] operator EntityRef() const noexcept {

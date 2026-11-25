@@ -23,13 +23,20 @@ using SnapshotStorageView = internal::SnapshotStorageView;
  * Accessible via `world.snapshots`.
  */
 class SnapshotView {
-public:
-  constexpr SnapshotView() noexcept = default;
+private:
+  friend class World;
   explicit constexpr SnapshotView(
       internal::SnapshotStorageView (*get_view)(void *ctx),
       void *ctx
   ) noexcept
       : get_view_(get_view), ctx_(ctx) {}
+
+public:
+  SnapshotView(const SnapshotView &) noexcept = default;
+  SnapshotView &operator=(const SnapshotView &) noexcept = default;
+  SnapshotView(SnapshotView &&) noexcept = default;
+  SnapshotView &operator=(SnapshotView &&) noexcept = default;
+  ~SnapshotView() = default;
 
   /// Serializes all archetypes, chunk columns, and active entities into a destination buffer.
   size_t save(void *destination_buffer, size_t max_bytes) {
