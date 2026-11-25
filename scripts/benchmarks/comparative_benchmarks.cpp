@@ -158,16 +158,19 @@ int main() {
       auto query = world.query<Position, const Velocity>();
 
       bench_2m.title("1. 2M Entities: Simple Streaming (Pos + Vel)")
-          .run("arche-ecs (Chunked SoA)", [&] {
-            query.each_chunk([](uint32_t count,
-                                Position *__restrict__ pos,
-                                const Velocity *__restrict__ vel) {
-#pragma clang loop vectorize(enable)
+          .run("arche-ecs (Chunked SoA batch)", [&] {
+            query.each_chunk([](uint32_t count, Position *pos, const Velocity *vel) {
               for (uint32_t i = 0; i < count; ++i) {
                 pos[i].x += vel[i].vx * 0.016f;
                 pos[i].y += vel[i].vy * 0.016f;
               }
             });
+          })
+          .run("arche-ecs (range-for idiomatic)", [&] {
+            for (auto [pos, vel] : query) {
+              pos.x += vel.vx * 0.016f;
+              pos.y += vel.vy * 0.016f;
+            }
           });
 
       flecs::world ecs;
@@ -176,7 +179,20 @@ int main() {
       }
       auto f_query = ecs.query<Position, const Velocity>();
 
-      bench_2m.run("Flecs (Archetype Table)", [&] {
+      bench_2m.run("Flecs (Table iter batch)", [&] {
+        f_query.run([](flecs::iter &it) {
+          while (it.next()) {
+            auto pos = it.field<Position>(0);
+            auto vel = it.field<const Velocity>(1);
+            for (size_t i = 0; i < it.count(); ++i) {
+              pos[i].x += vel[i].vx * 0.016f;
+              pos[i].y += vel[i].vy * 0.016f;
+            }
+          }
+        });
+      });
+
+      bench_2m.run("Flecs (each idiomatic)", [&] {
         f_query.each([](Position &pos, const Velocity &vel) {
           pos.x += vel.vx * 0.016f;
           pos.y += vel.vy * 0.016f;
@@ -225,11 +241,8 @@ int main() {
       auto query = world.query<Position, Velocity>();
 
       bench_2m.title("2. 2M Entities: Realistic Swarm Physics (Euler + Bounds)")
-          .run("arche-ecs (Chunked SoA)", [&] {
-            query.each_chunk([](uint32_t count,
-                                Position *__restrict__ pos,
-                                Velocity *__restrict__ vel) {
-#pragma clang loop vectorize(enable)
+          .run("arche-ecs (Chunked SoA batch)", [&] {
+            query.each_chunk([](uint32_t count, Position *pos, Velocity *vel) {
               for (uint32_t i = 0; i < count; ++i) {
                 pos[i].x += vel[i].vx * 0.016f;
                 pos[i].y += vel[i].vy * 0.016f;
@@ -239,6 +252,16 @@ int main() {
                   vel[i].vy = -vel[i].vy;
               }
             });
+          })
+          .run("arche-ecs (range-for idiomatic)", [&] {
+            for (auto [pos, vel] : query) {
+              pos.x += vel.vx * 0.016f;
+              pos.y += vel.vy * 0.016f;
+              if (pos.x < 0.0f || pos.x > 1920.0f)
+                vel.vx = -vel.vx;
+              if (pos.y < 0.0f || pos.y > 1080.0f)
+                vel.vy = -vel.vy;
+            }
           });
 
       flecs::world ecs;
@@ -249,7 +272,24 @@ int main() {
       }
       auto f_query = ecs.query<Position, Velocity>();
 
-      bench_2m.run("Flecs (Archetype Table)", [&] {
+      bench_2m.run("Flecs (Table iter batch)", [&] {
+        f_query.run([](flecs::iter &it) {
+          while (it.next()) {
+            auto pos = it.field<Position>(0);
+            auto vel = it.field<Velocity>(1);
+            for (size_t i = 0; i < it.count(); ++i) {
+              pos[i].x += vel[i].vx * 0.016f;
+              pos[i].y += vel[i].vy * 0.016f;
+              if (pos[i].x < 0.0f || pos[i].x > 1920.0f)
+                vel[i].vx = -vel[i].vx;
+              if (pos[i].y < 0.0f || pos[i].y > 1080.0f)
+                vel[i].vy = -vel[i].vy;
+            }
+          }
+        });
+      });
+
+      bench_2m.run("Flecs (each idiomatic)", [&] {
         f_query.each([](Position &pos, Velocity &vel) {
           pos.x += vel.vx * 0.016f;
           pos.y += vel.vy * 0.016f;
@@ -374,6 +414,17 @@ int main() {
                 state[i].flags |= 2;
             }
           });
+        })
+        .run("arche-ecs (range-for idiomatic)", [&] {
+          for (auto [pos, vel, acc, rot, s, m, r, state] : query) {
+            vel.vx += acc.ax * m.inv_mass * 0.016f;
+            vel.vy += acc.ay * m.inv_mass * 0.016f;
+            pos.x += vel.vx * s.sx * 0.016f;
+            pos.y += vel.vy * s.sy * 0.016f;
+            rot.angle += 0.01f;
+            if (pos.x < r.r)
+              state.flags |= 2;
+          }
         });
 
     flecs::world ecs;
@@ -398,7 +449,31 @@ int main() {
         const Radius,
         BoidState>();
 
-    bench_wide.run("Flecs (Archetype Table)", [&] {
+    bench_wide.run("Flecs (Table iter batch)", [&] {
+      f_query.run([](flecs::iter &it) {
+        while (it.next()) {
+          auto pos = it.field<Position>(0);
+          auto vel = it.field<Velocity>(1);
+          auto acc = it.field<const Acceleration>(2);
+          auto rot = it.field<Rotation>(3);
+          auto s = it.field<const Scale>(4);
+          auto m = it.field<const Mass>(5);
+          auto r = it.field<const Radius>(6);
+          auto state = it.field<BoidState>(7);
+          for (size_t i = 0; i < it.count(); ++i) {
+            vel[i].vx += acc[i].ax * m[i].inv_mass * 0.016f;
+            vel[i].vy += acc[i].ay * m[i].inv_mass * 0.016f;
+            pos[i].x += vel[i].vx * s[i].sx * 0.016f;
+            pos[i].y += vel[i].vy * s[i].sy * 0.016f;
+            rot[i].angle += 0.01f;
+            if (pos[i].x < r[i].r)
+              state[i].flags |= 2;
+          }
+        }
+      });
+    });
+
+    bench_wide.run("Flecs (each idiomatic)", [&] {
       f_query.each([](Position &pos,
                       Velocity &vel,
                       const Acceleration &acc,
@@ -659,7 +734,20 @@ int main() {
       }
       auto f_query = ecs.query<Position, const Velocity>();
 
-      bench_frag.run("Flecs (Archetype Table)", [&] {
+      bench_frag.run("Flecs (Table iter batch)", [&] {
+        f_query.run([](flecs::iter &it) {
+          while (it.next()) {
+            auto pos = it.field<Position>(0);
+            auto vel = it.field<const Velocity>(1);
+            for (size_t i = 0; i < it.count(); ++i) {
+              pos[i].x += vel[i].vx * 0.016f;
+              pos[i].y += vel[i].vy * 0.016f;
+            }
+          }
+        });
+      });
+
+      bench_frag.run("Flecs (each idiomatic)", [&] {
         f_query.each([](Position &pos, const Velocity &vel) {
           pos.x += vel.vx * 0.016f;
           pos.y += vel.vy * 0.016f;
@@ -804,7 +892,20 @@ int main() {
                          .without<FrozenTag>()
                          .build();
 
-      bench_frag.run("Flecs (Table Query Filter)", [&] {
+      bench_frag.run("Flecs (Table iter batch)", [&] {
+        f_query.run([](flecs::iter &it) {
+          while (it.next()) {
+            auto pos = it.field<Position>(0);
+            auto vel = it.field<const Velocity>(1);
+            for (size_t i = 0; i < it.count(); ++i) {
+              pos[i].x += vel[i].vx * 0.016f;
+              pos[i].y += vel[i].vy * 0.016f;
+            }
+          }
+        });
+      });
+
+      bench_frag.run("Flecs (each idiomatic)", [&] {
         f_query.each([](Position &pos, const Velocity &vel) {
           pos.x += vel.vx * 0.016f;
           pos.y += vel.vy * 0.016f;

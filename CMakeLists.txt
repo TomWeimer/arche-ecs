@@ -137,6 +137,7 @@ add_test(NAME arche_tests COMMAND arche_tests)
 
 # Module 008: Cycle-Accurate Hardware Performance Benchmarks
 add_executable(arche_benchmarks scripts/benchmarks/arche_benchmarks.cpp)
+target_compile_options(arche_benchmarks PRIVATE -O3 -DNDEBUG)
 target_link_libraries(arche_benchmarks PRIVATE arche::arche)
 add_test(NAME arche_benchmarks COMMAND arche_benchmarks)
 
@@ -328,6 +329,12 @@ if(ARCHE_BUILD_COMPARISON_BENCHMARKS)
     FetchContent_MakeAvailable(flecs)
 
     add_executable(comparative_ecs_benchmarks scripts/benchmarks/comparative_benchmarks.cpp)
-    target_compile_options(comparative_ecs_benchmarks PRIVATE -Wno-deprecated-literal-operator)
+    target_compile_options(comparative_ecs_benchmarks PRIVATE -O3 -DNDEBUG -Wno-deprecated-literal-operator)
     target_link_libraries(comparative_ecs_benchmarks PRIVATE arche::arche nanobench EnTT::EnTT flecs_static)
+    if(TARGET flecs_static)
+        target_compile_options(flecs_static PRIVATE -O3 -DNDEBUG)
+    endif()
+    if(TARGET nanobench)
+        target_compile_options(nanobench PRIVATE -O3 -DNDEBUG)
+    endif()
 endif()
