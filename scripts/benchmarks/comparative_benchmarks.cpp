@@ -9,6 +9,7 @@ import arche;
 #include <atomic>
 #include <cstdint>
 #include <cstdlib>
+#include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <new>
@@ -463,6 +464,8 @@ int main() {
   std::cout << "==============================================================="
                "===============\n\n";
 
+  std::vector<ankerl::nanobench::Result> all_benchmark_results;
+
   constexpr size_t COUNT_2M = 2'000'000;
   constexpr size_t COUNT_500K = 500'000;
   constexpr size_t COUNT_200K = 200'000;
@@ -475,7 +478,7 @@ int main() {
   std::cout << ">>> Running Section I: 2,000,000 (2M) Entity Benchmarks...\n\n";
   {
     ankerl::nanobench::Bench bench_2m;
-    bench_2m.warmup(1).minEpochIterations(3).maxEpochTime(
+    bench_2m.warmup(2).minEpochIterations(10).maxEpochTime(
         std::chrono::milliseconds(250)
     );
 
@@ -694,6 +697,11 @@ int main() {
         });
       }
     }
+    all_benchmark_results.insert(
+        all_benchmark_results.end(),
+        bench_2m.results().begin(),
+        bench_2m.results().end()
+    );
   }
 
   // ---------------------------------------------------------------------------
@@ -703,7 +711,7 @@ int main() {
                "(500k)...\n\n";
   {
     ankerl::nanobench::Bench bench_wide;
-    bench_wide.warmup(1).minEpochIterations(3).maxEpochTime(
+    bench_wide.warmup(2).minEpochIterations(10).maxEpochTime(
         std::chrono::milliseconds(250)
     );
 
@@ -868,6 +876,11 @@ int main() {
           state.flags |= 2;
       });
     });
+    all_benchmark_results.insert(
+        all_benchmark_results.end(),
+        bench_wide.results().begin(),
+        bench_wide.results().end()
+    );
   }
 
   // ---------------------------------------------------------------------------
@@ -909,7 +922,7 @@ int main() {
 
   {
     ankerl::nanobench::Bench bench_sort;
-    bench_sort.warmup(1).minEpochIterations(3).maxEpochTime(
+    bench_sort.warmup(2).minEpochIterations(5).maxEpochTime(
         std::chrono::milliseconds(250)
     );
 
@@ -993,6 +1006,11 @@ int main() {
         });
       });
     }
+    all_benchmark_results.insert(
+        all_benchmark_results.end(),
+        bench_sort.results().begin(),
+        bench_sort.results().end()
+    );
   }
 
   // ---------------------------------------------------------------------------
@@ -1002,7 +1020,7 @@ int main() {
                "Filters...\n\n";
   {
     ankerl::nanobench::Bench bench_frag;
-    bench_frag.warmup(1).minEpochIterations(3).maxEpochTime(
+    bench_frag.warmup(2).minEpochIterations(10).maxEpochTime(
         std::chrono::milliseconds(250)
     );
 
@@ -1271,6 +1289,11 @@ int main() {
         });
       });
     }
+    all_benchmark_results.insert(
+        all_benchmark_results.end(),
+        bench_frag.results().begin(),
+        bench_frag.results().end()
+    );
   }
 
   // ---------------------------------------------------------------------------
@@ -1280,7 +1303,7 @@ int main() {
       << "\n>>> Running Section V: Lifecycle, Mutation & Random Access...\n\n";
   {
     ankerl::nanobench::Bench bench_life;
-    bench_life.warmup(1).minEpochIterations(3).maxEpochTime(
+    bench_life.warmup(2).minEpochIterations(10).maxEpochTime(
         std::chrono::milliseconds(250)
     );
 
@@ -1475,6 +1498,11 @@ int main() {
             }
           });
     }
+    all_benchmark_results.insert(
+        all_benchmark_results.end(),
+        bench_life.results().begin(),
+        bench_life.results().end()
+    );
   }
 
   // ---------------------------------------------------------------------------
@@ -1483,7 +1511,7 @@ int main() {
   std::cout << "\n>>> Running Section VI: Full-Frame 10-System Game Loop Simulation (100k Entities)...\n\n";
   {
     ankerl::nanobench::Bench bench_frame;
-    bench_frame.warmup(2).minEpochIterations(5).maxEpochTime(
+    bench_frame.warmup(2).minEpochIterations(10).maxEpochTime(
         std::chrono::milliseconds(250)
     );
 
@@ -1859,6 +1887,11 @@ int main() {
             ankerl::nanobench::doNotOptimizeAway(total_pos);
           }
         });
+    all_benchmark_results.insert(
+        all_benchmark_results.end(),
+        bench_frame.results().begin(),
+        bench_frame.results().end()
+    );
   }
 
   // ---------------------------------------------------------------------------
@@ -2189,6 +2222,11 @@ int main() {
           });
           ankerl::nanobench::doNotOptimizeAway(processed);
         });
+    all_benchmark_results.insert(
+        all_benchmark_results.end(),
+        bench_sparse.results().begin(),
+        bench_sparse.results().end()
+    );
   }
 
   // ===========================================================================
@@ -2231,8 +2269,8 @@ int main() {
     }
 
     ankerl::nanobench::Bench bench_churn;
-    bench_churn.warmup(1).minEpochIterations(3).maxEpochTime(
-        std::chrono::milliseconds(200)
+    bench_churn.warmup(2).minEpochIterations(10).maxEpochTime(
+        std::chrono::milliseconds(250)
     );
 
     bench_churn.title("17. Dynamic Churn: Add & Remove Buff (50k Entities)")
@@ -2313,6 +2351,30 @@ int main() {
             entt_reg.erase<ShieldBuff>(entt_ents[i]);
           }
         });
+    all_benchmark_results.insert(
+        all_benchmark_results.end(),
+        bench_churn.results().begin(),
+        bench_churn.results().end()
+    );
+  }
+
+  // ===========================================================================
+  // Export All Microbenchmarks to JSON
+  // ===========================================================================
+  {
+    const char *json_out_path = "build/benchmark_results.json";
+    std::ofstream json_file(json_out_path);
+    if (json_file.is_open()) {
+      ankerl::nanobench::render(
+          ankerl::nanobench::templates::json(),
+          all_benchmark_results,
+          json_file
+      );
+      std::cout << "\n>>> [Hygiene] All benchmark telemetry exported successfully to: "
+                << json_out_path << " (" << all_benchmark_results.size() << " benchmark runs)\n";
+    } else {
+      std::cerr << "\n>>> [Warning] Failed to open " << json_out_path << " for writing.\n";
+    }
   }
 
   std::cout << "\n============================================================="
