@@ -188,14 +188,4 @@ void ArchetypeGraph::register_query_cache(QueryCache &cache) {
   registered_caches_.push_back(&cache);
 }
 
-void ArchetypeGraph::unregister_query_cache(QueryCache &cache) {
-  // 1. Locate and remove cache from notification list.
-  auto it = std::find(
-      registered_caches_.begin(), registered_caches_.end(), &cache
-  );
-  if (it != registered_caches_.end()) {
-    registered_caches_.erase(it);
-  }
-}
-
 } // namespace arche

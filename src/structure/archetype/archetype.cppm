@@ -65,6 +65,8 @@ public:
   };
 
 private:
+  friend class ArchetypeGraph;
+
   uint32_t archetype_id_{0};
   ComponentMask mask_;
   std::vector<ComponentID> types_;
@@ -148,13 +150,6 @@ public:
    */
   [[nodiscard]] bool has_component(ComponentID type) const noexcept;
 
-  /**
-   * @brief Type-safe template check if this archetype contains a component.
-   * @tparam T Component type.
-   * @return true if present; false otherwise.
-   */
-  template <typename T> [[nodiscard]] bool has() const noexcept;
-
   // --- Column Layout Lookups -------------------------------------------------
 
   /**
@@ -186,14 +181,6 @@ public:
   [[nodiscard]] std::span<const ComponentColumnLayout>
   column_layouts() const noexcept;
 
-  /**
-   * @brief Computes the chunk-relative byte offset for a component type.
-   * @tparam T Component type.
-   * @return Byte offset from the chunk base address, or UINT32_MAX if not present.
-   */
-  template <typename T>
-  [[nodiscard]] uint32_t column_offset() const noexcept;
-
   // --- Transition Graph Edges ------------------------------------------------
 
   /**
@@ -209,20 +196,6 @@ public:
    * @return Destination archetype pointer, or nullptr if edge not yet cached.
    */
   [[nodiscard]] Archetype *get_remove_edge(ComponentID type) const noexcept;
-
-  /**
-   * @brief Caches the destination archetype edge for component addition.
-   * @param type Added component ComponentID.
-   * @param target Destination archetype.
-   */
-  void set_add_edge(ComponentID type, Archetype *target);
-
-  /**
-   * @brief Caches the destination archetype edge for component removal.
-   * @param type Removed component ComponentID.
-   * @param target Destination archetype.
-   */
-  void set_remove_edge(ComponentID type, Archetype *target);
 
   // --- Chunk Page Management -------------------------------------------------
 
@@ -282,6 +255,9 @@ public:
   void set_entity_count(size_t count) noexcept;
 
 private:
+  void set_add_edge(ComponentID type, Archetype *target);
+  void set_remove_edge(ComponentID type, Archetype *target);
+
   [[nodiscard]] uint32_t _calculate_entity_size_sum(
       const ComponentRegistry &registry
   ) const;

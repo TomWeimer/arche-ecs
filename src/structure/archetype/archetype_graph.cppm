@@ -135,12 +135,6 @@ public:
    * @param cache Query cache to register and backfill with existing matching archetypes.
    */
   void register_query_cache(QueryCache &cache);
-
-  /**
-   * @brief Unregisters a QueryCache from receiving future archetype creation notifications.
-   * @param cache Query cache to remove.
-   */
-  void unregister_query_cache(QueryCache &cache);
 };
 
 } // namespace arche

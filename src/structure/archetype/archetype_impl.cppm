@@ -71,10 +71,6 @@ bool Archetype::has_component(ComponentID type) const noexcept {
   return mask_.test(type);
 }
 
-template <typename T> inline bool Archetype::has() const noexcept {
-  return has_component(component_id<std::decay_t<T>>());
-}
-
 // =============================================================================
 // Column Layout Lookups Implementations
 // =============================================================================
@@ -106,12 +102,6 @@ const ComponentColumnLayout *Archetype::column_layout_for(
 std::span<const ComponentColumnLayout>
 Archetype::column_layouts() const noexcept {
   return columns_;
-}
-
-template <typename T>
-inline uint32_t Archetype::column_offset() const noexcept {
-  const auto *layout = column_layout_for(component_id<std::decay_t<T>>());
-  return layout != nullptr ? layout->chunk_byte_offset : UINT32_MAX;
 }
 
 // =============================================================================
