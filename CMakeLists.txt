@@ -21,13 +21,7 @@ target_sources(arche
       src/arche.cppm
       # Layer 0: Foundation
       src/foundation/types/entity.cppm
-      src/foundation/types/access.cppm
-      src/foundation/types/filters.cppm
       src/foundation/types/types.cppm
-      src/foundation/types/detail/snapshot_header.cppm
-      src/foundation/types/detail/system_types.cppm
-      src/foundation/types/detail/plugin_concept.cppm
-      src/foundation/types/detail/resource_id.cppm
       src/foundation/component/component_mask.cppm
       src/foundation/component/type_id.cppm
       src/foundation/component/detail/type_id_impl.cppm
@@ -58,6 +52,7 @@ target_sources(arche
       src/lifecycle/command/command.cppm
       src/lifecycle/command/detail/command_impl.cppm
       src/lifecycle/snapshot/snapshot.cppm
+      src/lifecycle/snapshot/detail/snapshot_header.cppm
       src/lifecycle/snapshot/detail/snapshot_impl.cppm
       src/lifecycle/resource/resource.cppm
       src/lifecycle/resource/detail/resource_impl.cppm
@@ -65,12 +60,15 @@ target_sources(arche
       # Layer 4: Runtime
       src/runtime/concurrency/thread_pool.cppm
       src/runtime/concurrency/detail/thread_pool_impl.cppm
+      src/runtime/query/query_filters.cppm
       src/runtime/query/query.cppm
       src/runtime/query/detail/query_masks.cppm
       src/runtime/query/detail/query_offsets.cppm
       src/runtime/query/detail/query_filter.cppm
       src/runtime/query/detail/query_iterator.cppm
       src/runtime/query/detail/query_impl.cppm
+      src/runtime/system/access.cppm
+      src/runtime/system/system_types.cppm
       src/runtime/system/scheduler.cppm
       src/runtime/system/detail/scheduler_impl.cppm
       src/runtime/system/system_context.cppm

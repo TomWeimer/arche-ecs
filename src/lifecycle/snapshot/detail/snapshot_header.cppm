@@ -3,7 +3,7 @@ module;
 #include <cstddef>
 #include <cstdint>
 
-export module arche:types.detail.snapshot_header;
+export module arche:snapshot.detail.header;
 
 export namespace arche {
 

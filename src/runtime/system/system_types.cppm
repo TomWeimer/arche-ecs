@@ -3,7 +3,7 @@ module;
 #include <cstdint>
 #include <functional>
 
-export module arche:types.detail.system_types;
+export module arche:system_types;
 
 export namespace arche {
 

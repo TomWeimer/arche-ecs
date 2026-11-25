@@ -9,7 +9,7 @@ module;
 
 export module arche:snapshot;
 
-export import :types.detail.snapshot_header;
+export import :snapshot.detail.header;
 import :archetype;
 import :chunk;
 import :chunk_pool;

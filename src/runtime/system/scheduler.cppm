@@ -9,7 +9,7 @@ module;
 
 export module arche:scheduler;
 
-import :types.detail.system_types;
+import :system_types;
 import :access;
 import :thread_pool;
 import :command;

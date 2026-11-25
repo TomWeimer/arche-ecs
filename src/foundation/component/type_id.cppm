@@ -10,7 +10,6 @@ export module arche:type_id;
 
 import :entity;
 import :component_mask;
-import :filters;
 
 export namespace arche {
 

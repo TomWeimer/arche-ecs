@@ -3,7 +3,7 @@ module;
 export module arche:access;
 
 import :component_mask;
-import :types.detail.resource_id;
+import :resource;
 
 export namespace arche {
 

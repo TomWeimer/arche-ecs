@@ -1,14 +1,33 @@
 module;
 
+#include <concepts>
 #include <cstdint>
 #include <string_view>
 #include <vector>
 
 export module arche:plugin;
 
-import :types.detail.plugin_concept;
-
 export namespace arche {
+
+class World;
+
+namespace internal {
+class Scheduler;
+}
+
+// =============================================================================
+// Plugin Lifecycle Concept
+// =============================================================================
+
+/**
+ * @concept Plugin
+ * @brief Autonomous module contract initializing resources, systems, and components.
+ */
+template <typename P>
+concept Plugin = requires(P plugin, World &world, internal::Scheduler &scheduler) {
+  { plugin.build(world, scheduler) } -> std::same_as<void>;
+  { P::name() } -> std::convertible_to<std::string_view>;
+};
 
 // =============================================================================
 // Plugin Management & Registry

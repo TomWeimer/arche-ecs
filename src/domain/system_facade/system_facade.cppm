@@ -8,7 +8,7 @@ module;
 export module arche:domain.system;
 
 import :access;
-import :types;
+import :system_types;
 import :scheduler;
 import :plugin;
 import :thread_pool;
