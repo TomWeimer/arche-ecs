@@ -5,7 +5,6 @@ module;
 
 export module arche:domain.resource;
 
-import :types;
 import :resource;
 
 export namespace arche {

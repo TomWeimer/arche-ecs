@@ -14,6 +14,7 @@ module;
 export module arche:query.detail.impl;
 
 import :query;
+import :hardware;
 
 export namespace arche {
 

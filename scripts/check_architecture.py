@@ -249,7 +249,11 @@ def classify_subsystem(file_path: str) -> Tuple[str, int]:
         return "arche_master", SUBSYSTEM_RULES["arche_master"]["layer"]
 
     # Tier 0: foundation
-    if p.startswith("src/foundation/types/") or p.startswith("src/types/"):
+    if (
+        p.startswith("src/foundation/entity/")
+        or p.startswith("src/foundation/types/")
+        or p.startswith("src/types/")
+    ):
         return "types", SUBSYSTEM_RULES["types"]["layer"]
     if (
         p.startswith("src/foundation/hardware/")
@@ -266,9 +270,11 @@ def classify_subsystem(file_path: str) -> Tuple[str, int]:
     # Tier 1: storage
     if p.startswith("src/storage/chunk/") or p.startswith("src/chunk/"):
         return "chunk", SUBSYSTEM_RULES["chunk"]["layer"]
-    if p == "src/storage/entity/entity.cppm" or p == "src/entity/entity.cppm":
-        return "public_entities", SUBSYSTEM_RULES["public_entities"]["layer"]
-    if p.startswith("src/storage/entity/") or p.startswith("src/entity/"):
+    if (
+        p.startswith("src/storage/slot_map/")
+        or p.startswith("src/storage/entity/")
+        or p.startswith("src/entity/")
+    ):
         return "sparse_entity", SUBSYSTEM_RULES["sparse_entity"]["layer"]
 
     # Tier 2: structure

@@ -2,7 +2,7 @@ module;
 
 #include <cstdint>
 
-export module arche:entity.detail.entity_record;
+export module arche:slot_map.detail.entity_record;
 
 export namespace arche::internal {
 

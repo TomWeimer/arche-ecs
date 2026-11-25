@@ -10,7 +10,7 @@ module;
 export module arche:slot_map;
 
 import :entity;
-import :entity.detail.entity_record;
+import :slot_map.detail.entity_record;
 
 export namespace arche::internal {
 

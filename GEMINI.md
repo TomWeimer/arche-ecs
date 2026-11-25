@@ -19,12 +19,12 @@ Dependencies flow strictly **top-down**. Lower layers must NEVER depend on or in
 
 | Layer | Subsystem / Tier | Contents | Permitted Dependencies |
 | :---: | :--- | :--- | :--- |
-| **0** | `foundation` (`types`, `hardware`, `component`) | POD types, bitmasks, CPU intrinsics, ColumnLayout, TypeID | Only Layer 0 |
-| **1** | `storage` (`chunk`, `entity`) | 64KB chunk page memory, SlotMap, Entity handles | Layer 0 only |
+| **0** | `foundation` (`entity`, `hardware`, `component`) | Entity handle, POD types, bitmasks, CPU intrinsics, ColumnLayout, TypeID | Only Layer 0 |
+| **1** | `storage` (`chunk`, `slot_map`) | 64KB chunk page memory, SlotMap routing table | Layer 0 only |
 | **2** | `structure` (`archetype`, `query_cache`) | Archetype tables, transition graph, reactive cache | Layers 0 and 1 |
 | **3** | `lifecycle` (`mutation`, `command`, `snapshot`, `resource`, `entity_view`) | Archetype transitions, command buffer, snapshot I/O, singleton resources, EntityRef | Layers 0, 1, and 2 |
 | **4** | `runtime` (`query`, `concurrency`, `system`, `sort`) | Query iterators, ThreadPool, Scheduler DAG, sort / permute | Layers 0, 1, 2, and 3 (+ sibling concurrency) |
-| **5** | `domain` | Domain facades (archetype, command, entity, gpu, resource, snapshot, system) | Layers 0, 1, 2, 3, and 4 |
+| **5** | `domain` | Domain facades (archetype, command, entity, resource, snapshot, system) | Layers 0, 1, 2, 3, and 4 |
 | **6** | `world` | Central World assembly, domain facades composition, storage | All lower layers (assembly coordinator) |
 | **7** | `arche_master` | Umbrella header & module (`src/arche.cppm`, `include/arche/arche.hpp`) | All layers |
 

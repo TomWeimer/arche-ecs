@@ -6,7 +6,6 @@ module;
 
 export module arche:domain.snapshot;
 
-import :types;
 import :snapshot;
 
 export namespace arche {

@@ -20,24 +20,21 @@ target_sources(arche
     FILE_SET CXX_MODULES FILES
       src/arche.cppm
       # Layer 0: Foundation
-      src/foundation/types/entity.cppm
-      src/foundation/types/types.cppm
+      src/foundation/entity/entity.cppm
       src/foundation/component/component_mask.cppm
       src/foundation/component/type_id.cppm
       src/foundation/component/detail/type_id_impl.cppm
       src/foundation/component/detail/column_layout.cppm
       src/foundation/hardware/hardware.cppm
-      src/foundation/hardware/math.cppm
       # Layer 1: Storage
       src/storage/chunk/chunk.cppm
       src/storage/chunk/detail/chunk_impl.cppm
       src/storage/chunk/chunk_pool.cppm
       src/storage/chunk/detail/chunk_pool_impl.cppm
       src/storage/chunk/detail/chunk_header.cppm
-      src/storage/entity/entity.cppm
-      src/storage/entity/slot_map.cppm
-      src/storage/entity/detail/slot_map_impl.cppm
-      src/storage/entity/detail/entity_record.cppm
+      src/storage/slot_map/slot_map.cppm
+      src/storage/slot_map/detail/slot_map_impl.cppm
+      src/storage/slot_map/detail/entity_record.cppm
       # Layer 2: Structure
       src/structure/archetype/archetype.cppm
       src/structure/archetype/detail/archetype_impl.cppm

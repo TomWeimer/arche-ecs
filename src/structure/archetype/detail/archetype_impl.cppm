@@ -14,7 +14,7 @@ module;
 export module arche:archetype.detail.impl;
 
 import :archetype;
-import :math;
+import :hardware;
 
 export namespace arche::internal {
 

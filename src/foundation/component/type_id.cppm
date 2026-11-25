@@ -8,7 +8,6 @@ module;
 
 export module arche:type_id;
 
-import :entity;
 import :component_mask;
 
 export namespace arche {

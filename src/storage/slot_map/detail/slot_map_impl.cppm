@@ -9,7 +9,7 @@ module;
 #include <stdexcept>
 #include <vector>
 
-export module arche:entity.detail.slot_map_impl;
+export module arche:slot_map.detail.impl;
 
 import :slot_map;
 

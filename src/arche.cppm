@@ -7,7 +7,6 @@ export module arche;
 // =============================================================================
 
 // --- Public Library Surface (in namespace arche) -----------------------------
-export import :types;
 export import :entity;
 export import :access;
 export import :filters;
@@ -30,7 +29,6 @@ export import :world;
 
 // --- Internal Engine Subsystems (in namespace arche::internal) ----------------
 export import :hardware;
-export import :math;
 export import :component_mask;
 export import :component.detail.column_layout;
 export import :component.detail.type_id_impl;
@@ -40,9 +38,8 @@ export import :chunk.detail.impl;
 export import :chunk_pool;
 export import :chunk_pool.detail.impl;
 export import :slot_map;
-export import :entity.detail.entity_record;
-export import :entity.detail.slot_map_impl;
-export import :entity_handle;
+export import :slot_map.detail.entity_record;
+export import :slot_map.detail.impl;
 export import :resource;
 export import :resource.detail.impl;
 export import :archetype;
