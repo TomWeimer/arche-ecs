@@ -2191,6 +2191,130 @@ int main() {
         });
   }
 
+  // ===========================================================================
+  // SECTION IX: Dynamic Archetype Churn (50k Entities Buff/Tag Cycling)
+  // ===========================================================================
+  std::cout << "\n>>> Running Section IX: Dynamic Archetype Churn (50k Entities Buff Cycling)...\n";
+  {
+    constexpr size_t CHURN_ENTITIES = 50'000;
+    struct SpeedBuff {
+      float multiplier{2.0f};
+    };
+    struct ShieldBuff {
+      float hp{100.0f};
+    };
+
+    // Benchmark 17: Add & Remove Component Churn per Frame (50,000 entities)
+    // Measures archetype table migration / graph transitions vs sparse set insertion/deletion.
+    arche::World arche_world;
+    std::vector<arche::Entity> arche_ents = arche_world.spawn(
+        {.count = CHURN_ENTITIES}, Position{0.0f, 0.0f}, Velocity{1.0f, 1.0f}
+    );
+
+    flecs::world flecs_world;
+    std::vector<flecs::entity> flecs_ents;
+    flecs_ents.reserve(CHURN_ENTITIES);
+    for (size_t i = 0; i < CHURN_ENTITIES; ++i) {
+      flecs_ents.push_back(
+          flecs_world.entity().set<Position>({0.0f, 0.0f}).set<Velocity>({1.0f, 1.0f})
+      );
+    }
+
+    entt::registry entt_reg;
+    std::vector<entt::entity> entt_ents;
+    entt_ents.reserve(CHURN_ENTITIES);
+    for (size_t i = 0; i < CHURN_ENTITIES; ++i) {
+      const auto e = entt_reg.create();
+      entt_reg.emplace<Position>(e, 0.0f, 0.0f);
+      entt_reg.emplace<Velocity>(e, 1.0f, 1.0f);
+      entt_ents.push_back(e);
+    }
+
+    ankerl::nanobench::Bench bench_churn;
+    bench_churn.warmup(1).minEpochIterations(3).maxEpochTime(
+        std::chrono::milliseconds(200)
+    );
+
+    bench_churn.title("17. Dynamic Churn: Add & Remove Buff (50k Entities)")
+        .run("arche-ecs (Add + Remove Archetype Graph)", [&] {
+          // Add SpeedBuff to 50k entities (moves to Pos+Vel+SpeedBuff archetype)
+          for (size_t i = 0; i < CHURN_ENTITIES; ++i) {
+            arche_world.add(arche_ents[i], SpeedBuff{2.5f});
+          }
+          // Remove SpeedBuff (moves back to Pos+Vel archetype)
+          for (size_t i = 0; i < CHURN_ENTITIES; ++i) {
+            arche_world.remove<SpeedBuff>(arche_ents[i]);
+          }
+        })
+        .run("Flecs (Add + Remove Table Transition)", [&] {
+          // Add SpeedBuff to 50k entities
+          for (size_t i = 0; i < CHURN_ENTITIES; ++i) {
+            flecs_ents[i].set<SpeedBuff>({2.5f});
+          }
+          // Remove SpeedBuff
+          for (size_t i = 0; i < CHURN_ENTITIES; ++i) {
+            flecs_ents[i].remove<SpeedBuff>();
+          }
+        })
+        .run("EnTT (Emplace + Erase Sparse Set)", [&] {
+          // Emplace SpeedBuff to 50k entities
+          for (size_t i = 0; i < CHURN_ENTITIES; ++i) {
+            entt_reg.emplace<SpeedBuff>(entt_ents[i], 2.5f);
+          }
+          // Erase SpeedBuff
+          for (size_t i = 0; i < CHURN_ENTITIES; ++i) {
+            entt_reg.erase<SpeedBuff>(entt_ents[i]);
+          }
+        });
+
+    // Benchmark 18: Multi-Archetype Alternating Churn (50k Entities cycling across 4 archetypes)
+    bench_churn.title("18. Multi-Archetype Alternating Churn (50k Entities)")
+        .run("arche-ecs (4-Way Cycle)", [&] {
+          // Even entities get SpeedBuff, odd get ShieldBuff
+          for (size_t i = 0; i < CHURN_ENTITIES; i += 2) {
+            arche_world.add(arche_ents[i], SpeedBuff{1.5f});
+          }
+          for (size_t i = 1; i < CHURN_ENTITIES; i += 2) {
+            arche_world.add(arche_ents[i], ShieldBuff{50.0f});
+          }
+          // Clean up
+          for (size_t i = 0; i < CHURN_ENTITIES; i += 2) {
+            arche_world.remove<SpeedBuff>(arche_ents[i]);
+          }
+          for (size_t i = 1; i < CHURN_ENTITIES; i += 2) {
+            arche_world.remove<ShieldBuff>(arche_ents[i]);
+          }
+        })
+        .run("Flecs (4-Way Cycle)", [&] {
+          for (size_t i = 0; i < CHURN_ENTITIES; i += 2) {
+            flecs_ents[i].set<SpeedBuff>({1.5f});
+          }
+          for (size_t i = 1; i < CHURN_ENTITIES; i += 2) {
+            flecs_ents[i].set<ShieldBuff>({50.0f});
+          }
+          for (size_t i = 0; i < CHURN_ENTITIES; i += 2) {
+            flecs_ents[i].remove<SpeedBuff>();
+          }
+          for (size_t i = 1; i < CHURN_ENTITIES; i += 2) {
+            flecs_ents[i].remove<ShieldBuff>();
+          }
+        })
+        .run("EnTT (4-Way Cycle)", [&] {
+          for (size_t i = 0; i < CHURN_ENTITIES; i += 2) {
+            entt_reg.emplace<SpeedBuff>(entt_ents[i], 1.5f);
+          }
+          for (size_t i = 1; i < CHURN_ENTITIES; i += 2) {
+            entt_reg.emplace<ShieldBuff>(entt_ents[i], 50.0f);
+          }
+          for (size_t i = 0; i < CHURN_ENTITIES; i += 2) {
+            entt_reg.erase<SpeedBuff>(entt_ents[i]);
+          }
+          for (size_t i = 1; i < CHURN_ENTITIES; i += 2) {
+            entt_reg.erase<ShieldBuff>(entt_ents[i]);
+          }
+        });
+  }
+
   std::cout << "\n============================================================="
                "=================\n";
   std::cout << "  Comprehensive 2M Comparative Benchmark Suite Completed "
