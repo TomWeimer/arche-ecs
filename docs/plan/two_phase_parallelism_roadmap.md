@@ -92,28 +92,29 @@ Batch 3 [Sequential System]:
 ### 2.4 Concrete Implementation Design (Phase 1)
 
 ```cpp
-#pragma once
+module;
 
 #include <vector>
 #include <string>
 #include <functional>
-#include <arche/arche.hpp>
 
-namespace arche {
+export module arche:scheduler;
 
-struct SystemContext {
-    World& world;
-    CommandBuffer& cmd;
-    float dt;
-};
+import :access;
+import :system_types;
+import :system_context;
+import :thread_pool;
+import :command;
+import :resource;
 
-using SystemFunction = void(*)(SystemContext&);
+namespace arche::internal {
 
-struct SystemDescriptor {
+struct SystemNode {
     std::string name;
     AccessDescriptor access;
     SystemFunction fn{nullptr};
     SystemScale scale{SystemScale::Narrow};
+    bool enabled{true};
 };
 
 class Scheduler {
@@ -123,62 +124,42 @@ public:
         AccessDescriptor access,
         SystemFunction fn,
         SystemScale scale = SystemScale::Narrow
-    ) {
-        systems_.push_back({std::move(name), access, fn, scale});
-        dirty_ = true;
-        return *this;
-    }
+    );
 
-    void compile();
+    void compile(const SystemExecutionTarget& target);
 
-    void run(World& world, ThreadPool& pool, float dt) {
-        if (dirty_) compile();
+    void run(const SystemExecutionTarget& target, ThreadPool& pool) {
+        if (dirty_) compile(target);
 
-        ParallelCommandBuffer parallel_cmd(pool.worker_count() + 1);
+        ParallelCommandBuffer *cmd_ptr = target.parallel_cmd;
+        if (!cmd_ptr) {
+            const uint32_t required = pool.worker_count() + 1;
+            if (!fallback_parallel_cmd_ || fallback_parallel_cmd_->thread_count() < required) {
+                fallback_parallel_cmd_ = std::make_unique<ParallelCommandBuffer>(required);
+            }
+            cmd_ptr = fallback_parallel_cmd_.get();
+        }
 
         for (const auto& batch : batches_) {
-            if (batch.is_wide) {
-                // Wide system: executes across all worker threads via pool
-                const size_t sys_idx = batch.system_indices[0];
-                CommandBuffer& cmd = parallel_cmd.get(0);
-                SystemContext ctx{world, cmd, dt};
-                systems_[sys_idx].fn(ctx);
-            } else if (batch.system_indices.size() == 1) {
-                // Single sequential system
-                const size_t sys_idx = batch.system_indices[0];
-                CommandBuffer& cmd = parallel_cmd.get(0);
-                SystemContext ctx{world, cmd, dt};
-                systems_[sys_idx].fn(ctx);
-            } else {
-                // Inter-System Parallel: run distinct systems on separate worker threads
-                pool.parallel_for([&](uint32_t thread_id) {
-                    if (thread_id < batch.system_indices.size()) {
-                        const size_t sys_idx = batch.system_indices[thread_id];
-                        CommandBuffer& cmd = parallel_cmd.get(thread_id);
-                        SystemContext ctx{world, cmd, dt};
-                        systems_[sys_idx].fn(ctx);
-                    }
-                });
-            }
-
-            // Batch barrier: commit deferred mutations deterministically
-            world.commit(parallel_cmd);
-            parallel_cmd.clear();
+            execute_batch(batch, target, pool, *cmd_ptr);
         }
     }
 
 private:
-    struct CompiledBatch {
+    struct Batch {
         std::vector<size_t> system_indices;
+        AccessDescriptor access{};
         bool is_wide{false};
+        bool is_sequential{false};
     };
 
-    std::vector<SystemDescriptor> systems_;
-    std::vector<CompiledBatch> batches_;
+    std::vector<SystemNode> systems_;
+    std::vector<Batch> batches_;
     bool dirty_{true};
+    std::unique_ptr<ParallelCommandBuffer> fallback_parallel_cmd_{nullptr};
 };
 
-} // namespace arche
+} // namespace arche::internal
 ```
 
 ### 2.5 Phase 1 Pros & Limits
@@ -347,17 +328,19 @@ private:
 
 ## 5. Phased Rollout Plan
 
-### Phase 1 Deliverables (Immediate Focus):
-1. **`include/arche/resource.hpp`**: Flat `ResourceContainer` with zero virtuals and `-fno-rtti` compliance.
-2. **`include/arche/world.hpp` integration**: Embed `ResourceContainer` inside `World` (`world.resource<T>()`, `world.insert_resource<T>()`).
-3. **`include/arche/scheduler.hpp`**:
+### Phase 1 Deliverables (Completed):
+1. **`src/storage/resource/resource.cppm`**: Flat `ResourceContainer` with zero virtuals and `-fno-rtti` compliance.
+2. **`src/world/world.cppm` integration**: Embedded `ResourceContainer` inside `WorldStorage`, accessible via `world.resources`.
+3. **`src/runtime/scheduler/scheduler.cppm`**:
    - `AccessDescriptor` (128-bit component/resource bitmasks).
    - `SystemScale` (`Narrow`, `Wide`, `Sequential`).
    - Init-time DAG level-partitioning compiler.
-   - Batch dispatcher utilizing existing `ThreadPool::parallel_for`.
+   - Batch dispatcher utilizing persistent `ParallelCommandBuffer` and `ThreadPool::parallel_for`.
+   - Scheduled sorting integration with zero-overhead `ColumnView<T>`.
 4. **Unit Tests & Validation**:
-   - Verify zero-race parallel batch execution.
-   - Verify deterministic `CommandBuffer` playback.
+   - Verified zero-race parallel batch execution.
+   - Verified deterministic `CommandBuffer` playback.
+   - Verified thread affinity for `Sequential` systems on thread 0.
 
 ### Phase 2 Evolution Trigger (When to transition):
 Initiate Phase 2 when simulation profiles exhibit one of the following thresholds:
