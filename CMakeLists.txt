@@ -49,6 +49,8 @@ target_sources(arche
       src/mutation/mutation.cppm
       src/mutation/mutation_impl.cppm
       # Layer 4: Concurrency
+      src/runtime/concurrency/task.cppm
+      src/runtime/concurrency/work_stealing_queue.cppm
       src/runtime/concurrency/thread_pool.cppm
       src/runtime/concurrency/thread_pool_impl.cppm
       # Layer 5: Query & Sort
@@ -213,6 +215,11 @@ add_executable(world_facade_tests tests/world_facade_tests.cpp)
 target_link_libraries(world_facade_tests PRIVATE arche::arche)
 add_test(NAME world_facade_tests COMMAND world_facade_tests)
 
+# Module 024 Tests: Work-Stealing Task Graph & Chase-Lev Deques
+add_executable(work_stealing_tests tests/work_stealing_tests.cpp)
+target_link_libraries(work_stealing_tests PRIVATE arche::arche)
+add_test(NAME work_stealing_tests COMMAND work_stealing_tests)
+
 # Architecture-as-Code (AaC) Boundary & Dependency Flow Verification
 find_package(Python3 REQUIRED)
 add_test(
@@ -244,7 +251,8 @@ add_custom_target(run_tests
     COMMAND scheduler_tests
     COMMAND plugin_tests
     COMMAND world_facade_tests
-    DEPENDS entity_tests component_id_tests archetype_tests chunk_storage_tests structural_mutation_tests query_tests arche_tests handles_and_snapshots_tests batch_lifecycle_tests simd_and_hardware_tests dirty_ticks_tests query_caching_tests archetype_permutation_tests double_buffered_tests multithreaded_query_tests stage2_validation_tests public_api_tests resource_tests access_tests scheduler_tests plugin_tests world_facade_tests
+    COMMAND work_stealing_tests
+    DEPENDS entity_tests component_id_tests archetype_tests chunk_storage_tests structural_mutation_tests query_tests arche_tests handles_and_snapshots_tests batch_lifecycle_tests simd_and_hardware_tests dirty_ticks_tests query_caching_tests archetype_permutation_tests double_buffered_tests multithreaded_query_tests stage2_validation_tests public_api_tests resource_tests access_tests scheduler_tests plugin_tests world_facade_tests work_stealing_tests
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
     COMMENT "Executing all unit tests..."
 )
@@ -278,6 +286,7 @@ add_custom_target(fclean
         $<TARGET_FILE:scheduler_tests>
         $<TARGET_FILE:plugin_tests>
         $<TARGET_FILE:world_facade_tests>
+        $<TARGET_FILE:work_stealing_tests>
     COMMENT "Full clean: removing intermediate objects and binaries..."
 )
 

@@ -48,6 +48,8 @@ export import :archetype_index;
 export import :mutation;
 export import :mutation.detail.impl;
 export import :snapshot_header;
+export import :task;
+export import :work_stealing_queue;
 export import :thread_pool;
 export import :concurrency.detail.thread_pool_impl;
 export import :scheduler;
