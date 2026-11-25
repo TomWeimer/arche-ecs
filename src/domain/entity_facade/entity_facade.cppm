@@ -45,12 +45,6 @@ public:
   /// Resolves an entity handle from a slot index, if alive.
   [[nodiscard]] std::optional<Entity> resolve(uint32_t index) const noexcept;
 
-  /// Immutable reference to the underlying SlotMap routing table.
-  [[nodiscard]] const internal::SlotMap &slot_map() const noexcept;
-
-  /// Mutable reference to the underlying SlotMap routing table.
-  [[nodiscard]] internal::SlotMap &slot_map() noexcept;
-
 private:
   internal::SlotMap *slot_map_{nullptr};
 };

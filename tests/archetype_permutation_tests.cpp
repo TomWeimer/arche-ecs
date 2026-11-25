@@ -68,7 +68,7 @@ void test_single_chunk_permutation() {
 
   // Reverse permutation: [4, 3, 2, 1, 0]
   std::vector<uint32_t> perm = {4, 3, 2, 1, 0};
-  Archetype *arch = world.entities.slot_map()
+  Archetype *arch = world.storage()->slot_map
                         .get_record(entities[0])
                         .archetype;
 
@@ -131,7 +131,7 @@ void test_multi_chunk_permutation() {
     perm[i] = static_cast<uint32_t>(COUNT - 1 - i);
   }
 
-  Archetype *arch = world.entities.slot_map()
+  Archetype *arch = world.storage()->slot_map
                         .get_record(entities[0])
                         .archetype;
 
@@ -220,7 +220,7 @@ void test_handle_stability_stress() {
     entities.push_back(world.spawn(Position{static_cast<float>(i), 0.0f}));
   }
 
-  Archetype *arch = world.entities.slot_map()
+  Archetype *arch = world.storage()->slot_map
                         .get_record(entities[0])
                         .archetype;
 

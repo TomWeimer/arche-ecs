@@ -46,16 +46,6 @@ SystemFacade &SystemFacade::add_system(
   return *this;
 }
 
-internal::Scheduler &SystemFacade::scheduler() noexcept {
-  assert(scheduler_ != nullptr);
-  return *scheduler_;
-}
-
-const internal::Scheduler &SystemFacade::scheduler() const noexcept {
-  assert(scheduler_ != nullptr);
-  return *scheduler_;
-}
-
 template <typename P>
 inline void SystemFacade::register_plugin_name() {
   assert(plugins_ != nullptr);

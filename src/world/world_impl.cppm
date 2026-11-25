@@ -331,8 +331,8 @@ inline void permute(
   Sort::permute(
       SortTarget{
           .arch = arch,
-          .chunks = world.archetypes.chunks(arch),
-          .slot_map = world.entities.slot_map(),
+          .chunks = arch->chunks(),
+          .slot_map = world.storage()->slot_map,
           .version = world.version(),
       },
       target_indices
@@ -343,7 +343,7 @@ template <typename... Components>
 inline void permute(World &world, std::span<const uint32_t> target_indices) {
   (world.storage()->registry.register_component<std::decay_t<Components>>(), ...);
   std::vector<ComponentID> types = {component_id<std::decay_t<Components>>()...};
-  Archetype *arch = world.archetypes.graph().get_or_create(types);
+  Archetype *arch = world.storage()->graph.get_or_create(types);
   permute(world, arch, target_indices);
 }
 
@@ -353,8 +353,8 @@ inline void sort(World &world, Archetype *arch, Compare &&comp) {
   Sort::by_component<Component>(
       SortTarget{
           .arch = arch,
-          .chunks = world.archetypes.chunks(arch),
-          .slot_map = world.entities.slot_map(),
+          .chunks = arch->chunks(),
+          .slot_map = world.storage()->slot_map,
           .version = world.version(),
       },
       std::forward<Compare>(comp)
@@ -415,8 +415,8 @@ inline void sort_by_key(World &world, KeyExtractor &&key_fn) {
     Sort::by_key<Component>(
         SortTarget{
             .arch = arch,
-            .chunks = world.archetypes.chunks(arch),
-            .slot_map = world.entities.slot_map(),
+            .chunks = arch->chunks(),
+            .slot_map = world.storage()->slot_map,
             .version = world.version(),
         },
         key_fn

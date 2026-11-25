@@ -27,24 +27,13 @@ size_t ArchetypeFacade::count() const noexcept {
   return graph_->archetypes().size();
 }
 
-std::vector<Chunk *> &ArchetypeFacade::chunks(Archetype *arch) {
-  assert(arch != nullptr);
-  return arch->chunks();
-}
-
-std::span<Chunk *const> ArchetypeFacade::chunks(const Archetype *arch) const {
-  assert(arch != nullptr);
-  return arch->chunks();
-}
-
-const ArchetypeGraph &ArchetypeFacade::graph() const noexcept {
+size_t ArchetypeFacade::total_chunks() const noexcept {
   assert(graph_ != nullptr);
-  return *graph_;
-}
-
-ArchetypeGraph &ArchetypeFacade::graph() noexcept {
-  assert(graph_ != nullptr);
-  return *graph_;
+  size_t total = 0;
+  for (const auto &arch_ptr : graph_->archetypes()) {
+    total += arch_ptr->chunks().size();
+  }
+  return total;
 }
 
 template <typename T>

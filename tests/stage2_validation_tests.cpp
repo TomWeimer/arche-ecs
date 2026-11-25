@@ -94,7 +94,7 @@ void test_permutation_and_reactive_cache() {
       {.count = COUNT}, Position{0.0f, 0.0f}, Velocity{1.0f, 1.0f}
   );
 
-  arche::Archetype *arch = world.entities.slot_map()
+  arche::Archetype *arch = world.storage()->slot_map
                                .get_record(entities[0])
                                .archetype;
 

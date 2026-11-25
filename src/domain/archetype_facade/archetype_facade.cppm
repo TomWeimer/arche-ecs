@@ -2,14 +2,11 @@ module;
 
 #include <cstddef>
 #include <cstdint>
-#include <span>
-#include <vector>
 
 export module arche:domain.archetype;
 
 import :archetype;
 import :archetype_graph;
-import :chunk;
 
 export namespace arche {
 
@@ -35,21 +32,12 @@ public:
   /// Returns the total number of distinct structural archetypes in the world.
   [[nodiscard]] size_t count() const noexcept;
 
-  /// Returns the vector of memory chunks allocated to an archetype.
-  [[nodiscard]] std::vector<internal::Chunk *> &chunks(internal::Archetype *arch);
-
-  /// Returns the immutable span of memory chunks allocated to an archetype.
-  [[nodiscard]] std::span<internal::Chunk *const> chunks(const internal::Archetype *arch) const;
+  /// Returns the total number of allocated memory chunks across all archetypes.
+  [[nodiscard]] size_t total_chunks() const noexcept;
 
   /// Counts total living entities possessing component type T across all archetypes.
   template <typename T>
   [[nodiscard]] uint32_t count_with() const noexcept;
-
-  /// Direct immutable reference to the underlying ArchetypeGraph.
-  [[nodiscard]] const internal::ArchetypeGraph &graph() const noexcept;
-
-  /// Direct mutable reference to the underlying ArchetypeGraph.
-  [[nodiscard]] internal::ArchetypeGraph &graph() noexcept;
 
 private:
   internal::ArchetypeGraph *graph_{nullptr};

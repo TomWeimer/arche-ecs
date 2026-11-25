@@ -51,12 +51,6 @@ public:
   template <typename T>
   bool remove();
 
-  /// Direct immutable access to the underlying ResourceContainer.
-  [[nodiscard]] const internal::ResourceContainer &container() const noexcept;
-
-  /// Direct mutable access to the underlying ResourceContainer.
-  [[nodiscard]] internal::ResourceContainer &container() noexcept;
-
 private:
   internal::ResourceContainer *resources_{nullptr};
 };

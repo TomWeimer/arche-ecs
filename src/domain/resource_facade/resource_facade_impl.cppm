@@ -22,16 +22,6 @@ bool ResourceFacade::has(ResourceID id) const noexcept {
   return resources_->has(id);
 }
 
-const ResourceContainer &ResourceFacade::container() const noexcept {
-  assert(resources_ != nullptr);
-  return *resources_;
-}
-
-ResourceContainer &ResourceFacade::container() noexcept {
-  assert(resources_ != nullptr);
-  return *resources_;
-}
-
 template <typename T, typename... Args>
 inline T &ResourceFacade::insert(Args &&...args) {
   assert(resources_ != nullptr && "Cannot insert resource to null container!");

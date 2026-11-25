@@ -135,11 +135,11 @@ void test_chunk_user_metadata_culling() {
   constexpr size_t COUNT = 5000;
   world.spawn({.count = COUNT}, Position{1.0f, 1.0f});
 
-  Archetype *arch = world.archetypes.graph()
+  Archetype *arch = world.storage()->graph
                         .archetypes()
                         .back()
                         .get();
-  auto &chunks = world.archetypes.chunks(arch);
+  auto &chunks = arch->chunks();
   assert(chunks.size() >= 2);
 
   // Set user metadata on chunk 0 (visible) and chunk 1 (culled)

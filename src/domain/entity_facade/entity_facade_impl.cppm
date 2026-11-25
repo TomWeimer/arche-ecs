@@ -43,14 +43,4 @@ std::optional<Entity> EntityFacade::resolve(uint32_t index) const noexcept {
   return slot_map_->resolve(index);
 }
 
-const SlotMap &EntityFacade::slot_map() const noexcept {
-  assert(slot_map_ != nullptr);
-  return *slot_map_;
-}
-
-SlotMap &EntityFacade::slot_map() noexcept {
-  assert(slot_map_ != nullptr);
-  return *slot_map_;
-}
-
 } // namespace arche

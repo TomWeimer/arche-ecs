@@ -62,12 +62,6 @@ public:
       SystemScale scale = SystemScale::Narrow
   );
 
-  /// Direct mutable reference to the underlying stage Scheduler.
-  [[nodiscard]] internal::Scheduler &scheduler() noexcept;
-
-  /// Direct read-only reference to the underlying stage Scheduler.
-  [[nodiscard]] const internal::Scheduler &scheduler() const noexcept;
-
   /// Registers a plugin name identifier for tracking and duplicate prevention.
   template <typename P>
   void register_plugin_name();
