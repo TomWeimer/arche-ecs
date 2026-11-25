@@ -657,6 +657,72 @@ arche-ecs/
 
 ---
 
+## Comparative Performance Analysis & Future Roadmap
+
+To keep `arche-ecs` accountable and brutally honest, the repository features comprehensive comparative benchmarks measuring `arche-ecs` against two industry standards—**Flecs** (archetype engine) and **EnTT** (sparse-set engine)—across 2,000,000 entities, multi-threading scaling, full 10-system game loops, and dynamic archetype churn.
+
+All microbenchmarks export directly to [build/benchmark_results.json](build/benchmark_results.json) and render via `make charts` into an interactive dashboard at [docs/benchmarks/benchmark_dashboard.html](docs/benchmarks/benchmark_dashboard.html) and [docs/benchmarks/BENCHMARK_RESULTS.md](docs/benchmarks/BENCHMARK_RESULTS.md).
+
+### The Harsh Numbers: Where `arche-ecs` Lost
+
+| Benchmark Scenario | `arche-ecs` | `Flecs` | `EnTT` | Reality |
+| :--- | :---: | :---: | :---: | :--- |
+| **Simple Streaming (2M)** | 962 µs | **515 µs** | 2,979 µs | **Flecs is ~1.9× faster** |
+| **Idiomatic Range-For (2M)** | 4,418 µs | **536 µs** | 2,979 µs | **Flecs is ~8× faster; our iterator is horribly slow** |
+| **Game Loop (100k, 10 sys)** | 755 µs | **315 µs** | 842 µs | **Flecs is ~2.4× faster** |
+| **Random Component Lookup** | 2,444 µs | 986 µs | **492 µs** | **EnTT is 5× faster, Flecs is 2.5× faster** |
+| **Entity Creation (20k single)** | 5,515 µs | 5,270 µs | **359 µs** | **EnTT crushes both by 15×** |
+| **Add Component (20k)** | 8,737 µs | 5,321 µs | **342 µs** | **EnTT is 25× faster, Flecs is 1.6× faster** |
+| **Entity Destruction (20k)** | 7,452 µs | 5,182 µs | **691 µs** | **EnTT is 10× faster, Flecs is 1.4× faster** |
+| **Dynamic Churn (50k Add/Remove)**| 22.9 ms | 8.2 ms | **0.83 ms** | **EnTT is 27× faster, Flecs is ~3× faster** |
+
+*(Note: Where `arche-ecs` won: Lowest memory footprint at **40.6 B/entity** vs Flecs 94.5 B and EnTT 53.3 B, and 64KB chunk-level change detection at **1.0 µs** vs EnTT 69.9 µs and Flecs 779 µs).*
+
+---
+
+### Why We Are Losing
+
+#### 1. Range-for Iterator is Broken Performance-Wise (4.4 ms vs Flecs 0.5 ms)
+Our `each_chunk` is competitive, but nobody wants to write verbose chunk lambdas with raw pointers every day. Our idiomatic `for (auto [pos, vel] : query)` is **4.5× slower** than our own chunk loop and **8× slower** than Flecs.
+* **Why:** The iterator stores entity state and recalculates row offsets, chunk pointers, and bounds on every single `++` increment. The compiler completely fails to auto-vectorize it, causing pipeline stalls on every entity step.
+
+#### 2. Random Access / `get<T>()` is Clunky (2.4 ms vs EnTT 0.5 ms)
+* **Why:** In EnTT, getting a component is literally `pool[entity_id]`—a single direct array lookup.
+* In `arche-ecs`, `world.get<T>(e)`:
+  1. Looks up the entity record in the `SlotMap` (layer 1).
+  2. Resolves its archetype pointer (layer 2).
+  3. Performs a linear/binary search through `archetype->column_ids` to locate the column index for `T`.
+  4. Multiplies by type size, finds the chunk, and offsets into the row.
+* That represents 4 to 5 memory hops and an inner search per lookup, which is why Flecs and EnTT outperform us on single-entity queries.
+
+#### 3. Archetype Transitions are Heavy and Uncached (8.7 ms vs Flecs 5.3 ms vs EnTT 0.3 ms)
+* **Why:** In `world.add<T>(e, ...)`, `arche-ecs` currently lacks an Archetype Graph with pre-cached edge lookups. Every time a component is added:
+  1. We take the current archetype's bitmask.
+  2. We set the new bit.
+  3. We search the global `ArchetypeIndex` hash map / list to find the destination archetype.
+  4. We re-register and migrate the columns one by one.
+* Flecs utilizes a pre-linked graph: adding component `X` simply follows `archetype->edges[X].add` directly to the destination table in a single pointer dereference. EnTT doesn’t migrate anything; it just pushes 16 bytes into an isolated dense vector.
+
+#### 4. The Scheduler Has Dispatch Overhead (755 µs vs Flecs 315 µs)
+* **Why:** Flecs compiles systems down to flat arrays of matching tables. When `flecs::world::progress()` runs, it iterates already-matched table pointers with minimal graph traversal or command overhead.
+* Our `arche::Scheduler` performs barrier synchronizations, command buffer handoffs, and DAG stage traversal dynamically every frame, introducing ~400 µs of pure scheduler/dispatch overhead across 10 systems.
+
+---
+
+### What Specifically Needs to Be Fixed to Close the Gap (Next Steps)
+
+1. **Fix the Iterator (P0 for Ergonomics & Idiomatic Speed):**
+   * Redesign `QueryIterator` so it does not step entity-by-entity in pure abstraction. It should maintain an inner pointer span to the current chunk's slice. When the span is exhausted, it advances to the next chunk. This enables Clang/GCC to auto-vectorize idiomatic range-for loops to match `each_chunk` speeds.
+2. **Implement an Archetype Transition Graph (P0 for Structural Mutation):**
+   * Introduce `std::vector<Archetype*> add_edges` and `remove_edges` inside each `Archetype`.
+   * After the first transition, `world.add(e, T{})` becomes an $O(1)$ pointer hop with zero bitmask lookups or index searches, cutting migration time down to match or beat Flecs (~5 ms or lower).
+3. **Cache Column Indices in Queries & Accessors (P1 for Lookup Speed):**
+   * Eliminate runtime column index searches in `get<T>()`. Cache the column index directly in component accessors or use a compact lookup table indexed by small component IDs.
+4. **Pre-Bake Scheduler Dispatch Batches:**
+   * Pre-compile the execution schedule at registration time instead of evaluating dependency rules dynamically. Pre-sort systems into fixed worker job batches so `world.run()` executes a tight, branchless loop over pre-matched chunk spans.
+
+---
+
 ## License
 
 This project is licensed under the [MIT License](LICENSE).
