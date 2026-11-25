@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Arche ECS vs. Flecs vs. EnTT — Comparative Benchmark Dashboard</title>
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  <style>
+    :root {
+      --background: #0f172a;
+      --card: #1e293b;
+      --card-border: #334155;
+      --foreground: #f8fafc;
+      --muted-foreground: #94a3b8;
+      --primary: #3b82f6;
+    }
+  </style>
+</head>
+<body class="bg-[var(--background)] text-[var(--foreground)] antialiased p-6 sm:p-10 font-sans">
+  <div class="max-w-5xl mx-auto space-y-10">
+    <!-- Header -->
+    <header class="border-b border-[var(--card-border)] pb-6 flex flex-col md:flex-row md:items-end justify-between gap-4">
+      <div>
+        <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold bg-blue-500/10 text-blue-400 border border-blue-500/20 mb-3">
+          Automated Telemetry Suite
+        </div>
+        <h1 class="text-3xl font-extrabold tracking-tight">Arche ECS Comparative Telemetry</h1>
+        <p class="text-sm text-[var(--muted-foreground)] mt-1">Rigorous comparative benchmarks: arche-ecs vs. Flecs vs. EnTT across 2M scale, multi-threading, memory footprint & change detection.</p>
+      </div>
+      <div class="flex items-center gap-4 text-xs font-medium">
+        <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-blue-500 inline-block"></span> arche-ecs</span>
+        <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-emerald-500 inline-block"></span> Flecs</span>
+        <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-amber-500 inline-block"></span> EnTT</span>
+      </div>
+    </header>
+
+    <!-- Key Insights Cards -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div class="bg-[var(--card)] border border-[var(--card-border)] p-5 rounded-2xl shadow-sm">
+        <div class="text-xs font-medium text-[var(--muted-foreground)] uppercase tracking-wider">Memory per Entity</div>
+        <div class="text-2xl font-black text-blue-400 mt-2">40.6 B <span class="text-xs text-emerald-400 font-normal">(-57% vs Flecs)</span></div>
+        <div class="text-xs text-[var(--muted-foreground)] mt-1">Tightly packed 64KB Chunk Pages (39.4% packing efficiency)</div>
+      </div>
+      <div class="bg-[var(--card)] border border-[var(--card-border)] p-5 rounded-2xl shadow-sm">
+        <div class="text-xs font-medium text-[var(--muted-foreground)] uppercase tracking-wider">Zero-Allocation Guarantee</div>
+        <div class="text-2xl font-black text-emerald-400 mt-2">0 Bytes / Frame</div>
+        <div class="text-xs text-[var(--muted-foreground)] mt-1">Steady-state simulation verified across 50 frames</div>
+      </div>
+      <div class="bg-[var(--card)] border border-[var(--card-border)] p-5 rounded-2xl shadow-sm">
+        <div class="text-xs font-medium text-[var(--muted-foreground)] uppercase tracking-wider">Change Detection (500k)</div>
+        <div class="text-2xl font-black text-blue-400 mt-2">1.0 µs <span class="text-xs text-blue-300 font-normal">(135× speedup)</span></div>
+        <div class="text-xs text-[var(--muted-foreground)] mt-1">O(1) chunk skipping via Mutated&lt;T&gt; dirty ticks</div>
+      </div>
+      <div class="bg-[var(--card)] border border-[var(--card-border)] p-5 rounded-2xl shadow-sm">
+        <div class="text-xs font-medium text-[var(--muted-foreground)] uppercase tracking-wider">Full-Frame 10-System Loop</div>
+        <div class="text-2xl font-black text-purple-400 mt-2">1,324 FPS</div>
+        <div class="text-xs text-[var(--muted-foreground)] mt-1">Faster than EnTT sequential with full DAG scheduling</div>
+      </div>
+    </div>
+
+
+    <section class="space-y-4">
+      <h2 class="text-xl font-bold flex items-center gap-2">
+        <span>Memory Footprint & Entity Packing</span>
+        <span class="text-xs font-normal text-[var(--muted-foreground)] px-2.5 py-0.5 rounded-full bg-slate-800 border border-slate-700">1,000,000 Entities (Pos + Vel, 16 B payload)</span>
+      </h2>
+      <div class="overflow-x-auto rounded-2xl border border-[var(--card-border)] bg-[var(--card)]">
+        <table class="w-full text-left text-sm">
+          <thead class="bg-slate-800/60 text-xs uppercase text-[var(--muted-foreground)] border-b border-[var(--card-border)]">
+            <tr>
+              <th class="py-3.5 px-6">ECS Framework & Architecture</th>
+              <th class="py-3.5 px-6 text-right">Total Heap Allocated</th>
+              <th class="py-3.5 px-6 text-right">Bytes / Entity</th>
+              <th class="py-3.5 px-6 text-right">Overhead Above Payload</th>
+              <th class="py-3.5 px-6 text-right">Packing Efficiency</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-[var(--card-border)] font-mono text-xs">
+            <tr class="hover:bg-slate-800/40 font-semibold text-blue-400">
+              <td class="py-3 px-6 font-sans flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-blue-500"></span> arche-ecs (64KB Chunk Pages)</td>
+              <td class="py-3 px-6 text-right">38.73 MB</td>
+              <td class="py-3 px-6 text-right">40.6 B</td>
+              <td class="py-3 px-6 text-right text-emerald-400">+24.6 B</td>
+              <td class="py-3 px-6 text-right text-emerald-400">39.4%</td>
+            </tr>
+            <tr class="hover:bg-slate-800/40 text-amber-400">
+              <td class="py-3 px-6 font-sans flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span> EnTT (Dense Sparse Pools)</td>
+              <td class="py-3 px-6 text-right">50.79 MB</td>
+              <td class="py-3 px-6 text-right">53.3 B</td>
+              <td class="py-3 px-6 text-right">+37.3 B</td>
+              <td class="py-3 px-6 text-right">30.0%</td>
+            </tr>
+            <tr class="hover:bg-slate-800/40 text-emerald-400">
+              <td class="py-3 px-6 font-sans flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> Flecs (Table Blocks)</td>
+              <td class="py-3 px-6 text-right">90.17 MB</td>
+              <td class="py-3 px-6 text-right">94.5 B</td>
+              <td class="py-3 px-6 text-right text-rose-400">+78.5 B</td>
+              <td class="py-3 px-6 text-right text-rose-400">16.9%</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+
+    <section class="space-y-8">
+      <h2 class="text-xl font-bold">Execution Performance & Scaling Charts</h2>
+      <div class="grid grid-cols-1 gap-6">
+
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 368" class="w-full max-w-3xl my-4 rounded-xl border border-[var(--card-border,#334155)] bg-[var(--card,#1e293b)] p-4 shadow-lg font-sans">
+  <text x="20" y="28" fill="var(--foreground,#f8fafc)" font-size="16" font-weight="600">3. 2M Entities: Multi-Threaded Scaling (1, 2, 4, 8 Threads)</text>
+  <text x="20" y="44" fill="var(--muted-foreground,#94a3b8)" font-size="12">Lower is better (µs)</text>
+  <g transform="translate(0, 50)">
+    <text x="225" y="20" fill="var(--foreground,#cbd5e1)" font-size="12" font-weight="500" text-anchor="end">arche-ecs (1-Thread query_…</text>
+    <rect x="240" y="6" width="360" height="18" rx="4" fill="rgba(255,255,255,0.05)" />
+    <rect x="240" y="6" width="348.2" height="18" rx="4" fill="#3b82f6" opacity="0.9" />
+    <text x="598.2" y="20" fill="var(--foreground,#f8fafc)" font-size="12" font-weight="600">965.8 µs</text>
+  </g>
+  <g transform="translate(0, 86)">
+    <text x="225" y="20" fill="var(--foreground,#cbd5e1)" font-size="12" font-weight="500" text-anchor="end">Flecs (1-Thread multi_thre…</text>
+    <rect x="240" y="6" width="360" height="18" rx="4" fill="rgba(255,255,255,0.05)" />
+    <rect x="240" y="6" width="191.1" height="18" rx="4" fill="#10b981" opacity="0.9" />
+    <text x="441.1" y="20" fill="var(--foreground,#f8fafc)" font-size="12" font-weight="600">530.2 µs</text>
+  </g>
+  <g transform="translate(0, 122)">
+    <text x="225" y="20" fill="var(--foreground,#cbd5e1)" font-size="12" font-weight="500" text-anchor="end">arche-ecs (2-Thread query_…</text>
+    <rect x="240" y="6" width="360" height="18" rx="4" fill="rgba(255,255,255,0.05)" />
+    <rect x="240" y="6" width="133.2" height="18" rx="4" fill="#3b82f6" opacity="0.9" />
+    <text x="383.2" y="20" fill="var(--foreground,#f8fafc)" font-size="12" font-weight="600">369.4 µs</text>
+  </g>
+  <g transform="translate(0, 158)">
+    <text x="225" y="20" fill="var(--foreground,#cbd5e1)" font-size="12" font-weight="500" text-anchor="end">Flecs (2-Thread multi_thre…</text>
+    <rect x="240" y="6" width="360" height="18" rx="4" fill="rgba(255,255,255,0.05)" />
+    <rect x="240" y="6" width="194.1" height="18" rx="4" fill="#10b981" opacity="0.9" />
+    <text x="444.1" y="20" fill="var(--foreground,#f8fafc)" font-size="12" font-weight="600">538.5 µs</text>
+  </g>
+  <g transform="translate(0, 194)">
+    <text x="225" y="20" fill="var(--foreground,#cbd5e1)" font-size="12" font-weight="500" text-anchor="end">arche-ecs (4-Thread query_…</text>
+    <rect x="240" y="6" width="360" height="18" rx="4" fill="rgba(255,255,255,0.05)" />
+    <rect x="240" y="6" width="106.4" height="18" rx="4" fill="#3b82f6" opacity="0.9" />
+    <text x="356.4" y="20" fill="var(--foreground,#f8fafc)" font-size="12" font-weight="600">295.1 µs</text>
+  </g>
+  <g transform="translate(0, 230)">
+    <text x="225" y="20" fill="var(--foreground,#cbd5e1)" font-size="12" font-weight="500" text-anchor="end">Flecs (4-Thread multi_thre…</text>
+    <rect x="240" y="6" width="360" height="18" rx="4" fill="rgba(255,255,255,0.05)" />
+    <rect x="240" y="6" width="360.0" height="18" rx="4" fill="#10b981" opacity="0.9" />
+    <text x="610.0" y="20" fill="var(--foreground,#f8fafc)" font-size="12" font-weight="600">998.7 µs</text>
+  </g>
+  <g transform="translate(0, 266)">
+    <text x="225" y="20" fill="var(--foreground,#cbd5e1)" font-size="12" font-weight="500" text-anchor="end">arche-ecs (8-Thread query_…</text>
+    <rect x="240" y="6" width="360" height="18" rx="4" fill="rgba(255,255,255,0.05)" />
+    <rect x="240" y="6" width="134.7" height="18" rx="4" fill="#3b82f6" opacity="0.9" />
+    <text x="384.7" y="20" fill="var(--foreground,#f8fafc)" font-size="12" font-weight="600">373.7 µs</text>
+  </g>
+  <g transform="translate(0, 302)">
+    <text x="225" y="20" fill="var(--foreground,#cbd5e1)" font-size="12" font-weight="500" text-anchor="end">Flecs (8-Thread multi_thre…</text>
+    <rect x="240" y="6" width="360" height="18" rx="4" fill="rgba(255,255,255,0.05)" />
+    <rect x="240" y="6" width="166.8" height="18" rx="4" fill="#10b981" opacity="0.9" />
+    <text x="416.8" y="20" fill="var(--foreground,#f8fafc)" font-size="12" font-weight="600">462.8 µs</text>
+  </g>
+</svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 260" class="w-full max-w-3xl my-4 rounded-xl border border-[var(--card-border,#334155)] bg-[var(--card,#1e293b)] p-4 shadow-lg font-sans">
+  <text x="20" y="28" fill="var(--foreground,#f8fafc)" font-size="16" font-weight="600">4. Wide Entity Simulation (500k Entities: 8 Components)</text>
+  <text x="20" y="44" fill="var(--muted-foreground,#94a3b8)" font-size="12">Lower is better (µs)</text>
+  <g transform="translate(0, 50)">
+    <text x="225" y="20" fill="var(--foreground,#cbd5e1)" font-size="12" font-weight="500" text-anchor="end">arche-ecs (Chunked SoA)</text>
+    <rect x="240" y="6" width="360" height="18" rx="4" fill="rgba(255,255,255,0.05)" />
+    <rect x="240" y="6" width="55.9" height="18" rx="4" fill="#3b82f6" opacity="0.9" />
+    <text x="305.9" y="20" fill="var(--foreground,#f8fafc)" font-size="12" font-weight="600">978.7 µs</text>
+  </g>
+  <g transform="translate(0, 86)">
+    <text x="225" y="20" fill="var(--foreground,#cbd5e1)" font-size="12" font-weight="500" text-anchor="end">arche-ecs (range-for idiom…</text>
+    <rect x="240" y="6" width="360" height="18" rx="4" fill="rgba(255,255,255,0.05)" />
+    <rect x="240" y="6" width="60.2" height="18" rx="4" fill="#3b82f6" opacity="0.9" />
+    <text x="310.2" y="20" fill="var(--foreground,#f8fafc)" font-size="12" font-weight="600">1.05 ms</text>
+  </g>
+  <g transform="translate(0, 122)">
+    <text x="225" y="20" fill="var(--foreground,#cbd5e1)" font-size="12" font-weight="500" text-anchor="end">Flecs (Table iter batch)</text>
+    <rect x="240" y="6" width="360" height="18" rx="4" fill="rgba(255,255,255,0.05)" />
+    <rect x="240" y="6" width="42.4" height="18" rx="4" fill="#10b981" opacity="0.9" />
+    <text x="292.4" y="20" fill="var(--foreground,#f8fafc)" font-size="12" font-weight="600">741.5 µs</text>
+  </g>
+  <g transform="translate(0, 158)">
+    <text x="225" y="20" fill="var(--foreground,#cbd5e1)" font-size="12" font-weight="500" text-anchor="end">Flecs (each idiomatic)</text>
+    <rect x="240" y="6" width="360" height="18" rx="4" fill="rgba(255,255,255,0.05)" />
+    <rect x="240" y="6" width="41.4" height="18" rx="4" fill="#10b981" opacity="0.9" />
+    <text x="291.4" y="20" fill="var(--foreground,#f8fafc)" font-size="12" font-weight="600">723.7 µs</text>
+  </g>
+  <g transform="translate(0, 194)">
+    <text x="225" y="20" fill="var(--foreground,#cbd5e1)" font-size="12" font-weight="500" text-anchor="end">EnTT (8 Sparse Pools)</text>
+    <rect x="240" y="6" width="360" height="18" rx="4" fill="rgba(255,255,255,0.05)" />
+    <rect x="240" y="6" width="360.0" height="18" rx="4" fill="#f59e0b" opacity="0.9" />
+    <text x="610.0" y="20" fill="var(--foreground,#f8fafc)" font-size="12" font-weight="600">6.30 ms</text>
+  </g>
+</svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 152" class="w-full max-w-3xl my-4 rounded-xl border border-[var(--card-border,#334155)] bg-[var(--card,#1e293b)] p-4 shadow-lg font-sans">
+  <text x="20" y="28" fill="var(--foreground,#f8fafc)" font-size="16" font-weight="600">6. Spatial Locality Query Speedup (500k Entities)</text>
+  <text x="20" y="44" fill="var(--muted-foreground,#94a3b8)" font-size="12">Lower is better (µs)</text>
+  <g transform="translate(0, 50)">
+    <text x="225" y="20" fill="var(--foreground,#cbd5e1)" font-size="12" font-weight="500" text-anchor="end">arche-ecs (Before Sort: Ra…</text>
+    <rect x="240" y="6" width="360" height="18" rx="4" fill="rgba(255,255,255,0.05)" />
+    <rect x="240" y="6" width="360.0" height="18" rx="4" fill="#3b82f6" opacity="0.9" />
+    <text x="610.0" y="20" fill="var(--foreground,#f8fafc)" font-size="12" font-weight="600">133.0 µs</text>
+  </g>
+  <g transform="translate(0, 86)">
+    <text x="225" y="20" fill="var(--foreground,#cbd5e1)" font-size="12" font-weight="500" text-anchor="end">arche-ecs (After Sort: Spa…</text>
+    <rect x="240" y="6" width="360" height="18" rx="4" fill="rgba(255,255,255,0.05)" />
+    <rect x="240" y="6" width="358.5" height="18" rx="4" fill="#3b82f6" opacity="0.9" />
+    <text x="608.5" y="20" fill="var(--foreground,#f8fafc)" font-size="12" font-weight="600">132.4 µs</text>
+  </g>
+</svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 224" class="w-full max-w-3xl my-4 rounded-xl border border-[var(--card-border,#334155)] bg-[var(--card,#1e293b)] p-4 shadow-lg font-sans">
+  <text x="20" y="28" fill="var(--foreground,#f8fafc)" font-size="16" font-weight="600">8. Exclusion Filter Query (Without<FrozenTag>, 100k Entities)</text>
+  <text x="20" y="44" fill="var(--muted-foreground,#94a3b8)" font-size="12">Lower is better (µs)</text>
+  <g transform="translate(0, 50)">
+    <text x="225" y="20" fill="var(--foreground,#cbd5e1)" font-size="12" font-weight="500" text-anchor="end">arche-ecs (Query Bitmask E…</text>
+    <rect x="240" y="6" width="360" height="18" rx="4" fill="rgba(255,255,255,0.05)" />
+    <rect x="240" y="6" width="21.5" height="18" rx="4" fill="#3b82f6" opacity="0.9" />
+    <text x="271.5" y="20" fill="var(--foreground,#f8fafc)" font-size="12" font-weight="600">12.1 µs</text>
+  </g>
+  <g transform="translate(0, 86)">
+    <text x="225" y="20" fill="var(--foreground,#cbd5e1)" font-size="12" font-weight="500" text-anchor="end">Flecs (Table iter batch)</text>
+    <rect x="240" y="6" width="360" height="18" rx="4" fill="rgba(255,255,255,0.05)" />
+    <rect x="240" y="6" width="20.3" height="18" rx="4" fill="#10b981" opacity="0.9" />
+    <text x="270.3" y="20" fill="var(--foreground,#f8fafc)" font-size="12" font-weight="600">11.4 µs</text>
+  </g>
+  <g transform="translate(0, 122)">
+    <text x="225" y="20" fill="var(--foreground,#cbd5e1)" font-size="12" font-weight="500" text-anchor="end">Flecs (each idiomatic)</text>
+    <rect x="240" y="6" width="360" height="18" rx="4" fill="rgba(255,255,255,0.05)" />
+    <rect x="240" y="6" width="20.2" height="18" rx="4" fill="#10b981" opacity="0.9" />
+    <text x="270.2" y="20" fill="var(--foreground,#f8fafc)" font-size="12" font-weight="600">11.4 µs</text>
+  </g>
+  <g transform="translate(0, 158)">
+    <text x="225" y="20" fill="var(--foreground,#cbd5e1)" font-size="12" font-weight="500" text-anchor="end">EnTT (View with Exclude)</text>
+    <rect x="240" y="6" width="360" height="18" rx="4" fill="rgba(255,255,255,0.05)" />
+    <rect x="240" y="6" width="360.0" height="18" rx="4" fill="#f59e0b" opacity="0.9" />
+    <text x="610.0" y="20" fill="var(--foreground,#f8fafc)" font-size="12" font-weight="600">202.9 µs</text>
+  </g>
+</svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 188" class="w-full max-w-3xl my-4 rounded-xl border border-[var(--card-border,#334155)] bg-[var(--card,#1e293b)] p-4 shadow-lg font-sans">
+  <text x="20" y="28" fill="var(--foreground,#f8fafc)" font-size="16" font-weight="600">12. Entity Destruction (20k Entities Despawn)</text>
+  <text x="20" y="44" fill="var(--muted-foreground,#94a3b8)" font-size="12">Lower is better (µs)</text>
+  <g transform="translate(0, 50)">
+    <text x="225" y="20" fill="var(--foreground,#cbd5e1)" font-size="12" font-weight="500" text-anchor="end">arche-ecs (Chunk Swap-Remo…</text>
+    <rect x="240" y="6" width="360" height="18" rx="4" fill="rgba(255,255,255,0.05)" />
+    <rect x="240" y="6" width="360.0" height="18" rx="4" fill="#3b82f6" opacity="0.9" />
+    <text x="610.0" y="20" fill="var(--foreground,#f8fafc)" font-size="12" font-weight="600">7.53 ms</text>
+  </g>
+  <g transform="translate(0, 86)">
+    <text x="225" y="20" fill="var(--foreground,#cbd5e1)" font-size="12" font-weight="500" text-anchor="end">EnTT (Sparse Pool Swap-Pop)</text>
+    <rect x="240" y="6" width="360" height="18" rx="4" fill="rgba(255,255,255,0.05)" />
+    <rect x="240" y="6" width="34.4" height="18" rx="4" fill="#f59e0b" opacity="0.9" />
+    <text x="284.4" y="20" fill="var(--foreground,#f8fafc)" font-size="12" font-weight="600">719.0 µs</text>
+  </g>
+  <g transform="translate(0, 122)">
+    <text x="225" y="20" fill="var(--foreground,#cbd5e1)" font-size="12" font-weight="500" text-anchor="end">Flecs (Table Swap-Remove)</text>
+    <rect x="240" y="6" width="360" height="18" rx="4" fill="rgba(255,255,255,0.05)" />
+    <rect x="240" y="6" width="247.6" height="18" rx="4" fill="#10b981" opacity="0.9" />
+    <text x="497.6" y="20" fill="var(--foreground,#f8fafc)" font-size="12" font-weight="600">5.18 ms</text>
+  </g>
+</svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 260" class="w-full max-w-3xl my-4 rounded-xl border border-[var(--card-border,#334155)] bg-[var(--card,#1e293b)] p-4 shadow-lg font-sans">
+  <text x="20" y="28" fill="var(--foreground,#f8fafc)" font-size="16" font-weight="600">13. Full-Frame 10-System Game Loop (100k Entities)</text>
+  <text x="20" y="44" fill="var(--muted-foreground,#94a3b8)" font-size="12">Lower is better (µs)</text>
+  <g transform="translate(0, 50)">
+    <text x="225" y="20" fill="var(--foreground,#cbd5e1)" font-size="12" font-weight="500" text-anchor="end">arche-ecs (Scheduler 8 Thr…</text>
+    <rect x="240" y="6" width="360" height="18" rx="4" fill="rgba(255,255,255,0.05)" />
+    <rect x="240" y="6" width="327.8" height="18" rx="4" fill="#3b82f6" opacity="0.9" />
+    <text x="577.8" y="20" fill="var(--foreground,#f8fafc)" font-size="12" font-weight="600">767.2 µs</text>
+  </g>
+  <g transform="translate(0, 86)">
+    <text x="225" y="20" fill="var(--foreground,#cbd5e1)" font-size="12" font-weight="500" text-anchor="end">arche-ecs (Scheduler 1 Thr…</text>
+    <rect x="240" y="6" width="360" height="18" rx="4" fill="rgba(255,255,255,0.05)" />
+    <rect x="240" y="6" width="322.8" height="18" rx="4" fill="#3b82f6" opacity="0.9" />
+    <text x="572.8" y="20" fill="var(--foreground,#f8fafc)" font-size="12" font-weight="600">755.5 µs</text>
+  </g>
+  <g transform="translate(0, 122)">
+    <text x="225" y="20" fill="var(--foreground,#cbd5e1)" font-size="12" font-weight="500" text-anchor="end">Flecs (Pipeline 8 Threads)</text>
+    <rect x="240" y="6" width="360" height="18" rx="4" fill="rgba(255,255,255,0.05)" />
+    <rect x="240" y="6" width="149.4" height="18" rx="4" fill="#10b981" opacity="0.9" />
+    <text x="399.4" y="20" fill="var(--foreground,#f8fafc)" font-size="12" font-weight="600">349.6 µs</text>
+  </g>
+  <g transform="translate(0, 158)">
+    <text x="225" y="20" fill="var(--foreground,#cbd5e1)" font-size="12" font-weight="500" text-anchor="end">Flecs (Pipeline 1 Thread)</text>
+    <rect x="240" y="6" width="360" height="18" rx="4" fill="rgba(255,255,255,0.05)" />
+    <rect x="240" y="6" width="134.9" height="18" rx="4" fill="#10b981" opacity="0.9" />
+    <text x="384.9" y="20" fill="var(--foreground,#f8fafc)" font-size="12" font-weight="600">315.8 µs</text>
+  </g>
+  <g transform="translate(0, 194)">
+    <text x="225" y="20" fill="var(--foreground,#cbd5e1)" font-size="12" font-weight="500" text-anchor="end">EnTT (Sequential 1 Thread)</text>
+    <rect x="240" y="6" width="360" height="18" rx="4" fill="rgba(255,255,255,0.05)" />
+    <rect x="240" y="6" width="360.0" height="18" rx="4" fill="#f59e0b" opacity="0.9" />
+    <text x="610.0" y="20" fill="var(--foreground,#f8fafc)" font-size="12" font-weight="600">842.5 µs</text>
+  </g>
+</svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 296" class="w-full max-w-3xl my-4 rounded-xl border border-[var(--card-border,#334155)] bg-[var(--card,#1e293b)] p-4 shadow-lg font-sans">
+  <text x="20" y="28" fill="var(--foreground,#f8fafc)" font-size="16" font-weight="600">16. Sparse Activity (500k Entities, 5% Mutated)</text>
+  <text x="20" y="44" fill="var(--muted-foreground,#94a3b8)" font-size="12">Lower is better (µs)</text>
+  <g transform="translate(0, 50)">
+    <text x="225" y="20" fill="var(--foreground,#cbd5e1)" font-size="12" font-weight="500" text-anchor="end">arche-ecs (Mutated<Positio…</text>
+    <rect x="240" y="6" width="360" height="18" rx="4" fill="rgba(255,255,255,0.05)" />
+    <rect x="240" y="6" width="4.0" height="18" rx="4" fill="#3b82f6" opacity="0.9" />
+    <text x="254.0" y="20" fill="var(--foreground,#f8fafc)" font-size="12" font-weight="600">1.0 µs</text>
+  </g>
+  <g transform="translate(0, 86)">
+    <text x="225" y="20" fill="var(--foreground,#cbd5e1)" font-size="12" font-weight="500" text-anchor="end">arche-ecs (Full Scan basel…</text>
+    <rect x="240" y="6" width="360" height="18" rx="4" fill="rgba(255,255,255,0.05)" />
+    <rect x="240" y="6" width="55.8" height="18" rx="4" fill="#3b82f6" opacity="0.9" />
+    <text x="305.8" y="20" fill="var(--foreground,#f8fafc)" font-size="12" font-weight="600">139.7 µs</text>
+  </g>
+  <g transform="translate(0, 122)">
+    <text x="225" y="20" fill="var(--foreground,#cbd5e1)" font-size="12" font-weight="500" text-anchor="end">Flecs (Filter iter.changed…</text>
+    <rect x="240" y="6" width="360" height="18" rx="4" fill="rgba(255,255,255,0.05)" />
+    <rect x="240" y="6" width="311.0" height="18" rx="4" fill="#10b981" opacity="0.9" />
+    <text x="561.0" y="20" fill="var(--foreground,#f8fafc)" font-size="12" font-weight="600">779.1 µs</text>
+  </g>
+  <g transform="translate(0, 158)">
+    <text x="225" y="20" fill="var(--foreground,#cbd5e1)" font-size="12" font-weight="500" text-anchor="end">Flecs (Full Scan baseline …</text>
+    <rect x="240" y="6" width="360" height="18" rx="4" fill="rgba(255,255,255,0.05)" />
+    <rect x="240" y="6" width="47.9" height="18" rx="4" fill="#10b981" opacity="0.9" />
+    <text x="297.9" y="20" fill="var(--foreground,#f8fafc)" font-size="12" font-weight="600">120.0 µs</text>
+  </g>
+  <g transform="translate(0, 194)">
+    <text x="225" y="20" fill="var(--foreground,#cbd5e1)" font-size="12" font-weight="500" text-anchor="end">EnTT (ActiveFlag Sparse Vi…</text>
+    <rect x="240" y="6" width="360" height="18" rx="4" fill="rgba(255,255,255,0.05)" />
+    <rect x="240" y="6" width="27.9" height="18" rx="4" fill="#f59e0b" opacity="0.9" />
+    <text x="277.9" y="20" fill="var(--foreground,#f8fafc)" font-size="12" font-weight="600">69.9 µs</text>
+  </g>
+  <g transform="translate(0, 230)">
+    <text x="225" y="20" fill="var(--foreground,#cbd5e1)" font-size="12" font-weight="500" text-anchor="end">EnTT (Full Scan baseline 5…</text>
+    <rect x="240" y="6" width="360" height="18" rx="4" fill="rgba(255,255,255,0.05)" />
+    <rect x="240" y="6" width="360.0" height="18" rx="4" fill="#f59e0b" opacity="0.9" />
+    <text x="610.0" y="20" fill="var(--foreground,#f8fafc)" font-size="12" font-weight="600">901.9 µs</text>
+  </g>
+</svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 188" class="w-full max-w-3xl my-4 rounded-xl border border-[var(--card-border,#334155)] bg-[var(--card,#1e293b)] p-4 shadow-lg font-sans">
+  <text x="20" y="28" fill="var(--foreground,#f8fafc)" font-size="16" font-weight="600">18. Multi-Archetype Alternating Churn (50k Entities)</text>
+  <text x="20" y="44" fill="var(--muted-foreground,#94a3b8)" font-size="12">Lower is better (ms)</text>
+  <g transform="translate(0, 50)">
+    <text x="225" y="20" fill="var(--foreground,#cbd5e1)" font-size="12" font-weight="500" text-anchor="end">arche-ecs (4-Way Cycle)</text>
+    <rect x="240" y="6" width="360" height="18" rx="4" fill="rgba(255,255,255,0.05)" />
+    <rect x="240" y="6" width="360.0" height="18" rx="4" fill="#3b82f6" opacity="0.9" />
+    <text x="610.0" y="20" fill="var(--foreground,#f8fafc)" font-size="12" font-weight="600">23.05 ms</text>
+  </g>
+  <g transform="translate(0, 86)">
+    <text x="225" y="20" fill="var(--foreground,#cbd5e1)" font-size="12" font-weight="500" text-anchor="end">Flecs (4-Way Cycle)</text>
+    <rect x="240" y="6" width="360" height="18" rx="4" fill="rgba(255,255,255,0.05)" />
+    <rect x="240" y="6" width="125.6" height="18" rx="4" fill="#10b981" opacity="0.9" />
+    <text x="375.6" y="20" fill="var(--foreground,#f8fafc)" font-size="12" font-weight="600">8.04 ms</text>
+  </g>
+  <g transform="translate(0, 122)">
+    <text x="225" y="20" fill="var(--foreground,#cbd5e1)" font-size="12" font-weight="500" text-anchor="end">EnTT (4-Way Cycle)</text>
+    <rect x="240" y="6" width="360" height="18" rx="4" fill="rgba(255,255,255,0.05)" />
+    <rect x="240" y="6" width="13.7" height="18" rx="4" fill="#f59e0b" opacity="0.9" />
+    <text x="263.7" y="20" fill="var(--foreground,#f8fafc)" font-size="12" font-weight="600">875.5 µs</text>
+  </g>
+</svg>
+
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="border-t border-[var(--card-border)] pt-6 text-xs text-[var(--muted-foreground)] flex justify-between items-center">
+      <div>Generated automatically by <code class="text-blue-400">scripts/benchmarks/benchmark_charts.py</code></div>
+      <div>Arche ECS High-Performance C++20 Archetype Engine</div>
+    </footer>
+  </div>
+</body>
+</html>

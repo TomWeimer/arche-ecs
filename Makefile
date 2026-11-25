@@ -2,7 +2,7 @@ BUILD_DIR ?= build
 BUILD_TYPE ?= Release
 NUM_JOBS ?= $(shell sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 8)
 
-.PHONY: all build test benchmark clean fclean re lint
+.PHONY: all build test benchmark charts clean fclean re lint
 
 all: build
 
@@ -22,6 +22,9 @@ test: build
 benchmark: build
 	@./$(BUILD_DIR)/arche_benchmarks
 	@./$(BUILD_DIR)/comparative_ecs_benchmarks
+
+charts:
+	@python3 scripts/benchmarks/benchmark_charts.py
 
 clean:
 	@if [ -d "$(BUILD_DIR)" ]; then cmake --build $(BUILD_DIR) --target clean; fi
