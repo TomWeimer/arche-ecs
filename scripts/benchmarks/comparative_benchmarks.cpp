@@ -320,43 +320,47 @@ int main() {
       });
     }
 
-    // 1C. 2,000,000 Entities: Multi-Threaded Scaling (8 Threads vs Single)
+    // 1C. 2,000,000 Entities: Multi-Threaded Scaling (1, 2, 4, 8 Threads)
     {
       arche::World world;
       world.spawn(
           {.count = COUNT_2M}, Position{0.0f, 0.0f}, Velocity{1.0f, 2.0f}
       );
-      auto query = world.query<Position, const Velocity>();
 
-      const uint32_t threads = std::max(
-          2u, std::thread::hardware_concurrency()
-      );
-      arche::internal::ThreadPool pool(threads);
-
-      bench_2m.title("3. 2M Entities: Multi-Threaded Chunk Parallelism")
-          .run(
-              "arche-ecs (8-Thread query_parallel)",
-              [&] {
-                world.query<Position, const Velocity>().each_parallel(
-                    [](uint32_t count, Position *pos, const Velocity *vel) {
-                      for (uint32_t i = 0; i < count; ++i) {
-                        pos[i].x += vel[i].vx * 0.016f;
-                        pos[i].y += vel[i].vy * 0.016f;
-                      }
-                    }
-                );
-              }
-          )
-          .run("arche-ecs (Single-Thread baseline)", [&] {
-            query.each_chunk(
-                [](uint32_t count, Position *pos, const Velocity *vel) {
-                  for (uint32_t i = 0; i < count; ++i) {
-                    pos[i].x += vel[i].vx * 0.016f;
-                    pos[i].y += vel[i].vy * 0.016f;
-                  }
-                }
-            );
+      flecs::world ecs;
+      for (size_t i = 0; i < COUNT_2M; ++i) {
+        ecs.entity().set<Position>({0.0f, 0.0f}).set<Velocity>({1.0f, 2.0f});
+      }
+      ecs.system<Position, const Velocity>()
+          .multi_threaded()
+          .each([](Position &pos, const Velocity &vel) {
+            pos.x += vel.vx * 0.016f;
+            pos.y += vel.vy * 0.016f;
           });
+
+      bench_2m.title("3. 2M Entities: Multi-Threaded Scaling (1, 2, 4, 8 Threads)");
+
+      const std::vector<uint32_t> thread_counts = {1, 2, 4, 8};
+
+      for (uint32_t t : thread_counts) {
+        world.set_threads(t);
+        bench_2m.run("arche-ecs (" + std::to_string(t) + "-Thread query_parallel)", [&] {
+          world.query<Position, const Velocity>().each_parallel(
+              [](uint32_t count, Position *pos, const Velocity *vel) {
+                for (uint32_t i = 0; i < count; ++i) {
+                  pos[i].x += vel[i].vx * 0.016f;
+                  pos[i].y += vel[i].vy * 0.016f;
+                }
+              }
+          );
+        });
+
+        ecs.set_threads(static_cast<int32_t>(t));
+        ecs.progress(); // Warmup stages
+        bench_2m.run("Flecs (" + std::to_string(t) + "-Thread multi_threaded)", [&] {
+          ecs.progress();
+        });
+      }
     }
   }
 
