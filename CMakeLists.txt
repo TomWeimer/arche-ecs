@@ -23,58 +23,58 @@ target_sources(arche
       src/foundation/entity/entity.cppm
       src/foundation/component/component_mask.cppm
       src/foundation/component/type_id.cppm
-      src/foundation/component/detail/type_id_impl.cppm
-      src/foundation/component/detail/column_layout.cppm
+      src/foundation/component/type_id_impl.cppm
+      src/foundation/component/column_layout.cppm
       src/foundation/hardware/hardware.cppm
       # Layer 1: Storage
       src/storage/chunk/chunk.cppm
-      src/storage/chunk/detail/chunk_impl.cppm
+      src/storage/chunk/chunk_impl.cppm
       src/storage/chunk/chunk_pool.cppm
-      src/storage/chunk/detail/chunk_pool_impl.cppm
-      src/storage/chunk/detail/chunk_header.cppm
+      src/storage/chunk/chunk_pool_impl.cppm
+      src/storage/chunk/chunk_header.cppm
       src/storage/slot_map/slot_map.cppm
-      src/storage/slot_map/detail/slot_map_impl.cppm
-      src/storage/slot_map/detail/entity_record.cppm
+      src/storage/slot_map/slot_map_impl.cppm
+      src/storage/slot_map/entity_record.cppm
       # Layer 2: Structure
       src/structure/archetype/archetype.cppm
-      src/structure/archetype/detail/archetype_impl.cppm
+      src/structure/archetype/archetype_impl.cppm
       src/structure/archetype/archetype_graph.cppm
-      src/structure/archetype/detail/archetype_graph_impl.cppm
+      src/structure/archetype/archetype_graph_impl.cppm
       src/structure/query_cache/query_cache.cppm
       # Layer 3: Lifecycle
       src/lifecycle/mutation/mutation.cppm
-      src/lifecycle/mutation/detail/mutation_impl.cppm
+      src/lifecycle/mutation/mutation_impl.cppm
       src/lifecycle/command/command.cppm
-      src/lifecycle/command/detail/command_impl.cppm
+      src/lifecycle/command/command_impl.cppm
       src/lifecycle/snapshot/snapshot.cppm
-      src/lifecycle/snapshot/detail/snapshot_header.cppm
-      src/lifecycle/snapshot/detail/snapshot_impl.cppm
+      src/lifecycle/snapshot/snapshot_header.cppm
+      src/lifecycle/snapshot/snapshot_impl.cppm
       src/lifecycle/resource/resource.cppm
-      src/lifecycle/resource/detail/resource_impl.cppm
+      src/lifecycle/resource/resource_impl.cppm
       src/lifecycle/entity_view/entity_view.cppm
       # Layer 4: Runtime
       src/runtime/concurrency/thread_pool.cppm
-      src/runtime/concurrency/detail/thread_pool_impl.cppm
+      src/runtime/concurrency/thread_pool_impl.cppm
       src/runtime/query/query_filters.cppm
       src/runtime/query/query.cppm
-      src/runtime/query/detail/query_masks.cppm
-      src/runtime/query/detail/query_offsets.cppm
-      src/runtime/query/detail/query_filter.cppm
-      src/runtime/query/detail/query_iterator.cppm
-      src/runtime/query/detail/query_impl.cppm
+      src/runtime/query/query_masks.cppm
+      src/runtime/query/query_offsets.cppm
+      src/runtime/query/query_filter.cppm
+      src/runtime/query/query_iterator.cppm
+      src/runtime/query/query_impl.cppm
       src/runtime/system/access.cppm
       src/runtime/system/system_types.cppm
       src/runtime/system/scheduler.cppm
-      src/runtime/system/detail/scheduler_impl.cppm
+      src/runtime/system/scheduler_impl.cppm
       src/runtime/system/system_context.cppm
-      src/runtime/system/detail/system_context_impl.cppm
+      src/runtime/system/system_context_impl.cppm
       src/runtime/system/access_builder.cppm
-      src/runtime/system/detail/access_builder_impl.cppm
+      src/runtime/system/access_builder_impl.cppm
       src/runtime/system/plugin.cppm
-      src/runtime/system/detail/plugin_impl.cppm
+      src/runtime/system/plugin_impl.cppm
       src/runtime/sort/sort.cppm
-      src/runtime/sort/detail/permute.cppm
-      src/runtime/sort/detail/sort_impl.cppm
+      src/runtime/sort/permute.cppm
+      src/runtime/sort/sort_impl.cppm
       # Layer 5: Domain Sub-Facades
       src/domain/archetype_facade/archetype_facade.cppm
       src/domain/archetype_facade/archetype_facade_impl.cppm
@@ -90,11 +90,11 @@ target_sources(arche
       src/domain/system_facade/system_facade_impl.cppm
       # Layer 6: World Assembly Coordinator & Storage
       src/world/world.cppm
-      src/world/detail/world_storage.cppm
-      src/world/detail/world_impl.cppm
+      src/world/world_storage.cppm
+      src/world/world_impl.cppm
   PRIVATE
-    src/runtime/sort/detail/sort.cpp
-    src/world/detail/world.cpp
+      src/runtime/sort/sort.cpp
+      src/world/world.cpp
 )
 
 target_include_directories(arche PUBLIC
