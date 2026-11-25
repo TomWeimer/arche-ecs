@@ -10,9 +10,7 @@ using arche::internal::Archetype;
 using arche::internal::ArchetypeGraph;
 using arche::CommandBuffer;
 using arche::Entity;
-using arche::GpuStd430Compatible;
 using arche::internal::Hardware;
-using arche::Std430Traits;
 using arche::TypeID;
 using arche::internal::TypeRegistry;
 using arche::World;
@@ -54,28 +52,6 @@ struct Mass {
  * @brief Zero-sized tag component representing entity mortality state.
  */
 struct TagDead {};
-
-/**
- * @struct GoodVec4
- * @brief std430-compliant 16-byte 4D vector.
- */
-struct GoodVec4 {
-  float x{0.0f};
-  float y{0.0f};
-  float z{0.0f};
-  float w{1.0f};
-};
-
-/**
- * @struct BadVec3
- * @brief Intentionally unpadded 12-byte 3D vector violating std430 array stride
- * rules.
- */
-struct BadVec3 {
-  float x{0.0f};
-  float y{0.0f};
-  float z{0.0f};
-};
 
 // =============================================================================
 // Unit Test 1: SlotMap Generational Safety
@@ -316,40 +292,6 @@ void test_deferred_command_buffer() {
 }
 
 // =============================================================================
-// Unit Test 6: GPU std430 Reflection Traits
-// =============================================================================
-
-/**
- * @brief Validates compile-time traits enforcing GPU std430 alignment rules.
- *
- * --- Why This Test Is Necessary (Documentation Rationale) ---
- * Under GPU `layout(std430)` specifications, 3D vectors (`vec3`) require
- * 16-byte array strides. A naive C++ struct of 12 bytes (`float[3]`) causes
- * off-by-4-byte memory misalignment in shaders. `GpuStd430Compatible`
- * statically validates types at compile time before memory is streamed to VRAM.
- *
- * This test guarantees:
- * 1. Compliant 16-byte structs (`GoodVec4`) pass `GpuStd430Compatible`.
- * 2. Unpadded 12-byte structs (`BadVec3`) fail
- * `Std430Traits<T>::is_safe_std430`.
- */
-void test_gpu_reflection_traits() {
-  std::cout << "[Test 6/6] GPU std430 Reflection Traits... ";
-
-  // 1. Positive check: 16-byte struct is std430 safe
-  static_assert(
-      GpuStd430Compatible<GoodVec4>, "GoodVec4 must be std430 compatible"
-  );
-
-  // 2. Negative check: unpadded 12-byte struct must be rejected
-  static_assert(
-      !Std430Traits<BadVec3>::is_safe_std430,
-      "BadVec3 (unpadded 12B) must fail std430 trait!"
-  );
-
-  std::cout << "PASSED\n";
-}
-
 // =============================================================================
 // Test Suite Entry Point
 // =============================================================================
@@ -364,10 +306,9 @@ int main() {
   test_hardware_adaptive_chunking();
   test_swap_and_pop_compaction();
   test_deferred_command_buffer();
-  test_gpu_reflection_traits();
 
   std::cout << "====================================================\n";
-  std::cout << ">>> ALL 6 UNIT TEST SUITES PASSED SUCCESSFULLY! <<<\n";
+  std::cout << ">>> ALL 5 UNIT TEST SUITES PASSED SUCCESSFULLY! <<<\n";
   std::cout << "====================================================\n";
   return 0;
 }

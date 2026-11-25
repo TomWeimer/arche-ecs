@@ -105,7 +105,6 @@ World::World(size_t chunk_size, uint32_t thread_count)
           storage_->installed_plugins,
           this
       ),
-      gpu(storage_->graph),
       commands(
           *storage_->parallel_cmd,
           [](ParallelCommandBuffer &cmd, void *ctx) {

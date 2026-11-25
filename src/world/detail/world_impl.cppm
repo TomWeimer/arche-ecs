@@ -25,8 +25,6 @@ import :domain.command;
 import :domain.command_impl;
 import :domain.entity;
 import :domain.entity_impl;
-import :domain.gpu;
-import :domain.gpu_impl;
 import :domain.resource;
 import :domain.resource_impl;
 import :domain.snapshot;

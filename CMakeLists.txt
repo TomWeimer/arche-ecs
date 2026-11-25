@@ -28,8 +28,6 @@ target_sources(arche
       src/foundation/component/detail/column_layout.cppm
       src/foundation/hardware/hardware.cppm
       src/foundation/hardware/math.cppm
-      src/foundation/hardware/gpu_layout.cppm
-      src/foundation/hardware/gpu_span.cppm
       # Layer 1: Storage
       src/storage/chunk/chunk.cppm
       src/storage/chunk/detail/chunk_impl.cppm
@@ -87,8 +85,6 @@ target_sources(arche
       src/domain/command_facade/command_facade_impl.cppm
       src/domain/entity_facade/entity_facade.cppm
       src/domain/entity_facade/entity_facade_impl.cppm
-      src/domain/gpu_facade/gpu_facade.cppm
-      src/domain/gpu_facade/gpu_facade_impl.cppm
       src/domain/resource_facade/resource_facade.cppm
       src/domain/resource_facade/resource_facade_impl.cppm
       src/domain/snapshot_facade/snapshot_facade.cppm
@@ -143,11 +139,6 @@ add_test(NAME structural_mutation_tests COMMAND structural_mutation_tests)
 add_executable(query_tests tests/query_tests.cpp)
 target_link_libraries(query_tests PRIVATE arche::arche)
 add_test(NAME query_tests COMMAND query_tests)
-
-# Module 007 Tests: GPU std430 Reflection & Buffer Views
-add_executable(gpu_reflection_tests tests/gpu_reflection_tests.cpp)
-target_link_libraries(gpu_reflection_tests PRIVATE arche::arche)
-add_test(NAME gpu_reflection_tests COMMAND gpu_reflection_tests)
 
 # Module 008: All-in-One Invariant Test Suite
 add_executable(arche_tests tests/arche_tests.cpp)
@@ -249,7 +240,6 @@ add_custom_target(run_tests
     COMMAND chunk_storage_tests
     COMMAND structural_mutation_tests
     COMMAND query_tests
-    COMMAND gpu_reflection_tests
     COMMAND arche_tests
     COMMAND handles_and_snapshots_tests
     COMMAND batch_lifecycle_tests
@@ -266,7 +256,7 @@ add_custom_target(run_tests
     COMMAND scheduler_tests
     COMMAND plugin_tests
     COMMAND world_facade_tests
-    DEPENDS entity_tests type_tests archetype_tests chunk_storage_tests structural_mutation_tests query_tests gpu_reflection_tests arche_tests handles_and_snapshots_tests batch_lifecycle_tests simd_and_hardware_tests dirty_ticks_tests query_caching_tests archetype_permutation_tests double_buffered_tests multithreaded_query_tests stage2_validation_tests public_api_tests resource_tests access_tests scheduler_tests plugin_tests world_facade_tests
+    DEPENDS entity_tests type_tests archetype_tests chunk_storage_tests structural_mutation_tests query_tests arche_tests handles_and_snapshots_tests batch_lifecycle_tests simd_and_hardware_tests dirty_ticks_tests query_caching_tests archetype_permutation_tests double_buffered_tests multithreaded_query_tests stage2_validation_tests public_api_tests resource_tests access_tests scheduler_tests plugin_tests world_facade_tests
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
     COMMENT "Executing all unit tests..."
 )
@@ -283,7 +273,6 @@ add_custom_target(fclean
         $<TARGET_FILE:chunk_storage_tests>
         $<TARGET_FILE:structural_mutation_tests>
         $<TARGET_FILE:query_tests>
-        $<TARGET_FILE:gpu_reflection_tests>
         $<TARGET_FILE:arche_tests>
         $<TARGET_FILE:arche_benchmarks>
         $<TARGET_FILE:handles_and_snapshots_tests>

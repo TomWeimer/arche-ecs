@@ -21,10 +21,15 @@ class Scheduler;
 
 /**
  * @concept Plugin
- * @brief Autonomous module contract initializing resources, systems, and components.
+ * @brief Autonomous module contract initializing resources, systems, and
+ * components.
  */
 template <typename P>
-concept Plugin = requires(P plugin, World &world, internal::Scheduler &scheduler) {
+concept Plugin = requires(
+    P plugin,
+    World &world,
+    internal::Scheduler &scheduler
+) {
   { plugin.build(world, scheduler) } -> std::same_as<void>;
   { P::name() } -> std::convertible_to<std::string_view>;
 };
@@ -35,7 +40,8 @@ concept Plugin = requires(P plugin, World &world, internal::Scheduler &scheduler
 
 /**
  * @class PluginRegistry
- * @brief Tracks installed engine plugins to enforce single-installation invariants.
+ * @brief Tracks installed engine plugins to enforce single-installation
+ * invariants.
  */
 class PluginRegistry {
 private:
@@ -49,7 +55,8 @@ public:
    * @brief Records a plugin by name.
    *
    * @param name Unique string identifier of the plugin.
-   * @throws std::runtime_error If a plugin with the given name was already registered.
+   * @throws std::runtime_error If a plugin with the given name was already
+   * registered.
    */
   void register_plugin(std::string_view name);
 

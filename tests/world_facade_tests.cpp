@@ -64,18 +64,8 @@ int main() {
   assert(!world.resources.has<GameConfig>());
   std::cout << "PASSED\n";
 
-  // 3. Test GPU Facade
-  std::cout << "[Test 3/4] GPU Facade (view_chunks & stream_to)... ";
-  auto views = world.gpu.view_chunks<Position>();
-  assert(views.size() == 2); // 2 distinct archetypes possessing Position
-
-  std::vector<Position> streamed_positions(2);
-  size_t bytes = world.gpu.stream_to<Position>(streamed_positions.data());
-  assert(bytes == 2 * sizeof(Position));
-  std::cout << "PASSED\n";
-
-  // 4. Test Snapshots Facade (Memory & File persistence)
-  std::cout << "[Test 4/4] Snapshots Facade (File save & restore)... ";
+  // 3. Test Snapshots Facade (Memory & File persistence)
+  std::cout << "[Test 3/3] Snapshots Facade (File save & restore)... ";
   assert(world.snapshots.size_bytes() > 0);
   auto hdr = world.snapshots.header();
   assert(hdr.magic == 0x48435241);

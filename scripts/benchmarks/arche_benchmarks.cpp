@@ -258,13 +258,23 @@ void run_gpu_streaming_benchmark(size_t entity_count, int iterations) {
   std::vector<uint8_t> mock_mapped_vram(vram_bytes, 0);
 
   // 3. Warm-up
-  world.gpu.stream_to<Position>(mock_mapped_vram.data());
+  auto stream_to_vram = [&](void *dest) -> size_t {
+    auto *dst_ptr = reinterpret_cast<uint8_t *>(dest);
+    size_t total_bytes = 0;
+    world.query<const Position>().each_chunk([&](uint32_t count, const Position *src) {
+      const size_t bytes = count * sizeof(Position);
+      std::memcpy(dst_ptr + total_bytes, src, bytes);
+      total_bytes += bytes;
+    });
+    return total_bytes;
+  };
+  stream_to_vram(mock_mapped_vram.data());
 
   // 4. Benchmark streaming
   const auto start_time = std::chrono::high_resolution_clock::now();
   size_t bytes_written = 0;
   for (int it = 0; it < iterations; ++it) {
-    bytes_written = world.gpu.stream_to<Position>(mock_mapped_vram.data());
+    bytes_written = stream_to_vram(mock_mapped_vram.data());
   }
   const auto end_time = std::chrono::high_resolution_clock::now();
 
@@ -451,11 +461,22 @@ void run_ring_vram_streaming_benchmark(size_t entity_count, int iterations) {
   const size_t slot_bytes = entity_count * sizeof(Position);
   std::vector<uint8_t> vram_ring(slot_bytes * 3, 0);
 
+  auto stream_to_vram = [&](void *dest) -> size_t {
+    auto *dst_ptr = reinterpret_cast<uint8_t *>(dest);
+    size_t total_bytes = 0;
+    world.query<const Position>().each_chunk([&](uint32_t count, const Position *src) {
+      const size_t bytes = count * sizeof(Position);
+      std::memcpy(dst_ptr + total_bytes, src, bytes);
+      total_bytes += bytes;
+    });
+    return total_bytes;
+  };
+
   const auto start = std::chrono::high_resolution_clock::now();
   size_t bytes_written = 0;
 
   for (int it = 0; it < iterations; ++it) {
-    bytes_written = world.gpu.stream_to<Position>(vram_ring.data());
+    bytes_written = stream_to_vram(vram_ring.data());
   }
 
   const auto end = std::chrono::high_resolution_clock::now();

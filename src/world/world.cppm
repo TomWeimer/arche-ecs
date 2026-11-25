@@ -22,7 +22,6 @@ export import :entity_view;
 export import :domain.archetype;
 export import :domain.command;
 export import :domain.entity;
-export import :domain.gpu;
 export import :domain.resource;
 export import :domain.snapshot;
 export import :domain.system;
@@ -58,7 +57,6 @@ export namespace arche {
  * - `world.resources`  -> Global singleton resources (Time, Input, Config).
  * - `world.snapshots`  -> Binary persistence (save / load world state).
  * - `world.systems`    -> Stage scheduler and pipeline execution.
- * - `world.gpu`        -> GPU buffer layout and shader reflection.
  * - `world.archetypes` -> Structural graph metrics and chunk memory inspection.
  */
 class World {
@@ -88,9 +86,6 @@ public:
 
   /// Stage-based system scheduler: register stages, systems, and execution pipelines.
   SystemFacade systems;
-
-  /// GPU memory reflection: inspect contiguous component columns and stream to GPU buffers.
-  GpuFacade gpu;
 
   /// Deferred command buffer management: commit or clear world-level command buffers.
   CommandFacade commands;

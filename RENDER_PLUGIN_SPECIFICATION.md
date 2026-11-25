@@ -52,6 +52,169 @@ static_assert(
 } // namespace arche
 ```
 
+### C. Original `Std430Traits` & `GpuStd430Compatible` (`src/foundation/hardware/gpu_layout.cppm`)
+
+```cpp
+#include <cstddef>
+#include <type_traits>
+
+namespace render {
+
+/**
+ * @struct Std430Traits
+ * @brief Compile-time validation of memory alignment and struct packing under
+ * GPU std430 rules (Vulkan, OpenGL SSBO, DirectX DXIL).
+ */
+template <typename T> struct Std430Traits {
+  static constexpr size_t size = sizeof(T);
+  static constexpr size_t alignment = alignof(T);
+  static constexpr bool is_power_of_two_aligned = (alignment != 0) &&
+      ((alignment & (alignment - 1)) == 0);
+  static constexpr bool is_size_multiple_of_alignment = (size % alignment) == 0;
+  static constexpr bool is_safe_std430 = is_power_of_two_aligned &&
+      is_size_multiple_of_alignment && (size != 12 || alignment == 16);
+};
+
+/**
+ * @concept GpuStd430Compatible
+ * @brief Constrains component types to trivially copyable structs satisfying
+ * std430 GPU alignment.
+ */
+template <typename T>
+concept GpuStd430Compatible = std::is_trivially_copyable_v<T> &&
+    Std430Traits<T>::is_safe_std430;
+
+} // namespace render
+```
+
+### D. Original `ComponentSpan` (`src/foundation/hardware/gpu_span.cppm`)
+
+```cpp
+#include <cstddef>
+#include <span>
+
+namespace render {
+
+/**
+ * @class ComponentSpan
+ * @brief Zero-copy, non-owning contiguous view over an archetype chunk component column.
+ */
+template <typename T> class ComponentSpan : public std::span<const T> {
+public:
+  using std::span<const T>::span;
+
+  constexpr ComponentSpan(const T *data, size_t count) noexcept
+      : std::span<const T>(data, count) {}
+
+  /// Returns the number of active component elements in this chunk column.
+  [[nodiscard]] constexpr size_t count() const noexcept { return this->size(); }
+
+  /// Returns the byte stride between contiguous elements (sizeof(T)).
+  [[nodiscard]] constexpr size_t stride() const noexcept { return sizeof(T); }
+
+  /// Converts this view explicitly to a standard C++20 std::span.
+  [[nodiscard]] constexpr std::span<const T> as_span() const noexcept {
+    return *this;
+  }
+};
+
+} // namespace render
+```
+
+### E. Original `GpuFacade` Implementation (`src/domain/gpu_facade/`)
+
+```cpp
+#include <cassert>
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
+#include <vector>
+
+namespace render {
+
+class GpuFacade {
+public:
+  constexpr GpuFacade() noexcept = default;
+  explicit constexpr GpuFacade(arche::internal::ArchetypeGraph &graph) noexcept
+      : graph_(&graph) {}
+
+  /// Returns spans of contiguous component column slices across all chunks for GPU upload.
+  template <typename T>
+  [[nodiscard]] std::vector<ComponentSpan<T>> view_chunks() {
+    assert(graph_ != nullptr);
+    const arche::TypeID tid = arche::type_id<T>();
+    std::vector<ComponentSpan<T>> result;
+
+    for (const auto &arch_ptr : graph_->archetypes()) {
+      const int16_t col = arch_ptr->column_index(tid);
+      if (col < 0) continue;
+
+      const auto &layout = arch_ptr->column_layout(static_cast<size_t>(col));
+      for (arche::internal::Chunk *chunk : arch_ptr->chunks()) {
+        if (chunk->count() > 0) {
+          T *ptr = reinterpret_cast<T *>(chunk->component_element(layout, 0));
+          result.emplace_back(ptr, chunk->count());
+        }
+      }
+    }
+    return result;
+  }
+
+  /// Streams all component columns of type T directly into a destination memory buffer.
+  template <typename T>
+  size_t stream_to(void *destination_buffer) {
+    assert(graph_ != nullptr && destination_buffer != nullptr);
+    const arche::TypeID tid = arche::type_id<T>();
+    uint8_t *dst = reinterpret_cast<uint8_t *>(destination_buffer);
+    size_t total_bytes = 0;
+
+    for (const auto &arch_ptr : graph_->archetypes()) {
+      const int16_t col = arch_ptr->column_index(tid);
+      if (col < 0) continue;
+
+      const auto &layout = arch_ptr->column_layout(static_cast<size_t>(col));
+      for (arche::internal::Chunk *chunk : arch_ptr->chunks()) {
+        const uint32_t count = chunk->count();
+        if (count > 0) {
+          const size_t bytes = count * sizeof(T);
+          const void *src = chunk->component_element(layout, 0);
+          std::memcpy(dst, src, bytes);
+          dst += bytes;
+          total_bytes += bytes;
+        }
+      }
+    }
+    return total_bytes;
+  }
+
+private:
+  arche::internal::ArchetypeGraph *graph_{nullptr};
+};
+
+} // namespace render
+```
+
+### F. Modern Pure Consumer Pattern (Using Public `query.each_chunk()`)
+
+In modern Arche-ECS, consumer projects do not need `GpuFacade` or internal `ArchetypeGraph` access. The identical linear blit is achieved through the public `Query` API with automatic `QueryCache` acceleration and zero intermediate heap allocations:
+
+```cpp
+template <typename T>
+size_t stream_to_vram(arche::World &world, void *mapped_vram_buffer) {
+  auto *dst = static_cast<uint8_t *>(mapped_vram_buffer);
+  size_t total_bytes = 0;
+
+  world.query<const T>().each_chunk([&](uint32_t count, const T *src) {
+    const size_t bytes = count * sizeof(T);
+    std::memcpy(dst, src, bytes);
+    dst += bytes;
+    total_bytes += bytes;
+  });
+
+  return total_bytes;
+}
+```
+
 ### B. Original `stream_gpu` & `indirect_draw` (`include/arche/world.hpp`)
 
 ```cpp
@@ -145,6 +308,169 @@ inline size_t World::indirect_draw(
 }
 
 } // namespace arche
+```
+
+### C. Original `Std430Traits` & `GpuStd430Compatible` (`src/foundation/hardware/gpu_layout.cppm`)
+
+```cpp
+#include <cstddef>
+#include <type_traits>
+
+namespace render {
+
+/**
+ * @struct Std430Traits
+ * @brief Compile-time validation of memory alignment and struct packing under
+ * GPU std430 rules (Vulkan, OpenGL SSBO, DirectX DXIL).
+ */
+template <typename T> struct Std430Traits {
+  static constexpr size_t size = sizeof(T);
+  static constexpr size_t alignment = alignof(T);
+  static constexpr bool is_power_of_two_aligned = (alignment != 0) &&
+      ((alignment & (alignment - 1)) == 0);
+  static constexpr bool is_size_multiple_of_alignment = (size % alignment) == 0;
+  static constexpr bool is_safe_std430 = is_power_of_two_aligned &&
+      is_size_multiple_of_alignment && (size != 12 || alignment == 16);
+};
+
+/**
+ * @concept GpuStd430Compatible
+ * @brief Constrains component types to trivially copyable structs satisfying
+ * std430 GPU alignment.
+ */
+template <typename T>
+concept GpuStd430Compatible = std::is_trivially_copyable_v<T> &&
+    Std430Traits<T>::is_safe_std430;
+
+} // namespace render
+```
+
+### D. Original `ComponentSpan` (`src/foundation/hardware/gpu_span.cppm`)
+
+```cpp
+#include <cstddef>
+#include <span>
+
+namespace render {
+
+/**
+ * @class ComponentSpan
+ * @brief Zero-copy, non-owning contiguous view over an archetype chunk component column.
+ */
+template <typename T> class ComponentSpan : public std::span<const T> {
+public:
+  using std::span<const T>::span;
+
+  constexpr ComponentSpan(const T *data, size_t count) noexcept
+      : std::span<const T>(data, count) {}
+
+  /// Returns the number of active component elements in this chunk column.
+  [[nodiscard]] constexpr size_t count() const noexcept { return this->size(); }
+
+  /// Returns the byte stride between contiguous elements (sizeof(T)).
+  [[nodiscard]] constexpr size_t stride() const noexcept { return sizeof(T); }
+
+  /// Converts this view explicitly to a standard C++20 std::span.
+  [[nodiscard]] constexpr std::span<const T> as_span() const noexcept {
+    return *this;
+  }
+};
+
+} // namespace render
+```
+
+### E. Original `GpuFacade` Implementation (`src/domain/gpu_facade/`)
+
+```cpp
+#include <cassert>
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
+#include <vector>
+
+namespace render {
+
+class GpuFacade {
+public:
+  constexpr GpuFacade() noexcept = default;
+  explicit constexpr GpuFacade(arche::internal::ArchetypeGraph &graph) noexcept
+      : graph_(&graph) {}
+
+  /// Returns spans of contiguous component column slices across all chunks for GPU upload.
+  template <typename T>
+  [[nodiscard]] std::vector<ComponentSpan<T>> view_chunks() {
+    assert(graph_ != nullptr);
+    const arche::TypeID tid = arche::type_id<T>();
+    std::vector<ComponentSpan<T>> result;
+
+    for (const auto &arch_ptr : graph_->archetypes()) {
+      const int16_t col = arch_ptr->column_index(tid);
+      if (col < 0) continue;
+
+      const auto &layout = arch_ptr->column_layout(static_cast<size_t>(col));
+      for (arche::internal::Chunk *chunk : arch_ptr->chunks()) {
+        if (chunk->count() > 0) {
+          T *ptr = reinterpret_cast<T *>(chunk->component_element(layout, 0));
+          result.emplace_back(ptr, chunk->count());
+        }
+      }
+    }
+    return result;
+  }
+
+  /// Streams all component columns of type T directly into a destination memory buffer.
+  template <typename T>
+  size_t stream_to(void *destination_buffer) {
+    assert(graph_ != nullptr && destination_buffer != nullptr);
+    const arche::TypeID tid = arche::type_id<T>();
+    uint8_t *dst = reinterpret_cast<uint8_t *>(destination_buffer);
+    size_t total_bytes = 0;
+
+    for (const auto &arch_ptr : graph_->archetypes()) {
+      const int16_t col = arch_ptr->column_index(tid);
+      if (col < 0) continue;
+
+      const auto &layout = arch_ptr->column_layout(static_cast<size_t>(col));
+      for (arche::internal::Chunk *chunk : arch_ptr->chunks()) {
+        const uint32_t count = chunk->count();
+        if (count > 0) {
+          const size_t bytes = count * sizeof(T);
+          const void *src = chunk->component_element(layout, 0);
+          std::memcpy(dst, src, bytes);
+          dst += bytes;
+          total_bytes += bytes;
+        }
+      }
+    }
+    return total_bytes;
+  }
+
+private:
+  arche::internal::ArchetypeGraph *graph_{nullptr};
+};
+
+} // namespace render
+```
+
+### F. Modern Pure Consumer Pattern (Using Public `query.each_chunk()`)
+
+In modern Arche-ECS, consumer projects do not need `GpuFacade` or internal `ArchetypeGraph` access. The identical linear blit is achieved through the public `Query` API with automatic `QueryCache` acceleration and zero intermediate heap allocations:
+
+```cpp
+template <typename T>
+size_t stream_to_vram(arche::World &world, void *mapped_vram_buffer) {
+  auto *dst = static_cast<uint8_t *>(mapped_vram_buffer);
+  size_t total_bytes = 0;
+
+  world.query<const T>().each_chunk([&](uint32_t count, const T *src) {
+    const size_t bytes = count * sizeof(T);
+    std::memcpy(dst, src, bytes);
+    dst += bytes;
+    total_bytes += bytes;
+  });
+
+  return total_bytes;
+}
 ```
 
 ---

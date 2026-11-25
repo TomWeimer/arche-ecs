@@ -102,26 +102,24 @@ void test_parallel_command_buffers() {
 // =============================================================================
 
 void test_chunk_views_and_streaming() {
-  std::cout << "[Test 3/4] Component Chunk Views & Linear Streaming... ";
+  std::cout << "[Test 3/4] Contiguous Chunk Iteration & Linear Streaming... ";
   World world;
 
   constexpr size_t COUNT = 1000;
   world.spawn({.count = COUNT}, Position{42.0f, 84.0f});
 
-  auto views = world.gpu.view_chunks<Position>();
-  assert(!views.empty());
-
-  size_t total_count = 0;
-  for (const auto &span : views) {
-    total_count += span.count();
-    assert(span.data() != nullptr);
-  }
-  assert(total_count == COUNT);
-
   std::vector<Position> dest(COUNT);
-  size_t streamed = world.gpu.stream_to<Position>(dest.data());
-  assert(streamed == COUNT * sizeof(Position));
+  size_t total_count = 0;
+  auto *dst_ptr = dest.data();
+
+  world.query<const Position>().each_chunk([&](uint32_t count, const Position *src) {
+    std::memcpy(dst_ptr + total_count, src, count * sizeof(Position));
+    total_count += count;
+  });
+
+  assert(total_count == COUNT);
   assert(dest[0].x == 42.0f && dest[0].y == 84.0f);
+  assert(dest[COUNT - 1].x == 42.0f && dest[COUNT - 1].y == 84.0f);
 
   std::cout << "PASSED\n";
 }
