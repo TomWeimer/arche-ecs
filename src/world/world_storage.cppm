@@ -56,6 +56,7 @@ struct WorldStorage {
       query_caches{};
   std::unique_ptr<ThreadPool> thread_pool;
   std::unique_ptr<ParallelCommandBuffer> parallel_cmd;
+  std::unique_ptr<SystemExecutionTarget> execution_target;
 
   explicit WorldStorage(
       size_t chunk_sz = 65536,

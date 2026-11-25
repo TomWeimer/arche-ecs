@@ -96,7 +96,10 @@ World::World(size_t chunk_size, uint32_t thread_count)
           this
       ),
       resources(storage_->resources),
-      archetypes(storage_->graph) {}
+      archetypes(storage_->graph) {
+  storage_->execution_target =
+      std::make_unique<internal::SystemExecutionTarget>(system_execution_target());
+}
 
 World::~World() {
   clear();
@@ -105,21 +108,24 @@ World::~World() {
 
 void World::run() {
   assert(storage_ != nullptr);
+  assert(storage_->execution_target != nullptr);
   if (storage_->thread_pool) {
-    storage_->scheduler.run(system_execution_target(), *storage_->thread_pool);
+    storage_->scheduler.run(*storage_->execution_target, *storage_->thread_pool);
   } else {
-    storage_->scheduler.run(system_execution_target());
+    storage_->scheduler.run(*storage_->execution_target);
   }
 }
 
 void World::run_sequential() {
   assert(storage_ != nullptr);
-  storage_->scheduler.run(system_execution_target());
+  assert(storage_->execution_target != nullptr);
+  storage_->scheduler.run(*storage_->execution_target);
 }
 
 void World::compile() {
   assert(storage_ != nullptr);
-  storage_->scheduler.compile(system_execution_target());
+  assert(storage_->execution_target != nullptr);
+  storage_->scheduler.compile(*storage_->execution_target);
 }
 
 std::optional<SystemFacade> World::system(std::string_view name) noexcept {
@@ -131,10 +137,7 @@ std::optional<SystemFacade> World::system(std::string_view name) noexcept {
   return SystemFacade(
       storage_->scheduler,
       *idx,
-      this,
-      [](void *ctx) -> SystemExecutionTarget {
-        return static_cast<World *>(ctx)->system_execution_target();
-      }
+      storage_->execution_target.get()
   );
 }
 

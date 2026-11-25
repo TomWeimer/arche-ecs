@@ -19,11 +19,11 @@ export import :access_builder;
 export import :plugin;
 export import :system_types;
 export import :system_context;
-export import :domain.archetype;
-export import :domain.entity;
-export import :domain.resource;
-export import :domain.snapshot;
-export import :domain.system;
+export import :archetype_view;
+export import :entity_view;
+export import :resource_view;
+export import :snapshot_view;
+export import :system_view;
 export import :world;
 
 // --- Internal Engine Subsystems (in namespace arche::internal) ----------------
@@ -65,9 +65,4 @@ export import :query.detail.filter;
 export import :system.detail.access_builder_impl;
 export import :system.detail.plugin_impl;
 export import :system.detail.system_context_impl;
-export import :domain.archetype_impl;
-export import :domain.entity_impl;
-export import :domain.resource_impl;
-export import :domain.snapshot_impl;
-export import :domain.system_impl;
 export import :world.detail.impl;

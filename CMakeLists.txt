@@ -50,7 +50,6 @@ target_sources(arche
       src/lifecycle/snapshot/snapshot_impl.cppm
       src/lifecycle/resource/resource.cppm
       src/lifecycle/resource/resource_impl.cppm
-      src/lifecycle/entity_view/entity_view.cppm
       # Layer 4: Runtime
       src/runtime/concurrency/thread_pool.cppm
       src/runtime/concurrency/thread_pool_impl.cppm
@@ -74,17 +73,12 @@ target_sources(arche
       src/runtime/sort/sort.cppm
       src/runtime/sort/permute.cppm
       src/runtime/sort/sort_impl.cppm
-      # Layer 5: Domain Sub-Facades
-      src/domain/archetype_facade/archetype_facade.cppm
-      src/domain/archetype_facade/archetype_facade_impl.cppm
-      src/domain/entity_facade/entity_facade.cppm
-      src/domain/entity_facade/entity_facade_impl.cppm
-      src/domain/resource_facade/resource_facade.cppm
-      src/domain/resource_facade/resource_facade_impl.cppm
-      src/domain/snapshot_facade/snapshot_facade.cppm
-      src/domain/snapshot_facade/snapshot_facade_impl.cppm
-      src/domain/system_facade/system_facade.cppm
-      src/domain/system_facade/system_facade_impl.cppm
+      # Layer 5: Views
+      src/views/archetype_view.cppm
+      src/views/entity_view.cppm
+      src/views/resource_view.cppm
+      src/views/snapshot_view.cppm
+      src/views/system_view.cppm
       # Layer 6: World Assembly Coordinator & Storage
       src/world/world.cppm
       src/world/world_storage.cppm

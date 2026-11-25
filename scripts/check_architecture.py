@@ -202,9 +202,9 @@ SUBSYSTEM_RULES: Dict[str, Dict] = {
             "sort",
         ],
     },
-    "domain": {
+    "views": {
         "layer": 5,
-        "description": "Domain facades encapsulating lower-level subsystems",
+        "description": "Domain views encapsulating lower-level subsystems",
         "allowed_targets": [
             "types",
             "hardware",
@@ -223,6 +223,32 @@ SUBSYSTEM_RULES: Dict[str, Dict] = {
             "concurrency",
             "system",
             "sort",
+            "views",
+            "domain",
+        ],
+    },
+    "domain": {
+        "layer": 5,
+        "description": "Domain views encapsulating lower-level subsystems (alias)",
+        "allowed_targets": [
+            "types",
+            "hardware",
+            "core_component",
+            "chunk",
+            "sparse_entity",
+            "public_entities",
+            "entity_lifecycle",
+            "archetype",
+            "query_cache",
+            "mutation",
+            "command",
+            "snapshot",
+            "resource",
+            "query",
+            "concurrency",
+            "system",
+            "sort",
+            "views",
             "domain",
         ],
     },
@@ -311,9 +337,13 @@ def classify_subsystem(file_path: str) -> Tuple[str, int]:
     if p.startswith("src/runtime/sort/") or p.startswith("src/sort/"):
         return "sort", SUBSYSTEM_RULES["sort"]["layer"]
 
-    # Tier 5: domain
-    if p.startswith("src/domain/") or p.startswith("src/facade/"):
-        return "domain", SUBSYSTEM_RULES["domain"]["layer"]
+    # Tier 5: views / domain
+    if (
+        p.startswith("src/views/")
+        or p.startswith("src/domain/")
+        or p.startswith("src/facade/")
+    ):
+        return "views", SUBSYSTEM_RULES["views"]["layer"]
 
     # Tier 6: world
     if p.startswith("src/world/"):

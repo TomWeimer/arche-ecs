@@ -19,11 +19,10 @@ export module arche:world;
 
 export import :entity;
 export import :entity_view;
-export import :domain.archetype;
-export import :domain.entity;
-export import :domain.resource;
-export import :domain.snapshot;
-export import :domain.system;
+export import :archetype_view;
+export import :resource_view;
+export import :snapshot_view;
+export import :system_view;
 export import :system_context;
 export import :query;
 export import :mutation;
