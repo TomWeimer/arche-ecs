@@ -10,7 +10,7 @@ export module arche;
 export import :entity;
 export import :access;
 export import :filters;
-export import :type_id;
+export import :component_id;
 export import :entity_view;
 export import :command;
 export import :command.detail.impl;
@@ -30,8 +30,7 @@ export import :world;
 // --- Internal Engine Subsystems (in namespace arche::internal) ----------------
 export import :hardware;
 export import :component_mask;
-export import :component.detail.column_layout;
-export import :component.detail.type_id_impl;
+export import :component.detail.component_id_impl;
 export import :chunk;
 export import :chunk.detail.chunk_header;
 export import :chunk.detail.impl;

@@ -33,7 +33,7 @@ import :domain.system;
 import :domain.system_impl;
 import :mutation;
 import :command;
-import :component.detail.type_id_impl;
+import :component.detail.component_id_impl;
 import :concurrency.detail.thread_pool_impl;
 import :system.detail.scheduler_impl;
 import :system.detail.system_context_impl;
@@ -45,7 +45,7 @@ import :query;
 import :query.detail.impl;
 import :resource.detail.impl;
 import :sort;
-import :type_id;
+import :component_id;
 import :chunk;
 import :archetype;
 import :slot_map;
@@ -195,13 +195,13 @@ template <Component T> inline bool World::has(Entity entity) const noexcept {
   if (!record || !record->archetype) {
     return false;
   }
-  return record->archetype->has_component(type_id<T>());
+  return record->archetype->has_component(component_id<T>());
 }
 
 template <Component T> inline const T &World::get(Entity entity) const {
   const EntityRecord &record = storage_->slot_map.get_record(entity);
   Archetype *arch = record.archetype;
-  const int16_t col = arch->column_index(type_id<T>());
+  const int16_t col = arch->column_index(component_id<T>());
   assert(col >= 0 && "Component not present on entity");
   const auto &layout = arch->column_layout(static_cast<size_t>(col));
   return *reinterpret_cast<const T *>(record.chunk->component_element(layout, record.row));
@@ -210,7 +210,7 @@ template <Component T> inline const T &World::get(Entity entity) const {
 template <Component T> inline T &World::get_mut(Entity entity) {
   const EntityRecord &record = storage_->slot_map.get_record(entity);
   Archetype *arch = record.archetype;
-  const int16_t col = arch->column_index(type_id<T>());
+  const int16_t col = arch->column_index(component_id<T>());
   assert(col >= 0 && "Component not present on entity");
   record.chunk->set_column_version(static_cast<uint16_t>(col), storage_->current_version);
   const auto &layout = arch->column_layout(static_cast<size_t>(col));
@@ -341,8 +341,8 @@ inline void permute(
 
 template <typename... Components>
 inline void permute(World &world, std::span<const uint32_t> target_indices) {
-  (world.storage()->registry.register_type<std::decay_t<Components>>(), ...);
-  std::vector<TypeID> types = {type_id<std::decay_t<Components>>()...};
+  (world.storage()->registry.register_component<std::decay_t<Components>>(), ...);
+  std::vector<ComponentID> types = {component_id<std::decay_t<Components>>()...};
   Archetype *arch = world.archetypes.graph().get_or_create(types);
   permute(world, arch, target_indices);
 }
@@ -365,7 +365,7 @@ template <typename Component, typename... Filters, typename Compare>
 inline void sort(World &world, Compare &&comp) {
   ComponentMask include_mask;
   ComponentMask exclude_mask;
-  include_mask.set(type_id<Component>());
+  include_mask.set(component_id<Component>());
   if constexpr (sizeof...(Filters) > 0) {
     (
         [&]<typename Filter>() {
@@ -392,7 +392,7 @@ template <typename Component, typename... Filters, typename KeyExtractor>
 inline void sort_by_key(World &world, KeyExtractor &&key_fn) {
   ComponentMask include_mask;
   ComponentMask exclude_mask;
-  include_mask.set(type_id<Component>());
+  include_mask.set(component_id<Component>());
   if constexpr (sizeof...(Filters) > 0) {
     (
         [&]<typename Filter>() {

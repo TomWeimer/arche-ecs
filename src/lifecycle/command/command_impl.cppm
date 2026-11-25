@@ -137,13 +137,13 @@ inline void CommandBuffer::add(Entity entity, T component) {
       "Deferred add requires trivially copyable data types"
   );
 
-  // 2. Atomically write opcode, target entity, TypeID, type registrar, and
+  // 2. Atomically write opcode, target entity, ComponentID, type registrar, and
   // component size.
   write(
       CommandType::AddComponent,
       entity,
-      type_id<T>(),
-      RegisterTypeFn{[](TypeRegistry &reg) { reg.register_type<T>(); }},
+      component_id<T>(),
+      RegisterTypeFn{[](ComponentRegistry &reg) { reg.register_component<T>(); }},
       static_cast<uint32_t>(sizeof(T))
   );
 
@@ -154,9 +154,9 @@ inline void CommandBuffer::add(Entity entity, T component) {
 // --- Remove - Component ------------------------------------------------------
 
 template <typename T> inline void CommandBuffer::remove(Entity entity) {
-  // 1. Write component removal opcode, entity handle, and TypeID in one
+  // 1. Write component removal opcode, entity handle, and ComponentID in one
   // statement.
-  write(CommandType::RemoveComponent, entity, type_id<T>());
+  write(CommandType::RemoveComponent, entity, component_id<T>());
 }
 
 // =============================================================================
@@ -244,7 +244,7 @@ inline void CommandBuffer::commit(MutationContext ctx) {
     }
     case CommandType::AddComponent: {
       const auto entity = read<Entity>(offset);
-      const auto tid = read<TypeID>(offset);
+      const auto tid = read<ComponentID>(offset);
       const auto reg_fn = read<RegisterTypeFn>(offset);
       const auto size = read<uint32_t>(offset);
       const void *data = read_bytes(offset, size);
@@ -256,7 +256,7 @@ inline void CommandBuffer::commit(MutationContext ctx) {
     }
     case CommandType::RemoveComponent: {
       const auto entity = read<Entity>(offset);
-      const auto tid = read<TypeID>(offset);
+      const auto tid = read<ComponentID>(offset);
       Mutation::remove_component(ctx, entity, tid);
       break;
     }

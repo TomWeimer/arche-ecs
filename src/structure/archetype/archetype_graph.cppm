@@ -11,7 +11,7 @@ export module arche:archetype_graph;
 
 export import :archetype;
 export import :component_mask;
-export import :type_id;
+export import :component_id;
 export import :query_cache;
 
 export namespace arche::internal {
@@ -37,7 +37,7 @@ export namespace arche::internal {
  */
 class ArchetypeGraph {
 private:
-  const TypeRegistry &registry_;
+  const ComponentRegistry &registry_;
   uint32_t chunk_size_{65536};
   Archetype *root_{nullptr};
   std::vector<std::unique_ptr<Archetype>> archetypes_;
@@ -54,7 +54,7 @@ public:
    * @param chunk_size Memory page size in bytes for chunk allocations (default: 64 KB).
    */
   explicit ArchetypeGraph(
-      const TypeRegistry &registry,
+      const ComponentRegistry &registry,
       uint32_t chunk_size = 65536
   );
 
@@ -100,7 +100,7 @@ public:
    * @param types Span of component TypeIDs.
    * @return Active archetype pointer.
    */
-  Archetype *get_or_create(std::span<const TypeID> types);
+  Archetype *get_or_create(std::span<const ComponentID> types);
 
   // --- Graph Transition Navigation -------------------------------------------
 
@@ -111,10 +111,10 @@ public:
    * bitmask, resolves the target archetype node, and memoizes the bidirectional edge.
    *
    * @param from Source archetype node.
-   * @param type Component TypeID to attach.
+   * @param type Component ComponentID to attach.
    * @return Destination archetype node.
    */
-  Archetype *traverse_add(Archetype *from, TypeID type);
+  Archetype *traverse_add(Archetype *from, ComponentID type);
 
   /**
    * @brief Navigates the directional transition edge for removing a component type.
@@ -123,10 +123,10 @@ public:
    * bitmask, resolves the target archetype node, and memoizes the bidirectional edge.
    *
    * @param from Source archetype node.
-   * @param type Component TypeID to detach.
+   * @param type Component ComponentID to detach.
    * @return Destination archetype node.
    */
-  Archetype *traverse_remove(Archetype *from, TypeID type);
+  Archetype *traverse_remove(Archetype *from, ComponentID type);
 
   // --- Query Cache Registration ----------------------------------------------
 

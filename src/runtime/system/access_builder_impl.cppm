@@ -6,7 +6,7 @@ export module arche:system.detail.access_builder_impl;
 
 import :access_builder;
 import :access;
-import :type_id;
+import :component_id;
 import :resource;
 
 export namespace arche {
@@ -17,13 +17,13 @@ export namespace arche {
 
 template <typename... Comps>
 inline AccessBuilder &AccessBuilder::reads() noexcept {
-  (read_components_.set(type_id<std::decay_t<Comps>>()), ...);
+  (read_components_.set(component_id<std::decay_t<Comps>>()), ...);
   return *this;
 }
 
 template <typename... Comps>
 inline AccessBuilder &AccessBuilder::writes() noexcept {
-  (write_components_.set(type_id<std::decay_t<Comps>>()), ...);
+  (write_components_.set(component_id<std::decay_t<Comps>>()), ...);
   return *this;
 }
 

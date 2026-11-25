@@ -22,9 +22,8 @@ target_sources(arche
       # Layer 0: Foundation
       src/foundation/entity/entity.cppm
       src/foundation/component/component_mask.cppm
-      src/foundation/component/type_id.cppm
-      src/foundation/component/type_id_impl.cppm
-      src/foundation/component/column_layout.cppm
+      src/foundation/component/component_id.cppm
+      src/foundation/component/component_id_impl.cppm
       src/foundation/hardware/hardware.cppm
       # Layer 1: Storage
       src/storage/chunk/chunk.cppm
@@ -113,9 +112,9 @@ target_link_libraries(entity_tests PRIVATE arche::arche)
 add_test(NAME entity_tests COMMAND entity_tests)
 
 # Module 002 Tests: Type Registry & Component Mask
-add_executable(type_tests tests/type_tests.cpp)
-target_link_libraries(type_tests PRIVATE arche::arche)
-add_test(NAME type_tests COMMAND type_tests)
+add_executable(component_id_tests tests/component_id_tests.cpp)
+target_link_libraries(component_id_tests PRIVATE arche::arche)
+add_test(NAME component_id_tests COMMAND component_id_tests)
 
 # Module 003 Tests: Archetype & Transition Graph
 add_executable(archetype_tests tests/archetype_tests.cpp)
@@ -232,7 +231,7 @@ add_test(
 # Custom Target: run all unit tests
 add_custom_target(run_tests
     COMMAND entity_tests
-    COMMAND type_tests
+    COMMAND component_id_tests
     COMMAND archetype_tests
     COMMAND chunk_storage_tests
     COMMAND structural_mutation_tests
@@ -253,7 +252,7 @@ add_custom_target(run_tests
     COMMAND scheduler_tests
     COMMAND plugin_tests
     COMMAND world_facade_tests
-    DEPENDS entity_tests type_tests archetype_tests chunk_storage_tests structural_mutation_tests query_tests arche_tests handles_and_snapshots_tests batch_lifecycle_tests simd_and_hardware_tests dirty_ticks_tests query_caching_tests archetype_permutation_tests double_buffered_tests multithreaded_query_tests stage2_validation_tests public_api_tests resource_tests access_tests scheduler_tests plugin_tests world_facade_tests
+    DEPENDS entity_tests component_id_tests archetype_tests chunk_storage_tests structural_mutation_tests query_tests arche_tests handles_and_snapshots_tests batch_lifecycle_tests simd_and_hardware_tests dirty_ticks_tests query_caching_tests archetype_permutation_tests double_buffered_tests multithreaded_query_tests stage2_validation_tests public_api_tests resource_tests access_tests scheduler_tests plugin_tests world_facade_tests
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
     COMMENT "Executing all unit tests..."
 )
@@ -265,7 +264,7 @@ add_custom_target(fclean
     COMMAND ${CMAKE_COMMAND} -E rm -f
         $<TARGET_FILE:arche>
         $<TARGET_FILE:entity_tests>
-        $<TARGET_FILE:type_tests>
+        $<TARGET_FILE:component_id_tests>
         $<TARGET_FILE:archetype_tests>
         $<TARGET_FILE:chunk_storage_tests>
         $<TARGET_FILE:structural_mutation_tests>

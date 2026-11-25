@@ -32,7 +32,7 @@ inline void Mutation::construct_component_in_row(
     U &&value
 ) {
   // 1. Resolve column index for component type.
-  const TypeID tid = type_id<std::decay_t<T>>();
+  const ComponentID tid = component_id<std::decay_t<T>>();
   const int16_t col = arch->column_index(tid);
   assert(col >= 0 && "Component not present in archetype column layout");
 
@@ -49,7 +49,7 @@ inline void Mutation::stamp_column_version(
     Chunk *chunk
 ) noexcept {
   // 1. Find column index for component type and stamp current mutation tick.
-  const int16_t col = arch->column_index(type_id<std::decay_t<T>>());
+  const int16_t col = arch->column_index(component_id<std::decay_t<T>>());
   if (col >= 0) {
     chunk->set_column_version(static_cast<uint16_t>(col), ctx.current_version);
   }
@@ -109,11 +109,11 @@ inline void Mutation::populate_chunks_batch(
 template <typename... Comps>
   requires(!(std::is_same_v<std::decay_t<Comps>, Batch> || ...))
 inline Entity Mutation::spawn(MutationContext &ctx, Comps &&...components) {
-  // 1. Ensure all component types are registered in the TypeRegistry.
-  (ctx.registry.register_type<std::decay_t<Comps>>(), ...);
+  // 1. Ensure all component types are registered in the ComponentRegistry.
+  (ctx.registry.register_component<std::decay_t<Comps>>(), ...);
 
   // 2. Resolve destination archetype node in the graph.
-  std::vector<TypeID> types = {type_id<std::decay_t<Comps>>()...};
+  std::vector<ComponentID> types = {component_id<std::decay_t<Comps>>()...};
   Archetype *arch = ctx.graph.get_or_create(types);
 
   // 3. Allocate generational entity handle in the SlotMap.
@@ -151,11 +151,11 @@ inline void Mutation::spawn_payload(
     std::memcpy(static_cast<void *>(&tuple), payload, sizeof(TupleType));
   }
 
-  // 2. Ensure all component types are registered in the TypeRegistry.
-  (ctx.registry.register_type<std::decay_t<Comps>>(), ...);
+  // 2. Ensure all component types are registered in the ComponentRegistry.
+  (ctx.registry.register_component<std::decay_t<Comps>>(), ...);
 
   // 3. Resolve destination archetype node in the graph.
-  std::vector<TypeID> types = {type_id<std::decay_t<Comps>>()...};
+  std::vector<ComponentID> types = {component_id<std::decay_t<Comps>>()...};
   Archetype *arch = ctx.graph.get_or_create(types);
 
   // 4. Allocate generational entity handle in the SlotMap.
@@ -195,8 +195,8 @@ inline std::vector<Entity> Mutation::spawn_batch(
   }
 
   // 1. Register types and resolve destination archetype.
-  (ctx.registry.register_type<std::decay_t<Comps>>(), ...);
-  std::vector<TypeID> types = {type_id<std::decay_t<Comps>>()...};
+  (ctx.registry.register_component<std::decay_t<Comps>>(), ...);
+  std::vector<ComponentID> types = {component_id<std::decay_t<Comps>>()...};
   Archetype *arch = ctx.graph.get_or_create(types);
 
   // 2. Allocate batch of entity handles in SlotMap.
@@ -211,7 +211,7 @@ inline std::vector<Entity> Mutation::spawn_batch(
       entities,
       [&](Chunk *chunk, uint32_t start_row, size_t, uint32_t to_add) {
         (chunk->fill_column<std::decay_t<Comps>>(
-             *arch->column_layout_for(type_id<std::decay_t<Comps>>()),
+             *arch->column_layout_for(component_id<std::decay_t<Comps>>()),
              start_row,
              to_add,
              components
@@ -238,8 +238,8 @@ inline void Mutation::spawn_batch(
   }
 
   // 1. Register types and resolve destination archetype.
-  (ctx.registry.register_type<std::decay_t<Comps>>(), ...);
-  std::vector<TypeID> types = {type_id<std::decay_t<Comps>>()...};
+  (ctx.registry.register_component<std::decay_t<Comps>>(), ...);
+  std::vector<ComponentID> types = {component_id<std::decay_t<Comps>>()...};
   Archetype *arch = ctx.graph.get_or_create(types);
 
   // 2. Allocate batch of entity handles in SlotMap.
@@ -253,7 +253,7 @@ inline void Mutation::spawn_batch(
       out_entities.subspan(0, count),
       [&](Chunk *chunk, uint32_t start_row, size_t offset, uint32_t to_add) {
         (chunk->copy_column<std::decay_t<Comps>>(
-             *arch->column_layout_for(type_id<std::decay_t<Comps>>()),
+             *arch->column_layout_for(component_id<std::decay_t<Comps>>()),
              start_row,
              column_data + offset,
              to_add
@@ -363,8 +363,8 @@ inline void Mutation::add_component(
     T &&component
 ) {
   // 1. Register component type and find current entity location.
-  ctx.registry.register_type<std::decay_t<T>>();
-  const TypeID tid = type_id<std::decay_t<T>>();
+  ctx.registry.register_component<std::decay_t<T>>();
+  const ComponentID tid = component_id<std::decay_t<T>>();
   const EntityRecord *rec = ctx.slot_map.find_record(entity);
   if (!rec || !rec->archetype || rec->archetype->has_component(tid)) {
     return;
@@ -380,7 +380,7 @@ inline void Mutation::add_component(
 void Mutation::add_component(
     MutationContext &ctx,
     Entity entity,
-    TypeID tid,
+    ComponentID tid,
     const void *data
 ) {
   // 1. Find current entity record and ensure component is not already attached.
@@ -402,7 +402,7 @@ inline void Mutation::remove_component(
     Entity entity
 ) {
   // 1. Find current entity record and ensure component is currently attached.
-  const TypeID tid = type_id<std::decay_t<T>>();
+  const ComponentID tid = component_id<std::decay_t<T>>();
   const EntityRecord *rec = ctx.slot_map.find_record(entity);
   if (!rec || !rec->archetype || !rec->archetype->has_component(tid)) {
     return;
@@ -418,7 +418,7 @@ inline void Mutation::remove_component(
 void Mutation::remove_component(
     MutationContext &ctx,
     Entity entity,
-    TypeID tid
+    ComponentID tid
 ) {
   // 1. Find current entity record and ensure component is currently attached.
   const EntityRecord *rec = ctx.slot_map.find_record(entity);
@@ -443,7 +443,7 @@ void Mutation::migrate(
     const EntityRecord &old_record,
     Archetype *src_arch,
     Archetype *dst_arch,
-    TypeID mutated_type,
+    ComponentID mutated_type,
     const void *added_component_data
 ) {
   assert(src_arch != nullptr && dst_arch != nullptr);
@@ -456,7 +456,7 @@ void Mutation::migrate(
   // 2. Relocate preserved components and write newly added component.
   for (size_t i = 0; i < dst_arch->component_count(); ++i) {
     const auto &dst_layout = dst_arch->column_layout(i);
-    const TypeID tid = dst_layout.type_id;
+    const ComponentID tid = dst_layout.component_id;
     void *dst_ptr = dst_chunk->component_element(dst_layout, dst_row);
 
     if (tid == mutated_type && added_component_data) {

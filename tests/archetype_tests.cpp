@@ -10,8 +10,8 @@ namespace {
 using arche::internal::Archetype;
 using arche::internal::ArchetypeGraph;
 
-using arche::TypeID;
-using arche::internal::TypeRegistry;
+using arche::ComponentID;
+using arche::internal::ComponentRegistry;
 } // namespace
 
 // =============================================================================
@@ -64,7 +64,7 @@ struct alignas(16) LargeTag {
 void test_root_initialization() {
   std::cout << "[Test 1/6] Root Initialization & Empty Archetype... ";
 
-  TypeRegistry registry;
+  ComponentRegistry registry;
   ArchetypeGraph graph(registry);
 
   Archetype *root = graph.root();
@@ -101,15 +101,15 @@ void test_single_addition_and_caching() {
   std::cout
       << "[Test 2/6] Single Component Addition & Bidirectional Caching... ";
 
-  TypeRegistry registry;
-  registry.register_type<Position>();
-  registry.register_type<Velocity>();
+  ComponentRegistry registry;
+  registry.register_component<Position>();
+  registry.register_component<Velocity>();
 
   ArchetypeGraph graph(registry);
   Archetype *root = graph.root();
 
-  const TypeID pos_t = arche::type_id<Position>();
-  const TypeID vel_t = arche::type_id<Velocity>();
+  const ComponentID pos_t = arche::component_id<Position>();
+  const ComponentID vel_t = arche::component_id<Velocity>();
 
   // 1. Cold traversal: First addition of Position (creates target archetype)
   Archetype *arch_pos = graph.traverse_add(root, pos_t);
@@ -152,15 +152,15 @@ void test_single_addition_and_caching() {
 void test_diamond_convergence() {
   std::cout << "[Test 3/6] Diamond Convergence (Commutative Addition)... ";
 
-  TypeRegistry registry;
-  registry.register_type<Position>();
-  registry.register_type<Velocity>();
+  ComponentRegistry registry;
+  registry.register_component<Position>();
+  registry.register_component<Velocity>();
 
   ArchetypeGraph graph(registry);
   Archetype *root = graph.root();
 
-  const TypeID pos_t = arche::type_id<Position>();
-  const TypeID vel_t = arche::type_id<Velocity>();
+  const ComponentID pos_t = arche::component_id<Position>();
+  const ComponentID vel_t = arche::component_id<Velocity>();
 
   // Path 1: Root -> +Position -> +Velocity
   Archetype *p1_pos = graph.traverse_add(root, pos_t);
@@ -201,18 +201,18 @@ void test_diamond_convergence() {
 void test_removal_transitions() {
   std::cout << "[Test 4/6] Component Removal Transitions... ";
 
-  TypeRegistry registry;
-  registry.register_type<Position>();
-  registry.register_type<Velocity>();
-  registry.register_type<Mass>();
+  ComponentRegistry registry;
+  registry.register_component<Position>();
+  registry.register_component<Velocity>();
+  registry.register_component<Mass>();
 
   ArchetypeGraph graph(registry);
-  const TypeID pos_t = arche::type_id<Position>();
-  const TypeID vel_t = arche::type_id<Velocity>();
-  const TypeID mass_t = arche::type_id<Mass>();
+  const ComponentID pos_t = arche::component_id<Position>();
+  const ComponentID vel_t = arche::component_id<Velocity>();
+  const ComponentID mass_t = arche::component_id<Mass>();
 
   // Create 3-component archetype directly via get_or_create
-  std::vector<TypeID> types = {pos_t, vel_t, mass_t};
+  std::vector<ComponentID> types = {pos_t, vel_t, mass_t};
   Archetype *full = graph.get_or_create(types);
   assert(full->component_count() == 3);
 
@@ -254,19 +254,19 @@ void test_removal_transitions() {
 void test_chunk_layout_and_alignment() {
   std::cout << "[Test 5/6] Chunk Layout & Column Offset Calculation... ";
 
-  TypeRegistry registry;
-  registry.register_type<Position>();
-  registry.register_type<Color>();
-  registry.register_type<LargeTag>();
+  ComponentRegistry registry;
+  registry.register_component<Position>();
+  registry.register_component<Color>();
+  registry.register_component<LargeTag>();
 
   const uint32_t chunk_size = 16384; // 16 KB chunk test
   ArchetypeGraph graph(registry, chunk_size);
 
-  const TypeID pos_t = arche::type_id<Position>();
-  const TypeID col_t = arche::type_id<Color>();
-  const TypeID tag_t = arche::type_id<LargeTag>();
+  const ComponentID pos_t = arche::component_id<Position>();
+  const ComponentID col_t = arche::component_id<Color>();
+  const ComponentID tag_t = arche::component_id<LargeTag>();
 
-  std::vector<TypeID> types = {pos_t, col_t, tag_t};
+  std::vector<ComponentID> types = {pos_t, col_t, tag_t};
   Archetype *arch = graph.get_or_create(types);
   assert(arch->chunk_capacity() > 0);
 
@@ -275,7 +275,7 @@ void test_chunk_layout_and_alignment() {
 
   // Verify column ordering matches strictly sorted TypeIDs
   for (size_t i = 1; i < arch->component_count(); ++i) {
-    assert(arch->column_layout(i - 1).type_id < arch->column_layout(i).type_id);
+    assert(arch->column_layout(i - 1).component_id < arch->column_layout(i).component_id);
   }
 
   // Verify each column begins on a strictly aligned byte boundary
@@ -303,13 +303,13 @@ void test_chunk_layout_and_alignment() {
 void test_transition_traversal_speed() {
   std::cout << "[Test 6/6] Transition Traversal Benchmark (L1 Cache Hit)... ";
 
-  TypeRegistry registry;
-  registry.register_type<Position>();
-  registry.register_type<Velocity>();
+  ComponentRegistry registry;
+  registry.register_component<Position>();
+  registry.register_component<Velocity>();
 
   ArchetypeGraph graph(registry);
   Archetype *root = graph.root();
-  const TypeID pos_t = arche::type_id<Position>();
+  const ComponentID pos_t = arche::component_id<Position>();
 
   Archetype *arch_pos = graph.traverse_add(root, pos_t);
 

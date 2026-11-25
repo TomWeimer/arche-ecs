@@ -11,7 +11,7 @@ export module arche:archetype;
 
 export import :entity;
 export import :component_mask;
-export import :type_id;
+export import :component_id;
 export import :hardware;
 export import :chunk;
 export import :chunk_pool;
@@ -67,7 +67,7 @@ public:
 private:
   uint32_t archetype_id_{0};
   ComponentMask mask_;
-  std::vector<TypeID> types_;
+  std::vector<ComponentID> types_;
   std::vector<ComponentColumnLayout> columns_;
   std::array<int16_t, MAX_COMPONENTS> type_to_column_;
   uint32_t chunk_size_{65536};
@@ -91,8 +91,8 @@ public:
   Archetype(
       uint32_t id,
       const ComponentMask &mask,
-      std::vector<TypeID> sorted_types,
-      const TypeRegistry &registry,
+      std::vector<ComponentID> sorted_types,
+      const ComponentRegistry &registry,
       uint32_t chunk_size = 65536
   );
 
@@ -127,7 +127,7 @@ public:
   [[nodiscard]] const ComponentMask &mask() const noexcept;
 
   /// Returns a span over the sorted constituent TypeIDs.
-  [[nodiscard]] std::span<const TypeID> types() const noexcept;
+  [[nodiscard]] std::span<const ComponentID> types() const noexcept;
 
   /// Returns the total number of distinct component types in this archetype.
   [[nodiscard]] size_t component_count() const noexcept;
@@ -143,10 +143,10 @@ public:
 
   /**
    * @brief Checks if this archetype contains a specific component type.
-   * @param type Target component TypeID.
+   * @param type Target component ComponentID.
    * @return true if present; false otherwise.
    */
-  [[nodiscard]] bool has_component(TypeID type) const noexcept;
+  [[nodiscard]] bool has_component(ComponentID type) const noexcept;
 
   /**
    * @brief Type-safe template check if this archetype contains a component.
@@ -159,10 +159,10 @@ public:
 
   /**
    * @brief Looks up the column index for a given component type.
-   * @param type Target component TypeID.
+   * @param type Target component ComponentID.
    * @return Zero-based column index, or -1 if the component is not in this archetype.
    */
-  [[nodiscard]] int16_t column_index(TypeID type) const noexcept;
+  [[nodiscard]] int16_t column_index(ComponentID type) const noexcept;
 
   /**
    * @brief Retrieves the column layout descriptor at a specified column index.
@@ -174,12 +174,12 @@ public:
   ) const noexcept;
 
   /**
-   * @brief Looks up the column layout descriptor for a component TypeID.
-   * @param type Target component TypeID.
+   * @brief Looks up the column layout descriptor for a component ComponentID.
+   * @param type Target component ComponentID.
    * @return Pointer to layout descriptor, or nullptr if not found.
    */
   [[nodiscard]] const ComponentColumnLayout *column_layout_for(
-      TypeID type
+      ComponentID type
   ) const noexcept;
 
   /// Returns a span over all component column layout descriptors.
@@ -198,31 +198,31 @@ public:
 
   /**
    * @brief Retrieves the cached destination archetype when adding a component.
-   * @param type Component TypeID to add.
+   * @param type Component ComponentID to add.
    * @return Destination archetype pointer, or nullptr if edge not yet cached.
    */
-  [[nodiscard]] Archetype *get_add_edge(TypeID type) const noexcept;
+  [[nodiscard]] Archetype *get_add_edge(ComponentID type) const noexcept;
 
   /**
    * @brief Retrieves the cached destination archetype when removing a component.
-   * @param type Component TypeID to remove.
+   * @param type Component ComponentID to remove.
    * @return Destination archetype pointer, or nullptr if edge not yet cached.
    */
-  [[nodiscard]] Archetype *get_remove_edge(TypeID type) const noexcept;
+  [[nodiscard]] Archetype *get_remove_edge(ComponentID type) const noexcept;
 
   /**
    * @brief Caches the destination archetype edge for component addition.
-   * @param type Added component TypeID.
+   * @param type Added component ComponentID.
    * @param target Destination archetype.
    */
-  void set_add_edge(TypeID type, Archetype *target);
+  void set_add_edge(ComponentID type, Archetype *target);
 
   /**
    * @brief Caches the destination archetype edge for component removal.
-   * @param type Removed component TypeID.
+   * @param type Removed component ComponentID.
    * @param target Destination archetype.
    */
-  void set_remove_edge(TypeID type, Archetype *target);
+  void set_remove_edge(ComponentID type, Archetype *target);
 
   // --- Chunk Page Management -------------------------------------------------
 
@@ -283,16 +283,16 @@ public:
 
 private:
   [[nodiscard]] uint32_t _calculate_entity_size_sum(
-      const TypeRegistry &registry
+      const ComponentRegistry &registry
   ) const;
 
   [[nodiscard]] uint32_t _calculate_chunk_capacity(
       uint32_t entity_size_sum
   ) const noexcept;
 
-  void _build_column_layouts(const TypeRegistry &registry);
+  void _build_column_layouts(const ComponentRegistry &registry);
 
-  void compute_layout(const TypeRegistry &registry);
+  void compute_layout(const ComponentRegistry &registry);
 };
 
 } // namespace arche

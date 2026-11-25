@@ -23,13 +23,13 @@ export namespace arche::internal {
 // =============================================================================
 
 ArchetypeGraph::ArchetypeGraph(
-    const TypeRegistry &registry,
+    const ComponentRegistry &registry,
     uint32_t chunk_size
 )
     : registry_(registry), chunk_size_(chunk_size) {
   // 1. Create root archetype node with empty component mask and empty types list.
   auto root_node = std::make_unique<Archetype>(
-      0, ComponentMask{}, std::vector<TypeID>{}, registry_, chunk_size_
+      0, ComponentMask{}, std::vector<ComponentID>{}, registry_, chunk_size_
   );
   root_ = root_node.get();
 
@@ -73,12 +73,12 @@ Archetype *ArchetypeGraph::get_or_create_archetype(
   }
 
   // 2. Decode component bitmask words into sorted list of TypeIDs.
-  std::vector<TypeID> sorted_types;
+  std::vector<ComponentID> sorted_types;
   for (size_t word_idx = 0; word_idx < ComponentMask::WORDS_COUNT; ++word_idx) {
     uint64_t w = mask.word(word_idx);
     while (w != 0) {
       const uint32_t bit = std::countr_zero(w);
-      const TypeID tid = static_cast<TypeID>((word_idx * 64) + bit);
+      const ComponentID tid = static_cast<ComponentID>((word_idx * 64) + bit);
       sorted_types.push_back(tid);
       w &= (w - 1);
     }
@@ -107,11 +107,11 @@ Archetype *ArchetypeGraph::get_or_create_archetype(
 }
 
 Archetype *ArchetypeGraph::get_or_create(
-    std::span<const TypeID> types
+    std::span<const ComponentID> types
 ) {
   // 1. Construct component mask from constituent TypeIDs.
   ComponentMask mask{};
-  for (TypeID tid : types) {
+  for (ComponentID tid : types) {
     mask.set(tid);
   }
   // 2. Delegate to bitmask resolver.
@@ -122,7 +122,7 @@ Archetype *ArchetypeGraph::get_or_create(
 // Graph Transition Navigation Implementations
 // =============================================================================
 
-Archetype *ArchetypeGraph::traverse_add(Archetype *from, TypeID type) {
+Archetype *ArchetypeGraph::traverse_add(Archetype *from, ComponentID type) {
   assert(from != nullptr);
 
   // 1. Check cached directional edge first for fast-path transition.
@@ -145,7 +145,7 @@ Archetype *ArchetypeGraph::traverse_add(Archetype *from, TypeID type) {
 
 Archetype *ArchetypeGraph::traverse_remove(
     Archetype *from,
-    TypeID type
+    ComponentID type
 ) {
   assert(from != nullptr);
 

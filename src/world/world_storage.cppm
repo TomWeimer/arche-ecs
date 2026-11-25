@@ -10,7 +10,7 @@ module;
 export module arche:world.detail.world_storage;
 
 import :hardware;
-import :type_id;
+import :component_id;
 import :chunk;
 import :chunk_pool;
 import :slot_map;
@@ -41,7 +41,7 @@ struct WorldStorage {
   uint32_t previous_version{0};
   uint32_t chunk_size{65536};
 
-  TypeRegistry registry;
+  ComponentRegistry registry;
   ResourceContainer resources;
   Scheduler scheduler;
   PluginRegistry installed_plugins;

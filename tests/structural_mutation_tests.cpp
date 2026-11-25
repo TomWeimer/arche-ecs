@@ -7,7 +7,7 @@ import arche;
 namespace {
 using arche::CommandBuffer;
 using arche::Entity;
-using arche::TypeID;
+using arche::ComponentID;
 using arche::World;
 } // namespace
 

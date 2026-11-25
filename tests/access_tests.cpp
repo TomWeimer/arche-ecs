@@ -8,7 +8,7 @@ using arche::Access;
 using arche::AccessBuilder;
 using arche::AccessDescriptor;
 using arche::resource_id;
-using arche::type_id;
+using arche::component_id;
 } // namespace
 
 // =============================================================================
@@ -234,7 +234,7 @@ void test_cross_domain_isolation() {
                               .writes_resource<Gravity>()
                               .build();
 
-  // Even if type_id<Position>() == resource_id<TimeStep>(), they must not
+  // Even if component_id<Position>() == resource_id<TimeStep>(), they must not
   // conflict!
   assert(!sys1.conflicts_with(sys2));
   assert(!sys2.conflicts_with(sys1));
@@ -275,17 +275,17 @@ void test_variadic_pack_registration() {
                               .build();
 
   // Check read components
-  assert(desc.read_components.test(type_id<Position>()));
-  assert(desc.read_components.test(type_id<Velocity>()));
-  assert(desc.read_components.test(type_id<Mass>()));
-  assert(!desc.read_components.test(type_id<Acceleration>()));
-  assert(!desc.read_components.test(type_id<Health>()));
+  assert(desc.read_components.test(component_id<Position>()));
+  assert(desc.read_components.test(component_id<Velocity>()));
+  assert(desc.read_components.test(component_id<Mass>()));
+  assert(!desc.read_components.test(component_id<Acceleration>()));
+  assert(!desc.read_components.test(component_id<Health>()));
   assert(desc.read_components.count() == 3);
 
   // Check write components
-  assert(desc.write_components.test(type_id<Acceleration>()));
-  assert(desc.write_components.test(type_id<Health>()));
-  assert(!desc.write_components.test(type_id<Position>()));
+  assert(desc.write_components.test(component_id<Acceleration>()));
+  assert(desc.write_components.test(component_id<Health>()));
+  assert(!desc.write_components.test(component_id<Position>()));
   assert(desc.write_components.count() == 2);
 
   // Check read resources

@@ -358,7 +358,7 @@ void test_world_resource_facade() {
 
 int main() {
   std::cout << "====================================================\n";
-  std::cout << "   Module 019: ResourceContainer & TypeID Tests      \n";
+  std::cout << "   Module 019: ResourceContainer & ComponentID Tests      \n";
   std::cout << "====================================================\n";
 
   test_sequential_resource_id_generation();

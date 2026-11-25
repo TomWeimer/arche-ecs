@@ -8,7 +8,7 @@ module;
 export module arche:command;
 
 export import :entity;
-export import :type_id;
+export import :component_id;
 export import :slot_map;
 export import :chunk_pool;
 export import :archetype;
@@ -72,7 +72,7 @@ public:
   using SpawnFn = void (*)(internal::MutationContext &, const uint8_t *);
 
   /// Function pointer type for deferred component type descriptor registration.
-  using RegisterTypeFn = void (*)(internal::TypeRegistry &);
+  using RegisterTypeFn = void (*)(internal::ComponentRegistry &);
 
 private:
   std::vector<uint8_t> buffer_;
@@ -164,7 +164,7 @@ public:
    * and clears the buffer.
    *
    * @param ctx Execution context view holding references to SlotMap, ChunkPool,
-   * ArchetypeGraph, and TypeRegistry.
+   * ArchetypeGraph, and ComponentRegistry.
    */
   void commit(internal::MutationContext ctx);
 

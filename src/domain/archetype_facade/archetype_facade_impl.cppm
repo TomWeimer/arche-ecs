@@ -9,7 +9,7 @@ module;
 export module arche:domain.archetype_impl;
 
 import :domain.archetype;
-import :type_id;
+import :component_id;
 import :archetype;
 import :archetype_graph;
 import :chunk;
@@ -50,7 +50,7 @@ ArchetypeGraph &ArchetypeFacade::graph() noexcept {
 template <typename T>
 inline uint32_t ArchetypeFacade::count_with() const noexcept {
   assert(graph_ != nullptr);
-  const TypeID tid = type_id<T>();
+  const ComponentID tid = component_id<T>();
   uint32_t total = 0;
   for (const auto &arch_ptr : graph_->archetypes()) {
     if (arch_ptr->has_component(tid)) {

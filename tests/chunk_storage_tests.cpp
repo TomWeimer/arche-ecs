@@ -14,8 +14,8 @@ using arche::internal::ComponentMask;
 using arche::Entity;
 using arche::internal::Hardware;
 using arche::internal::SlotMap;
-using arche::TypeID;
-using arche::internal::TypeRegistry;
+using arche::ComponentID;
+using arche::internal::ComponentRegistry;
 } // namespace
 
 // =============================================================================
@@ -88,21 +88,21 @@ void test_hardware_queries() {
 void test_chunk_allocation_and_alignment() {
   std::cout << "[Test 2/4] Aligned Chunk Allocation & Slice Math... ";
 
-  TypeRegistry registry;
-  registry.register_type<Position>();
-  registry.register_type<Velocity>();
+  ComponentRegistry registry;
+  registry.register_component<Position>();
+  registry.register_component<Velocity>();
 
   const uint32_t chunk_size = static_cast<uint32_t>(
       Hardware::optimal_chunk_size()
   );
-  const TypeID pos_t = arche::type_id<Position>();
-  const TypeID vel_t = arche::type_id<Velocity>();
+  const ComponentID pos_t = arche::component_id<Position>();
+  const ComponentID vel_t = arche::component_id<Velocity>();
 
   ComponentMask mask;
   mask.set(pos_t);
   mask.set(vel_t);
 
-  std::vector<TypeID> types = {pos_t, vel_t};
+  std::vector<ComponentID> types = {pos_t, vel_t};
   Archetype arch(1, mask, std::move(types), registry, chunk_size);
   assert(arch.chunk_capacity() > 0);
 
@@ -153,20 +153,20 @@ void test_chunk_allocation_and_alignment() {
 void test_swap_and_pop_compaction() {
   std::cout << "[Test 3/4] Swap-and-Pop Compaction & SlotMap Sync... ";
 
-  TypeRegistry registry;
-  registry.register_type<Position>();
-  registry.register_type<Health>();
+  ComponentRegistry registry;
+  registry.register_component<Position>();
+  registry.register_component<Health>();
 
   SlotMap slot_map;
   const uint32_t chunk_size = 16384;
-  const TypeID pos_t = arche::type_id<Position>();
-  const TypeID hp_t = arche::type_id<Health>();
+  const ComponentID pos_t = arche::component_id<Position>();
+  const ComponentID hp_t = arche::component_id<Health>();
 
   ComponentMask mask;
   mask.set(pos_t);
   mask.set(hp_t);
 
-  std::vector<TypeID> types = {pos_t, hp_t};
+  std::vector<ComponentID> types = {pos_t, hp_t};
   Archetype arch(1, mask, std::move(types), registry, chunk_size);
   ChunkPool pool(chunk_size, 1);
   void *buffer = pool.acquire();

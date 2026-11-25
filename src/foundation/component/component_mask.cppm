@@ -18,12 +18,8 @@ export namespace arche {
 /// Dense 32-bit integer identifier for component types.
 using ComponentID = uint32_t;
 
-/// Sentinel value indicating an invalid or unallocated ComponentID / TypeID.
-inline constexpr ComponentID INVALID_TYPE_ID = 0xFFFFFFFF;
-
-/// Alias for ComponentID used interchangeably across type registries and
-/// storage.
-using TypeID = ComponentID;
+/// Sentinel value indicating an invalid or unallocated ComponentID.
+inline constexpr ComponentID INVALID_COMPONENT_ID = 0xFFFFFFFF;
 
 namespace internal {
 

@@ -7,7 +7,7 @@ module;
 export module arche:chunk;
 
 export import :entity;
-export import :component.detail.column_layout;
+export import :component_id;
 export import :chunk.detail.chunk_header;
 
 export namespace arche::internal {

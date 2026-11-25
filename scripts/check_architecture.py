@@ -42,7 +42,7 @@ SUBSYSTEM_RULES: Dict[str, Dict] = {
     },
     "core_component": {
         "layer": 0,
-        "description": "TypeID, ComponentMask, and ColumnLayout primitives",
+        "description": "ComponentID, ComponentMask, and ColumnLayout primitives",
         "allowed_targets": ["hardware", "types", "core_component"],
     },
     "chunk": {
@@ -481,10 +481,6 @@ def run_checks(root_dir: str) -> int:
                         is_coordinator = (
                             src_file.startswith("src/world/")
                             or src_file == "src/arche.cppm"
-                            or (
-                                partition == "component.detail.column_layout"
-                                and "chunk" in src_file
-                            )
                         )
                         if not is_own_subsystem and not is_coordinator:
                             violations.append(

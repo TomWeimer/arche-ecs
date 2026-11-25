@@ -25,8 +25,8 @@ export namespace arche::internal {
 Archetype::Archetype(
     uint32_t id,
     const ComponentMask &mask,
-    std::vector<TypeID> sorted_types,
-    const TypeRegistry &registry,
+    std::vector<ComponentID> sorted_types,
+    const ComponentRegistry &registry,
     uint32_t chunk_size
 )
     : archetype_id_(id), mask_(mask), types_(std::move(sorted_types)),
@@ -61,25 +61,25 @@ bool Archetype::matches(
 
 uint32_t Archetype::id() const noexcept { return archetype_id_; }
 const ComponentMask &Archetype::mask() const noexcept { return mask_; }
-std::span<const TypeID> Archetype::types() const noexcept { return types_; }
+std::span<const ComponentID> Archetype::types() const noexcept { return types_; }
 size_t Archetype::component_count() const noexcept { return types_.size(); }
 uint32_t Archetype::chunk_capacity() const noexcept { return chunk_capacity_; }
 uint32_t Archetype::entity_count() const noexcept { return total_entities_; }
 uint32_t Archetype::chunk_size() const noexcept { return chunk_size_; }
 
-bool Archetype::has_component(TypeID type) const noexcept {
+bool Archetype::has_component(ComponentID type) const noexcept {
   return mask_.test(type);
 }
 
 template <typename T> inline bool Archetype::has() const noexcept {
-  return has_component(type_id<std::decay_t<T>>());
+  return has_component(component_id<std::decay_t<T>>());
 }
 
 // =============================================================================
 // Column Layout Lookups Implementations
 // =============================================================================
 
-int16_t Archetype::column_index(TypeID type) const noexcept {
+int16_t Archetype::column_index(ComponentID type) const noexcept {
   if (type >= MAX_COMPONENTS) {
     return -1;
   }
@@ -94,7 +94,7 @@ const ComponentColumnLayout &Archetype::column_layout(
 }
 
 const ComponentColumnLayout *Archetype::column_layout_for(
-    TypeID type
+    ComponentID type
 ) const noexcept {
   const int16_t idx = column_index(type);
   if (idx < 0) {
@@ -110,7 +110,7 @@ Archetype::column_layouts() const noexcept {
 
 template <typename T>
 inline uint32_t Archetype::column_offset() const noexcept {
-  const auto *layout = column_layout_for(type_id<std::decay_t<T>>());
+  const auto *layout = column_layout_for(component_id<std::decay_t<T>>());
   return layout != nullptr ? layout->chunk_byte_offset : UINT32_MAX;
 }
 
@@ -118,21 +118,21 @@ inline uint32_t Archetype::column_offset() const noexcept {
 // Transition Graph Edges Implementations
 // =============================================================================
 
-Archetype *Archetype::get_add_edge(TypeID type) const noexcept {
+Archetype *Archetype::get_add_edge(ComponentID type) const noexcept {
   if (type >= edges_add_.size()) {
     return nullptr;
   }
   return edges_add_[type];
 }
 
-Archetype *Archetype::get_remove_edge(TypeID type) const noexcept {
+Archetype *Archetype::get_remove_edge(ComponentID type) const noexcept {
   if (type >= edges_remove_.size()) {
     return nullptr;
   }
   return edges_remove_[type];
 }
 
-void Archetype::set_add_edge(TypeID type, Archetype *target) {
+void Archetype::set_add_edge(ComponentID type, Archetype *target) {
   // 1. Dynamically resize sparse transition vector if needed.
   if (type >= edges_add_.size()) {
     edges_add_.resize(
@@ -143,7 +143,7 @@ void Archetype::set_add_edge(TypeID type, Archetype *target) {
   edges_add_[type] = target;
 }
 
-void Archetype::set_remove_edge(TypeID type, Archetype *target) {
+void Archetype::set_remove_edge(ComponentID type, Archetype *target) {
   // 1. Dynamically resize sparse transition vector if needed.
   if (type >= edges_remove_.size()) {
     edges_remove_.resize(
@@ -237,13 +237,13 @@ void Archetype::set_entity_count(size_t count) noexcept {
 // =============================================================================
 
 uint32_t Archetype::_calculate_entity_size_sum(
-    const TypeRegistry &registry
+    const ComponentRegistry &registry
 ) const {
   // 1. Base entity size sum begins with the Entity handle column (8 bytes).
   uint32_t total = static_cast<uint32_t>(sizeof(Entity));
 
   // 2. Accumulate byte size of each registered component type.
-  for (TypeID t : types_) {
+  for (ComponentID t : types_) {
     const auto &desc = registry.get_descriptor(t);
     total += desc.size;
   }
@@ -278,7 +278,7 @@ uint32_t Archetype::_calculate_chunk_capacity(
   return (aligned_capacity == 0) ? 1 : aligned_capacity;
 }
 
-void Archetype::_build_column_layouts(const TypeRegistry &registry) {
+void Archetype::_build_column_layouts(const ComponentRegistry &registry) {
   constexpr uint32_t CHUNK_HEADER_RESERVE = ChunkGeometry::HEADER_BYTES;
 
   // 1. Lay out the Entity handle array directly past the ChunkHeader.
@@ -289,13 +289,13 @@ void Archetype::_build_column_layouts(const TypeRegistry &registry) {
 
   // 2. Sequentially place each component column aligned to its type requirements.
   for (size_t i = 0; i < types_.size(); ++i) {
-    TypeID t = types_[i];
+    ComponentID t = types_[i];
     const auto &desc = registry.get_descriptor(t);
 
     current_offset = arche::math::align_up(current_offset, desc.alignment);
 
     ComponentColumnLayout layout;
-    layout.type_id = t;
+    layout.component_id = t;
     layout.size = desc.size;
     layout.alignment = desc.alignment;
     layout.chunk_byte_offset = current_offset;
@@ -316,7 +316,7 @@ void Archetype::_build_column_layouts(const TypeRegistry &registry) {
   );
 }
 
-void Archetype::compute_layout(const TypeRegistry &registry) {
+void Archetype::compute_layout(const ComponentRegistry &registry) {
   // 1. Reset column layout list.
   columns_.clear();
   columns_.reserve(types_.size());

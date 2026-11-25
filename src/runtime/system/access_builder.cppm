@@ -5,7 +5,7 @@ module;
 export module arche:access_builder;
 
 import :access;
-import :type_id;
+import :component_id;
 import :resource;
 
 export namespace arche {

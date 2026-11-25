@@ -48,7 +48,7 @@ void test_clean_lifecycle_api() {
   const auto &rec = world.entities.slot_map().get_record(
       e1
   );
-  const int16_t pos_col = rec.archetype->column_index(arche::type_id<Pos>());
+  const int16_t pos_col = rec.archetype->column_index(arche::component_id<Pos>());
   assert(rec.chunk->column_version(pos_col) == 1);
 
   // Read via get does NOT bump version
@@ -205,7 +205,7 @@ void test_entity_view_api() {
   const auto &rec = world.entities.slot_map().get_record(
       e1
   );
-  const int16_t pos_col = rec.archetype->column_index(arche::type_id<Pos>());
+  const int16_t pos_col = rec.archetype->column_index(arche::component_id<Pos>());
   assert(rec.chunk->column_version(static_cast<uint16_t>(pos_col)) == v_before);
 
   // add component
@@ -238,7 +238,7 @@ void test_public_encapsulation_boundary() {
   static_assert(std::is_same_v<arche::EntityMut, arche::EntityMut>);
   static_assert(std::is_same_v<arche::CommandBuffer, arche::CommandBuffer>);
   static_assert(std::is_same_v<arche::World, arche::World>);
-  static_assert(std::is_same_v<arche::TypeID, arche::TypeID>);
+  static_assert(std::is_same_v<arche::ComponentID, arche::ComponentID>);
   static_assert(std::is_same_v<arche::Access, arche::AccessBuilder>);
   static_assert(std::is_same_v<arche::AccessDescriptor, arche::AccessDescriptor>);
   static_assert(std::is_same_v<arche::SystemContext, arche::SystemContext>);

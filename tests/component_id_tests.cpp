@@ -5,9 +5,9 @@ import arche;
 
 namespace {
 using arche::internal::ComponentMask;
-using arche::type_id;
-using arche::TypeID;
-using arche::internal::TypeRegistry;
+using arche::component_id;
+using arche::ComponentID;
+using arche::internal::ComponentRegistry;
 } // namespace
 
 // =============================================================================
@@ -48,7 +48,7 @@ struct TrackedObject {
 };
 
 // =============================================================================
-// Unit Test 1: Sequential Contiguous TypeID Generation
+// Unit Test 1: Sequential Contiguous ComponentID Generation
 // =============================================================================
 
 /**
@@ -62,29 +62,29 @@ struct TrackedObject {
  *
  * This test guarantees:
  * 1. Monotonic Contiguity: First component is assigned 0, second 1, third 2.
- * 2. Caching Invariant: Subsequent calls to `type_id<T>()` return the exact
+ * 2. Caching Invariant: Subsequent calls to `component_id<T>()` return the exact
  * same cached ID without re-executing atomic or mutex-based counter increments.
- * 3. Decay Invariant: `type_id<const Pos&>()` maps to `type_id<Pos>()`.
+ * 3. Decay Invariant: `component_id<const Pos&>()` maps to `component_id<Pos>()`.
  */
 void test_sequential_type_ids() {
-  std::cout << "[Test 1/4] Sequential Contiguous TypeID Generation... ";
+  std::cout << "[Test 1/4] Sequential Contiguous ComponentID Generation... ";
 
-  const TypeID id_pos = type_id<Pos>();
-  const TypeID id_vel = type_id<Vel>();
-  const TypeID id_mass = type_id<Mass>();
+  const ComponentID id_pos = component_id<Pos>();
+  const ComponentID id_vel = component_id<Vel>();
+  const ComponentID id_mass = component_id<Mass>();
 
   assert(id_pos == 0);
   assert(id_vel == 1);
   assert(id_mass == 2);
 
   // Repeated lookups must return identical cached IDs
-  assert(type_id<Pos>() == 0);
-  assert(type_id<Vel>() == 1);
-  assert(type_id<Mass>() == 2);
+  assert(component_id<Pos>() == 0);
+  assert(component_id<Vel>() == 1);
+  assert(component_id<Mass>() == 2);
 
   // Type decay check
-  assert(type_id<const Pos &>() == 0);
-  assert(type_id<Pos &&>() == 0);
+  assert(component_id<const Pos &>() == 0);
+  assert(component_id<Pos &&>() == 0);
 
   std::cout << "PASSED\n";
 }
@@ -163,10 +163,10 @@ void test_query_filter_matching() {
   std::cout << "[Test 3/4] Fast Query Bitmask Inclusion/Exclusion... ";
 
   ComponentMask entity_mask;
-  const TypeID pos_id = type_id<Pos>();
-  const TypeID vel_id = type_id<Vel>();
-  const TypeID active_id = type_id<ActiveTag>();
-  const TypeID dead_id = type_id<DeadTag>();
+  const ComponentID pos_id = component_id<Pos>();
+  const ComponentID vel_id = component_id<Vel>();
+  const ComponentID active_id = component_id<ActiveTag>();
+  const ComponentID dead_id = component_id<DeadTag>();
 
   entity_mask.set(pos_id);
   entity_mask.set(vel_id);
@@ -216,8 +216,8 @@ void test_query_filter_matching() {
 void test_descriptor_lifecycle() {
   std::cout << "[Test 4/4] Type Descriptor Move & Destruction Semantics... ";
 
-  TypeRegistry registry;
-  const auto &desc = registry.register_type<TrackedObject>();
+  ComponentRegistry registry;
+  const auto &desc = registry.register_component<TrackedObject>();
 
   assert(!desc.is_trivially_destructible);
   assert(TrackedObject::live_instances == 0);
@@ -240,7 +240,7 @@ void test_descriptor_lifecycle() {
   assert(TrackedObject::live_instances == 0);
 
   // 4. Verify trivial POD reflection
-  const auto &pos_desc = registry.register_type<Pos>();
+  const auto &pos_desc = registry.register_component<Pos>();
   assert(pos_desc.is_trivially_copyable);
   assert(pos_desc.is_trivially_destructible);
   assert(pos_desc.destructor == nullptr); // Skipped on trivial types

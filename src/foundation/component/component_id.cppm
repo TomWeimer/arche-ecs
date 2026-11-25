@@ -6,7 +6,7 @@ module;
 #include <type_traits>
 #include <vector>
 
-export module arche:type_id;
+export module arche:component_id;
 
 import :component_mask;
 
@@ -18,17 +18,17 @@ export namespace arche {
 
 namespace Internal {
 
-inline TypeID allocate_type_id_sequential() noexcept {
-  static TypeID global_counter = 0;
+inline ComponentID allocate_component_id_sequential() noexcept {
+  static ComponentID global_counter = 0;
   return global_counter++;
 }
 
-template <typename T> inline TypeID get_or_allocate_type_id() noexcept {
-  static const TypeID id = allocate_type_id_sequential();
+template <typename T> inline ComponentID get_or_allocate_component_id() noexcept {
+  static const ComponentID id = allocate_component_id_sequential();
   return id;
 }
 
-template <typename T> constexpr std::string_view get_type_name() noexcept {
+template <typename T> constexpr std::string_view get_component_name() noexcept {
 #if defined(__clang__) || defined(__GNUC__)
   constexpr std::string_view prefix = "[with T = ";
   constexpr std::string_view suffix = "]";
@@ -40,7 +40,7 @@ template <typename T> constexpr std::string_view get_type_name() noexcept {
   const size_t end = sig.find(suffix, start);
   return sig.substr(start + prefix.size(), end - (start + prefix.size()));
 #elif defined(_MSC_VER)
-  constexpr std::string_view prefix = "get_type_name<";
+  constexpr std::string_view prefix = "get_component_name<";
   constexpr std::string_view suffix = ">(";
   constexpr std::string_view sig = __FUNCSIG__;
   const size_t start = sig.find(prefix);
@@ -57,18 +57,18 @@ template <typename T> constexpr std::string_view get_type_name() noexcept {
 } // namespace Internal
 
 // =============================================================================
-// Public Type Identification API
+// Public Component Identification API
 // =============================================================================
 
 /**
  * @brief Retrieves the unique 32-bit runtime identifier for component type `T`.
  *
  * @tparam T Component type to identify.
- * @return Monotonically assigned 0-indexed dense TypeID.
+ * @return Monotonically assigned 0-indexed dense ComponentID.
  */
 template <typename T>
-[[nodiscard]] inline TypeID type_id() noexcept {
-  return Internal::get_or_allocate_type_id<std::decay_t<T>>();
+[[nodiscard]] inline ComponentID component_id() noexcept {
+  return Internal::get_or_allocate_component_id<std::decay_t<T>>();
 }
 
 /**
@@ -78,8 +78,8 @@ template <typename T>
  * @return String view representing the component type name.
  */
 template <typename T>
-[[nodiscard]] constexpr std::string_view type_name() noexcept {
-  return Internal::get_type_name<std::decay_t<T>>();
+[[nodiscard]] constexpr std::string_view component_name() noexcept {
+  return Internal::get_component_name<std::decay_t<T>>();
 }
 
 // =============================================================================
@@ -96,12 +96,12 @@ namespace internal {
  * in-place construction, destruction, and relocation across archetype chunk boundaries.
  */
 struct ComponentDescriptor {
-  TypeID id{INVALID_TYPE_ID};               ///< Dense runtime type identifier.
-  size_t size{0};                           ///< Size of the component in bytes (`sizeof(T)`).
-  size_t alignment{0};                      ///< Required byte alignment (`alignof(T)`).
-  std::string_view name{"Unknown"};         ///< Human-readable demangled type name.
-  bool is_trivially_copyable{false};        ///< True if memory relocation can use `std::memcpy`.
-  bool is_trivially_destructible{false};    ///< True if destructor invocation can be omitted.
+  ComponentID id{INVALID_COMPONENT_ID};         ///< Dense runtime component identifier.
+  size_t size{0};                               ///< Size of the component in bytes (`sizeof(T)`).
+  size_t alignment{0};                          ///< Required byte alignment (`alignof(T)`).
+  std::string_view name{"Unknown"};             ///< Human-readable demangled component name.
+  bool is_trivially_copyable{false};            ///< True if memory relocation can use `std::memcpy`.
+  bool is_trivially_destructible{false};        ///< True if destructor invocation can be omitted.
 
   void (*constructor)(void *target){nullptr};              ///< Default placement-new constructor.
   void (*destructor)(void *target){nullptr};               ///< Explicit destructor invocation.
@@ -149,29 +149,48 @@ private:
 };
 
 // =============================================================================
-// TypeRegistry (Component Type Registry & Descriptor Lookup)
+// Component Column Layout Descriptor
 // =============================================================================
 
 /**
- * @class TypeRegistry
- * @brief Dynamic registry maintaining ComponentDescriptor metadata indexed by TypeID.
+ * @struct ComponentColumnLayout
+ * @brief Memory layout and alignment descriptor for a component column within an archetype chunk.
+ *
+ * Defines contiguous array parameters (component ID, byte size, required alignment,
+ * starting byte offset inside the 64KB chunk page, and lifecycle metadata pointer).
+ */
+struct ComponentColumnLayout {
+  ComponentID component_id{INVALID_COMPONENT_ID}; ///< Component type identifier.
+  uint32_t size{0};                               ///< Byte size of each component instance.
+  uint32_t alignment{0};                          ///< Byte alignment constraint.
+  uint32_t chunk_byte_offset{0};                  ///< Starting byte offset within the chunk memory page.
+  const ComponentDescriptor *descriptor{nullptr}; ///< Pointer to type-erased lifecycle vtable.
+};
+
+// =============================================================================
+// ComponentRegistry (Component Type Registry & Descriptor Lookup)
+// =============================================================================
+
+/**
+ * @class ComponentRegistry
+ * @brief Dynamic registry maintaining ComponentDescriptor metadata indexed by ComponentID.
  *
  * Guarantees zero memory overhead over an internal `std::vector<ComponentDescriptor>`.
  */
-struct TypeRegistry {
+struct ComponentRegistry {
 private:
   std::vector<ComponentDescriptor> descriptors;
 
 public:
   static constexpr size_t MAX_TYPES = 128;
 
-  TypeRegistry();
-  ~TypeRegistry() = default;
+  ComponentRegistry();
+  ~ComponentRegistry() = default;
 
-  TypeRegistry(const TypeRegistry &other);
-  TypeRegistry &operator=(const TypeRegistry &other);
-  TypeRegistry(TypeRegistry &&) noexcept = default;
-  TypeRegistry &operator=(TypeRegistry &&) noexcept = default;
+  ComponentRegistry(const ComponentRegistry &other);
+  ComponentRegistry &operator=(const ComponentRegistry &other);
+  ComponentRegistry(ComponentRegistry &&) noexcept = default;
+  ComponentRegistry &operator=(ComponentRegistry &&) noexcept = default;
 
   /**
    * @brief Registers component type `T` into the registry if not already registered.
@@ -180,7 +199,7 @@ public:
    * @return Immutable reference to the stored descriptor.
    */
   template <typename T>
-  const ComponentDescriptor &register_type();
+  const ComponentDescriptor &register_component();
 
   /**
    * @brief Retrieves the descriptor for component type `T`.
@@ -193,13 +212,13 @@ public:
   [[nodiscard]] const ComponentDescriptor &get_descriptor() const;
 
   /**
-   * @brief Retrieves the descriptor for a runtime TypeID.
+   * @brief Retrieves the descriptor for a runtime ComponentID.
    *
-   * @param id Type identifier.
+   * @param id Component identifier.
    * @return Immutable reference to the stored descriptor.
    * @throws std::runtime_error If `id` is invalid or unregistered.
    */
-  [[nodiscard]] const ComponentDescriptor &get_descriptor(TypeID id) const;
+  [[nodiscard]] const ComponentDescriptor &get_descriptor(ComponentID id) const;
 
   /**
    * @brief Returns the total number of registered types in this registry.
@@ -210,8 +229,8 @@ public:
 // --- Invariant Guarantees ----------------------------------------------------
 
 static_assert(
-    sizeof(TypeRegistry) == sizeof(std::vector<ComponentDescriptor>),
-    "TypeRegistry must introduce zero memory overhead over std::vector"
+    sizeof(ComponentRegistry) == sizeof(std::vector<ComponentDescriptor>),
+    "ComponentRegistry must introduce zero memory overhead over std::vector"
 );
 
 } // namespace internal

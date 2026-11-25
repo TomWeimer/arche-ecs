@@ -9,7 +9,7 @@ module;
 export module arche:mutation;
 
 export import :entity;
-export import :type_id;
+export import :component_id;
 export import :slot_map;
 export import :chunk_pool;
 export import :archetype;
@@ -33,7 +33,7 @@ struct MutationContext {
   SlotMap &slot_map;
   ChunkPool &chunk_pool;
   ArchetypeGraph &graph;
-  TypeRegistry &registry;
+  ComponentRegistry &registry;
   uint32_t current_version{0};
 };
 
@@ -221,7 +221,7 @@ struct Mutation {
   static void add_component(
       MutationContext &ctx,
       Entity entity,
-      TypeID tid,
+      ComponentID tid,
       const void *data
   );
 
@@ -245,7 +245,7 @@ struct Mutation {
   static void remove_component(
       MutationContext &ctx,
       Entity entity,
-      TypeID tid
+      ComponentID tid
   );
 
   /**
@@ -260,7 +260,7 @@ struct Mutation {
    * @param old_record Location record before migration.
    * @param src_arch Source archetype table.
    * @param dst_arch Destination archetype table.
-   * @param mutated_type TypeID of the component being added or removed.
+   * @param mutated_type ComponentID of the component being added or removed.
    * @param added_component_data Pointer to added component data (nullptr on removal).
    */
   static void migrate(
@@ -269,7 +269,7 @@ struct Mutation {
       const EntityRecord &old_record,
       Archetype *src_arch,
       Archetype *dst_arch,
-      TypeID mutated_type,
+      ComponentID mutated_type,
       const void *added_component_data
   );
 };

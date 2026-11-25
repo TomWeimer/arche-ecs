@@ -9,7 +9,7 @@ module;
 
 export module arche:query.detail.filter;
 
-import :type_id;
+import :component_id;
 import :filters;
 import :chunk;
 import :archetype;
@@ -24,7 +24,7 @@ using namespace internal;
 
 /// Individual rule checking a component's column dirty version on chunks.
 struct MutationFilterRule {
-  TypeID type_id{INVALID_TYPE_ID};
+  ComponentID component_id{INVALID_COMPONENT_ID};
   uint32_t since_version{0};
 };
 
@@ -47,7 +47,7 @@ struct MutationFilterList {
   uint8_t count{0};
 
   /// Appends a new mutation rule; asserts that capacity is not exceeded.
-  constexpr void add(TypeID id, uint32_t ver) noexcept {
+  constexpr void add(ComponentID id, uint32_t ver) noexcept {
     assert(count < CAPACITY && "Query supports at most 2 Mutated<T> filters");
     rules[count++] = MutationFilterRule{id, ver};
   }
@@ -96,7 +96,7 @@ inline void apply_temporal_filter(
   const uint32_t ver = (f.since_version == SINCE_LAST_FRAME)
       ? default_since_version
       : f.since_version;
-  mutation_filters.add(type_id<std::decay_t<T>>(), ver);
+  mutation_filters.add(component_id<std::decay_t<T>>(), ver);
 }
 
 /// Applies Added filter tracking structural entity creation version threshold.
@@ -167,7 +167,7 @@ inline bool chunk_matches_filters(
   for (size_t i = 0; i < mutation_filters.size(); ++i) {
     // 3. Locate the component's column in this archetype.
     const auto &rule = mutation_filters[i];
-    const int16_t col = arch->column_index(rule.type_id);
+    const int16_t col = arch->column_index(rule.component_id);
 
     // 4. Skip chunk if this component column was not modified since the
     // requested version.

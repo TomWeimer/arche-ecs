@@ -9,9 +9,9 @@ module;
 #include <utility>
 #include <vector>
 
-export module arche:component.detail.type_id_impl;
+export module arche:component.detail.component_id_impl;
 
-import :type_id;
+import :component_id;
 
 export namespace arche::internal {
 
@@ -38,10 +38,10 @@ template <typename T>
   using Comp = std::decay_t<T>;
 
   ComponentDescriptor desc;
-  desc.id = type_id<Comp>();
+  desc.id = component_id<Comp>();
   desc.size = sizeof(Comp);
   desc.alignment = alignof(Comp);
-  desc.name = type_name<Comp>();
+  desc.name = component_name<Comp>();
   desc.is_trivially_copyable = std::is_trivially_copyable_v<Comp>;
   desc.is_trivially_destructible = std::is_trivially_destructible_v<Comp>;
 
@@ -94,19 +94,19 @@ template <typename C>
 }
 
 // =============================================================================
-// TypeRegistry Implementation
+// ComponentRegistry Implementation
 // =============================================================================
 
-TypeRegistry::TypeRegistry() {
+ComponentRegistry::ComponentRegistry() {
   descriptors.reserve(MAX_TYPES);
 }
 
-TypeRegistry::TypeRegistry(const TypeRegistry &other)
+ComponentRegistry::ComponentRegistry(const ComponentRegistry &other)
     : descriptors(other.descriptors) {
   descriptors.reserve(MAX_TYPES);
 }
 
-TypeRegistry &TypeRegistry::operator=(const TypeRegistry &other) {
+ComponentRegistry &ComponentRegistry::operator=(const ComponentRegistry &other) {
   if (this != &other) {
     descriptors = other.descriptors;
     descriptors.reserve(MAX_TYPES);
@@ -115,36 +115,36 @@ TypeRegistry &TypeRegistry::operator=(const TypeRegistry &other) {
 }
 
 template <typename T>
-inline const ComponentDescriptor &TypeRegistry::register_type() {
-  const TypeID id = type_id<T>();
+inline const ComponentDescriptor &ComponentRegistry::register_component() {
+  const ComponentID id = component_id<T>();
   if (id >= descriptors.size()) {
     descriptors.resize(id + 1);
   }
-  if (descriptors[id].id == INVALID_TYPE_ID) {
+  if (descriptors[id].id == INVALID_COMPONENT_ID) {
     descriptors[id] = ComponentDescriptor::create<T>();
   }
   return descriptors[id];
 }
 
 template <typename T>
-[[nodiscard]] inline const ComponentDescriptor &TypeRegistry::get_descriptor() const {
-  const TypeID id = type_id<T>();
-  if (id >= descriptors.size() || descriptors[id].id == INVALID_TYPE_ID) {
+[[nodiscard]] inline const ComponentDescriptor &ComponentRegistry::get_descriptor() const {
+  const ComponentID id = component_id<T>();
+  if (id >= descriptors.size() || descriptors[id].id == INVALID_COMPONENT_ID) {
     throw std::runtime_error(
-        "arche::TypeRegistry: Unregistered component type requested"
+        "arche::ComponentRegistry: Unregistered component type requested"
     );
   }
   return descriptors[id];
 }
 
-const ComponentDescriptor &TypeRegistry::get_descriptor(TypeID id) const {
-  if (id >= descriptors.size() || descriptors[id].id == INVALID_TYPE_ID) {
-    throw std::runtime_error("arche::TypeRegistry: Invalid TypeID requested");
+const ComponentDescriptor &ComponentRegistry::get_descriptor(ComponentID id) const {
+  if (id >= descriptors.size() || descriptors[id].id == INVALID_COMPONENT_ID) {
+    throw std::runtime_error("arche::ComponentRegistry: Invalid ComponentID requested");
   }
   return descriptors[id];
 }
 
-[[nodiscard]] size_t TypeRegistry::registered_count() const noexcept {
+[[nodiscard]] size_t ComponentRegistry::registered_count() const noexcept {
   return descriptors.size();
 }
 

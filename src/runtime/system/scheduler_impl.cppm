@@ -23,7 +23,7 @@ namespace arche::internal::detail::scheduler {
 
 inline void stamp_component_version(
     const ArchetypeGraph &graph,
-    TypeID tid,
+    ComponentID tid,
     uint32_t current_version
 ) noexcept {
   for (const auto &arch_ptr : graph.archetypes()) {
@@ -223,7 +223,7 @@ void Scheduler::execute_batch(
   for (uint32_t id = 0; id < 128; ++id) {
     if (batch.access.write_components.test(id)) {
       detail::scheduler::stamp_component_version(
-          target.graph, static_cast<TypeID>(id), target.current_version
+          target.graph, static_cast<ComponentID>(id), target.current_version
       );
     }
   }
@@ -277,7 +277,7 @@ void Scheduler::run(const SystemExecutionTarget &target) {
     for (uint32_t id = 0; id < 128; ++id) {
       if (batch.access.write_components.test(id)) {
         detail::scheduler::stamp_component_version(
-            target.graph, static_cast<TypeID>(id), target.current_version
+            target.graph, static_cast<ComponentID>(id), target.current_version
         );
       }
     }

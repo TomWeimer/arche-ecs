@@ -19,7 +19,7 @@ Dependencies flow strictly **top-down**. Lower layers must NEVER depend on or in
 
 | Layer | Subsystem / Tier | Contents | Permitted Dependencies |
 | :---: | :--- | :--- | :--- |
-| **0** | `foundation` (`entity`, `hardware`, `component`) | Entity handle, POD types, bitmasks, CPU intrinsics, ColumnLayout, TypeID | Only Layer 0 |
+| **0** | `foundation` (`entity`, `hardware`, `component`) | Entity handle, POD types, bitmasks, CPU intrinsics, ColumnLayout, ComponentID | Only Layer 0 |
 | **1** | `storage` (`chunk`, `slot_map`) | 64KB chunk page memory, SlotMap routing table | Layer 0 only |
 | **2** | `structure` (`archetype`, `query_cache`) | Archetype tables, transition graph, reactive cache | Layers 0 and 1 |
 | **3** | `lifecycle` (`mutation`, `command`, `snapshot`, `resource`, `entity_view`) | Archetype transitions, command buffer, snapshot I/O, singleton resources, EntityRef | Layers 0, 1, and 2 |

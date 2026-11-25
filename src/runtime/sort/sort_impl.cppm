@@ -15,7 +15,7 @@ import :sort;
 import :archetype;
 import :chunk;
 import :slot_map;
-import :type_id;
+import :component_id;
 
 export namespace arche::internal {
 
@@ -98,7 +98,7 @@ inline void sort_archetype(
     return;
   }
 
-  const int16_t col = arch->column_index(type_id<Component>());
+  const int16_t col = arch->column_index(component_id<Component>());
   if (col < 0) {
     return;
   }
@@ -154,7 +154,7 @@ inline void sort_archetype_by_key(
     return;
   }
 
-  const int16_t col = arch->column_index(type_id<Component>());
+  const int16_t col = arch->column_index(component_id<Component>());
   if (col < 0) {
     return;
   }

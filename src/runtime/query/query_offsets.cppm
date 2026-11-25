@@ -13,7 +13,7 @@ export module arche:query.detail.offsets;
 import :entity;
 import :archetype;
 import :chunk;
-import :type_id;
+import :component_id;
 import :hardware;
 import :filters;
 
@@ -40,19 +40,19 @@ inline uint32_t resolve_column_offset(Archetype *arch) {
   // (1 = present, 0 = absent) without reading column memory.
   else if constexpr (is_has_v<DecayComp>) {
     using Inner = has_inner_t<DecayComp>;
-    return arch->has_component(type_id<std::decay_t<Inner>>()) ? 1 : 0;
+    return arch->has_component(component_id<std::decay_t<Inner>>()) ? 1 : 0;
   }
   // 3. Optional component (T*, Opt<T>, OptMut<T>): returns byte offset if
   // present in archetype, or UINT32_MAX sentinel if absent.
   else if constexpr (std::is_pointer_v<DecayComp>) {
     using Raw = std::remove_pointer_t<DecayComp>;
-    const auto *layout = arch->column_layout_for(type_id<std::decay_t<Raw>>());
+    const auto *layout = arch->column_layout_for(component_id<std::decay_t<Raw>>());
     return layout ? layout->chunk_byte_offset : UINT32_MAX;
   }
   // 4. Required component (T, const T): guaranteed present by query matching;
   // returns column byte offset.
   else {
-    const auto *layout = arch->column_layout_for(type_id<DecayComp>());
+    const auto *layout = arch->column_layout_for(component_id<DecayComp>());
     assert(
         layout != nullptr &&
         "Queried component missing from matched archetype layout!"

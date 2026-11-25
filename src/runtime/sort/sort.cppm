@@ -12,7 +12,7 @@ export import :sort.detail.permute;
 import :archetype;
 import :chunk;
 import :slot_map;
-import :type_id;
+import :component_id;
 
 export namespace arche::internal {
 

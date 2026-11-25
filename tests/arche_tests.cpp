@@ -11,8 +11,8 @@ using arche::internal::ArchetypeGraph;
 using arche::CommandBuffer;
 using arche::Entity;
 using arche::internal::Hardware;
-using arche::TypeID;
-using arche::internal::TypeRegistry;
+using arche::ComponentID;
+using arche::internal::ComponentRegistry;
 using arche::World;
 using arche::internal::SlotMap;
 } // namespace
@@ -126,15 +126,15 @@ void test_generational_slot_map() {
  */
 void test_archetype_dag_convergence() {
   std::cout << "[Test 2/6] Archetype DAG Diamond Convergence... ";
-  TypeRegistry registry;
-  registry.register_type<Pos>();
-  registry.register_type<Vel>();
+  ComponentRegistry registry;
+  registry.register_component<Pos>();
+  registry.register_component<Vel>();
 
   ArchetypeGraph graph(registry);
   Archetype *root = graph.root();
 
-  const TypeID pos_t = arche::type_id<Pos>();
-  const TypeID vel_t = arche::type_id<Vel>();
+  const ComponentID pos_t = arche::component_id<Pos>();
+  const ComponentID vel_t = arche::component_id<Vel>();
 
   // 1. Traverse Path 1: Root -> +Pos -> +Vel
   Archetype *p1 = graph.traverse_add(root, pos_t);

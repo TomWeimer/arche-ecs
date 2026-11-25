@@ -7,7 +7,7 @@ module;
 export module arche:query.detail.masks;
 
 import :component_mask;
-import :type_id;
+import :component_id;
 import :filters;
 import :query.detail.filter;
 
@@ -33,7 +33,7 @@ template <typename T>
 inline void set_mask_for_type(ComponentMask &mask) {
   using Decay = std::decay_t<T>;
   if constexpr (Component<Decay>) {
-    mask.set(type_id<Decay>());
+    mask.set(component_id<Decay>());
   }
 }
 
