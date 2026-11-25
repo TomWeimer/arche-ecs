@@ -15,6 +15,7 @@ export module arche:scheduler.detail.scheduler_impl;
 import :scheduler;
 import :system_context;
 import :thread_pool;
+import :task;
 import :command;
 import :resource;
 import :archetype;
@@ -54,20 +55,15 @@ inline void execute_parallel_narrow_nodes(
     ThreadPool &pool,
     ParallelCommandBuffer &parallel_cmd
 ) {
-  std::atomic<size_t> next_system{0};
   const size_t total_systems = system_indices.size();
+  if (total_systems == 0) {
+    return;
+  }
 
-  pool.parallel_for([&](uint32_t thread_id) {
-    while (true) {
-      const size_t idx = next_system.fetch_add(1, std::memory_order_relaxed);
-      if (idx >= total_systems) {
-        break;
-      }
-      const size_t sys_idx = system_indices[idx];
-      if (!systems[sys_idx].enabled) {
-        continue;
-      }
-      CommandBuffer &cmd = parallel_cmd.get(thread_id);
+  if (total_systems == 1 || pool.worker_count() <= 1) {
+    const size_t sys_idx = system_indices[0];
+    if (systems[sys_idx].enabled) {
+      CommandBuffer &cmd = parallel_cmd.get(0);
       SystemContext ctx(
           cmd,
           target.resources,
@@ -78,7 +74,73 @@ inline void execute_parallel_narrow_nodes(
       );
       systems[sys_idx].fn(ctx);
     }
-  });
+    return;
+  }
+
+  struct alignas(64) NarrowTaskItem {
+    size_t system_idx;
+    const SystemList *systems;
+    const SystemExecutionTarget *target;
+    ParallelCommandBuffer *parallel_cmd;
+    TaskGroup *group;
+  };
+
+  TaskGroup group;
+  group.pending.store(static_cast<uint32_t>(total_systems), std::memory_order_relaxed);
+
+  auto task_fn = [](void *data, uint32_t thread_id) {
+    auto *item = static_cast<NarrowTaskItem *>(data);
+    const auto &sys = (*item->systems)[item->system_idx];
+    if (sys.enabled) {
+      CommandBuffer &cmd = item->parallel_cmd->get(thread_id);
+      SystemContext ctx(
+          cmd,
+          item->target->resources,
+          item->target->cache_ctx,
+          item->target->get_cache_fn,
+          item->target->current_version,
+          item->target->previous_version
+      );
+      sys.fn(ctx);
+    }
+    item->group->pending.fetch_sub(1, std::memory_order_release);
+  };
+
+  const uint32_t workers = pool.worker_count();
+
+  if (total_systems <= 128) {
+    NarrowTaskItem stack_items[128];
+    for (size_t i = 0; i < total_systems; ++i) {
+      stack_items[i] = {
+          .system_idx = system_indices[i],
+          .systems = &systems,
+          .target = &target,
+          .parallel_cmd = &parallel_cmd,
+          .group = &group
+      };
+      pool.schedule(
+          Task{.execute = task_fn, .data = &stack_items[i]},
+          static_cast<uint32_t>(i % workers)
+      );
+    }
+    pool.wait(group);
+  } else {
+    std::vector<NarrowTaskItem> heap_items(total_systems);
+    for (size_t i = 0; i < total_systems; ++i) {
+      heap_items[i] = {
+          .system_idx = system_indices[i],
+          .systems = &systems,
+          .target = &target,
+          .parallel_cmd = &parallel_cmd,
+          .group = &group
+      };
+      pool.schedule(
+          Task{.execute = task_fn, .data = &heap_items[i]},
+          static_cast<uint32_t>(i % workers)
+      );
+    }
+    pool.wait(group);
+  }
 }
 
 } // namespace arche::internal::detail::scheduler

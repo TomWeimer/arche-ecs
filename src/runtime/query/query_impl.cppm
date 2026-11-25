@@ -14,6 +14,7 @@ module;
 export module arche:query.detail.impl;
 
 import :query;
+import :task;
 import :hardware;
 
 export namespace arche {
@@ -314,24 +315,17 @@ inline void Query<Components...>::each_parallel(Func &&func) {
   }
 
   const size_t total_tasks = tasks.size();
-  std::atomic<size_t> next_task{0};
+  const uint32_t workers = pool_->worker_count();
 
-  // 5. Dispatch chunk tasks dynamically across worker threads via parallel_for.
-  pool_->parallel_for([&](uint32_t thread_id) {
-    while (true) {
-      const size_t idx = next_task.fetch_add(1, std::memory_order_relaxed);
-      if (idx >= total_tasks) {
-        break;
-      }
-      Chunk *chunk = tasks[idx].chunk;
-      const auto &offsets = tasks[idx].offsets;
-
-      // 6. Unpack typed pointers via std::apply and execute mode-specific
-      // callback.
+  // If single worker or only 1 chunk task, execute synchronously on caller thread
+  if (workers <= 1 || total_tasks == 1) {
+    for (size_t i = 0; i < total_tasks; ++i) {
+      Chunk *chunk = tasks[i].chunk;
+      const auto &offsets = tasks[i].offsets;
       std::apply(
           [&](auto... offs) {
             if constexpr (wants_cmd) {
-              CommandBuffer &cmd = parallel_cmd_->get(thread_id);
+              CommandBuffer &cmd = parallel_cmd_->get(0);
               func(
                   chunk->count(),
                   cmd,
@@ -347,7 +341,92 @@ inline void Query<Components...>::each_parallel(Func &&func) {
           offsets
       );
     }
-  });
+    return;
+  }
+
+  // Phase 2: Sliced chunk ranges scheduled into the work-stealing pool via TaskGroup.
+  // Up to 128 slices distributed across worker queues to enable dynamic stealing without queue thrashing.
+  struct ChunkSliceContext {
+    struct Slice {
+      ChunkSliceContext *parent{nullptr};
+      size_t start{0};
+      size_t end{0};
+    };
+
+    TaskGroup group;
+    std::remove_reference_t<Func> *fn{nullptr};
+    ParallelCommandBuffer *parallel_cmd{nullptr};
+    std::span<const ChunkTask> tasks;
+    Slice slices[128];
+  };
+
+  const size_t max_slices = std::min<size_t>(
+      128, std::max<size_t>(static_cast<size_t>(workers), (total_tasks + 7) / 8)
+  );
+  const size_t chunks_per_slice = (total_tasks + max_slices - 1) / max_slices;
+
+  ChunkSliceContext ctx;
+  ctx.fn = &func;
+  ctx.parallel_cmd = parallel_cmd_;
+  ctx.tasks = tasks;
+
+  size_t actual_slices = 0;
+  for (size_t s = 0; s < max_slices; ++s) {
+    const size_t start = s * chunks_per_slice;
+    if (start >= total_tasks) {
+      break;
+    }
+    const size_t end = std::min(total_tasks, start + chunks_per_slice);
+    ctx.slices[actual_slices] = {
+        .parent = &ctx,
+        .start = start,
+        .end = end
+    };
+    ++actual_slices;
+  }
+
+  ctx.group.pending.store(
+      static_cast<uint32_t>(actual_slices), std::memory_order_relaxed
+  );
+
+  auto task_fn = [](void *data, uint32_t thread_id) {
+    auto *slice = static_cast<typename ChunkSliceContext::Slice *>(data);
+    auto *c = slice->parent;
+
+    for (size_t i = slice->start; i < slice->end; ++i) {
+      Chunk *chunk = c->tasks[i].chunk;
+      const auto &offsets = c->tasks[i].offsets;
+
+      std::apply(
+          [&](auto... offs) {
+            if constexpr (wants_cmd) {
+              CommandBuffer &cmd = c->parallel_cmd->get(thread_id);
+              (*c->fn)(
+                  chunk->count(),
+                  cmd,
+                  detail::query::get_column_ptr<Components>(chunk, offs)...
+              );
+            } else {
+              (*c->fn)(
+                  chunk->count(),
+                  detail::query::get_column_ptr<Components>(chunk, offs)...
+              );
+            }
+          },
+          offsets
+      );
+    }
+    c->group.pending.fetch_sub(1, std::memory_order_release);
+  };
+
+  for (size_t s = 0; s < actual_slices; ++s) {
+    pool_->schedule(
+        Task{.execute = task_fn, .data = &ctx.slices[s]},
+        static_cast<uint32_t>(s % workers)
+    );
+  }
+
+  pool_->wait(ctx.group);
 }
 
 } // namespace arche
