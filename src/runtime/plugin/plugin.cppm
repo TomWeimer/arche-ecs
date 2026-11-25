@@ -45,6 +45,22 @@ public:
     return *this;
   }
 
+  /// Adds a scheduled sorting stage to the execution schedule targeting matching archetypes.
+  template <typename Component, typename... Filters, typename Predicate, typename Sorter>
+  PluginContext &add_sort_stage(
+      std::string name,
+      Predicate &&condition,
+      Sorter &&sorter
+  ) {
+    assert(scheduler_ != nullptr);
+    scheduler_->template add_sort_stage<Component, Filters...>(
+        std::move(name),
+        std::forward<Predicate>(condition),
+        std::forward<Sorter>(sorter)
+    );
+    return *this;
+  }
+
 private:
   internal::Scheduler *scheduler_{nullptr};
 };

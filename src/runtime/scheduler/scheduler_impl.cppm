@@ -96,7 +96,14 @@ Scheduler &Scheduler::add_system(
     SystemScale scale
 ) {
   systems_.push_back(
-      SystemNode{std::move(name), access, std::move(fn), scale}
+      SystemNode{
+          .name = std::move(name),
+          .access = access,
+          .fn = std::move(fn),
+          .stage_fn = nullptr,
+          .scale = scale,
+          .enabled = true,
+      }
   );
   dirty_ = true;
   return *this;
@@ -205,7 +212,11 @@ void Scheduler::execute_batch(
           &pool,
           &parallel_cmd
       );
-      systems_[idx].fn(ctx);
+      if (systems_[idx].stage_fn) {
+        systems_[idx].stage_fn(target, ctx);
+      } else if (systems_[idx].fn) {
+        systems_[idx].fn(ctx);
+      }
     }
   } else if (batch.system_indices.size() == 1) {
     const size_t idx = batch.system_indices[0];
@@ -219,7 +230,11 @@ void Scheduler::execute_batch(
           target.current_version,
           target.previous_version
       );
-      systems_[idx].fn(ctx);
+      if (systems_[idx].stage_fn) {
+        systems_[idx].stage_fn(target, ctx);
+      } else if (systems_[idx].fn) {
+        systems_[idx].fn(ctx);
+      }
     }
   } else {
     detail::scheduler::execute_parallel_narrow_nodes(
@@ -340,7 +355,11 @@ void Scheduler::run_system(
       target.current_version,
       target.previous_version
   );
-  systems_[index].fn(ctx);
+  if (systems_[index].stage_fn) {
+    systems_[index].stage_fn(target, ctx);
+  } else if (systems_[index].fn) {
+    systems_[index].fn(ctx);
+  }
 
   for (uint32_t id = 0; id < 128; ++id) {
     if (systems_[index].access.write_components.test(id)) {

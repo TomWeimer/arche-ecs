@@ -31,7 +31,16 @@ struct WorldTestProbe {
       internal::Archetype *arch,
       std::span<const uint32_t> indices
   ) {
-    arche::permute(w, arch, indices);
+    w.advance_version();
+    internal::Sort::permute(
+        internal::SortTarget{
+            .arch = arch,
+            .chunks = arch->chunks(),
+            .slot_map = internal::WorldAccess::slot_map(w),
+            .version = w.version(),
+        },
+        indices
+    );
   }
 
   static internal::SlotMap &slot_map(World &w) noexcept {

@@ -1,5 +1,6 @@
 import arche;
 
+#include <algorithm>
 #include <cassert>
 #include <chrono>
 #include <cstdint>
@@ -427,12 +428,42 @@ void run_cache_locality_permutation_benchmark(size_t entity_count) {
     return elapsed_us.count();
   };
 
+struct SorterPlugin {
+  static std::string_view name() { return "SorterPlugin"; }
+  void build(arche::World &, arche::PluginContext &ctx) {
+    ctx.add_sort_stage<Position>(
+        "MortonSort",
+        [](const arche::SystemContext &) { return true; },
+        [](arche::ColumnView<Position> columns, std::vector<uint32_t> &out_perm) {
+          struct Item {
+            float x;
+            uint32_t idx;
+          };
+          std::vector<Item> items;
+          items.reserve(columns.total_count());
+          uint32_t gid = 0;
+          for (std::span<const Position> span : columns) {
+            for (const auto &p : span) {
+              items.push_back({p.x, gid++});
+            }
+          }
+          std::sort(items.begin(), items.end(), [](const Item &a, const Item &b) {
+            return a.x < b.x;
+          });
+          out_perm.resize(items.size());
+          for (size_t i = 0; i < items.size(); ++i) {
+            out_perm[i] = items[i].idx;
+          }
+        }
+    );
+  }
+};
+
   const double pre_sort_us = measure_neighbor_latency();
 
-  // 2. Apply Morton-order permutation (sorting by position.x)
-  arche::sort<Position>(world, [](const Position &a, const Position &b) {
-    return a.x < b.x;
-  });
+  // 2. Apply Morton-order permutation (sorting by position.x) via scheduled sort stage
+  world.add_plugin<SorterPlugin>();
+  world.run();
 
   const double post_sort_us = measure_neighbor_latency();
   const double speedup = pre_sort_us /

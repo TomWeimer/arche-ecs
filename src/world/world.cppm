@@ -290,14 +290,4 @@ struct WorldAccess {
 
 } // namespace internal
 
-// --- Spatial Locality Sorting Algorithms -------------------------------------
-
-/**
- * @brief Sorts all archetypes containing component `Comp` matching `Filters...` in-place.
- *
- * Reorders entity rows and chunk columns to achieve contiguous spatial cache locality.
- */
-template <typename Component, typename... Filters, typename Compare>
-void sort(World &world, Compare &&comp);
-
 } // namespace arche

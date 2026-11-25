@@ -160,4 +160,138 @@ public:
   );
 };
 
+} // namespace arche::internal
+
+export namespace arche {
+
+/**
+ * @class ColumnView
+ * @brief Zero-overhead chunk-segmented view over a single component column for an archetype.
+ *
+ * Provides safe, structured access to contiguous chunk spans during scheduled sorting
+ * without exposing internal table mutations or requiring heap vector allocations.
+ *
+ * @tparam T Component type of the target column.
+ */
+template <typename T>
+class ColumnView {
+private:
+  const internal::Archetype *arch_{nullptr};
+  internal::ComponentColumnLayout layout_{};
+  bool valid_{false};
+
+public:
+  class Iterator {
+  private:
+    const internal::Archetype *arch_{nullptr};
+    uint32_t chunk_idx_{0};
+    uint32_t byte_offset_{0};
+
+  public:
+    using iterator_category = std::forward_iterator_tag;
+    using value_type = std::span<const T>;
+    using difference_type = std::ptrdiff_t;
+    using pointer = const std::span<const T> *;
+    using reference = std::span<const T>;
+
+    Iterator() = default;
+    Iterator(
+        const internal::Archetype *arch,
+        uint32_t chunk_idx,
+        uint32_t byte_offset
+    ) noexcept
+        : arch_(arch), chunk_idx_(chunk_idx), byte_offset_(byte_offset) {}
+
+    std::span<const T> operator*() const noexcept {
+      if (!arch_ || chunk_idx_ >= arch_->chunks().size()) {
+        return {};
+      }
+      const internal::Chunk *chunk = arch_->chunks()[chunk_idx_];
+      if (!chunk || chunk->count() == 0) {
+        return {};
+      }
+      return std::span<const T>(
+          chunk->template typed_slice<T>(byte_offset_), chunk->count()
+      );
+    }
+
+    Iterator &operator++() noexcept {
+      ++chunk_idx_;
+      return *this;
+    }
+
+    Iterator operator++(int) noexcept {
+      Iterator tmp = *this;
+      ++(*this);
+      return tmp;
+    }
+
+    bool operator==(const Iterator &other) const noexcept {
+      return arch_ == other.arch_ && chunk_idx_ == other.chunk_idx_;
+    }
+
+    bool operator!=(const Iterator &other) const noexcept {
+      return !(*this == other);
+    }
+  };
+
+  ColumnView() = default;
+
+  explicit ColumnView(const internal::Archetype *arch) noexcept : arch_(arch) {
+    if (arch_) {
+      const auto *l = arch_->column_layout_for(component_id<T>());
+      if (l) {
+        layout_ = *l;
+        valid_ = true;
+      }
+    }
+  }
+
+  [[nodiscard]] size_t total_count() const noexcept {
+    return (valid_ && arch_) ? arch_->entity_count() : 0;
+  }
+
+  [[nodiscard]] size_t chunk_count() const noexcept {
+    return (valid_ && arch_) ? arch_->chunks().size() : 0;
+  }
+
+  [[nodiscard]] bool empty() const noexcept {
+    return total_count() == 0;
+  }
+
+  [[nodiscard]] std::span<const T> operator[](size_t chunk_idx) const noexcept {
+    if (!valid_ || !arch_ || chunk_idx >= arch_->chunks().size()) {
+      return {};
+    }
+    const internal::Chunk *chunk = arch_->chunks()[chunk_idx];
+    if (!chunk || chunk->count() == 0) {
+      return {};
+    }
+    return std::span<const T>(
+        chunk->template typed_slice<T>(layout_.chunk_byte_offset), chunk->count()
+    );
+  }
+
+  [[nodiscard]] const T &get(size_t global_idx) const noexcept {
+    auto coord = arch_->decompose_index(static_cast<uint32_t>(global_idx));
+    return (*this)[coord.chunk_index][coord.local_row];
+  }
+
+  [[nodiscard]] Iterator begin() const noexcept {
+    if (!valid_ || !arch_) {
+      return Iterator(nullptr, 0, 0);
+    }
+    return Iterator(arch_, 0, layout_.chunk_byte_offset);
+  }
+
+  [[nodiscard]] Iterator end() const noexcept {
+    if (!valid_ || !arch_) {
+      return Iterator(nullptr, 0, 0);
+    }
+    return Iterator(
+        arch_, static_cast<uint32_t>(arch_->chunks().size()), layout_.chunk_byte_offset
+    );
+  }
+};
+
 } // namespace arche

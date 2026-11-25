@@ -73,6 +73,7 @@ inline SystemExecutionTarget World::system_execution_target() noexcept {
   return SystemExecutionTarget{
       .resources = storage_->resources,
       .graph = storage_->graph,
+      .slot_map = storage_->slot_map,
       .current_version = storage_->current_version,
       .previous_version = storage_->previous_version,
       .cache_ctx = this,
@@ -211,37 +212,6 @@ inline Query<Components...> World::query(FilterArgs &&...filters) {
 }
 
 // =============================================================================
-// Spatial Permutation & Sort Wrappers
-// =============================================================================
-
-inline void permute(
-    World &world,
-    Archetype *arch,
-    std::span<const uint32_t> target_indices
-) {
-  world.advance_version();
-  Sort::permute(
-      SortTarget{
-          .arch = arch,
-          .chunks = arch->chunks(),
-          .slot_map = internal::WorldAccess::slot_map(world),
-          .version = world.version(),
-      },
-      target_indices
-  );
-}
-
-template <typename... Components>
-inline void permute(World &world, std::span<const uint32_t> target_indices) {
-  auto &reg = internal::WorldAccess::registry(world);
-  auto &g = internal::WorldAccess::graph(world);
-  (reg.register_component<std::decay_t<Components>>(), ...);
-  std::vector<ComponentID> types = {component_id<std::decay_t<Components>>()...};
-  Archetype *arch = g.get_or_create(types);
-  permute(world, arch, target_indices);
-}
-
-// =============================================================================
 // WorldAccess Implementations
 // =============================================================================
 
@@ -322,82 +292,5 @@ inline QueryCache *WorldAccess::query_cache(
 }
 
 } // namespace internal
-
-template <typename Component, typename Compare>
-inline void sort(World &world, Archetype *arch, Compare &&comp) {
-  world.advance_version();
-  Sort::by_component<Component>(
-      SortTarget{
-          .arch = arch,
-          .chunks = arch->chunks(),
-          .slot_map = internal::WorldAccess::slot_map(world),
-          .version = world.version(),
-      },
-      std::forward<Compare>(comp)
-  );
-}
-
-template <typename Component, typename... Filters, typename Compare>
-inline void sort(World &world, Compare &&comp) {
-  ComponentMask include_mask;
-  ComponentMask exclude_mask;
-  include_mask.set(component_id<Component>());
-  if constexpr (sizeof...(Filters) > 0) {
-    (
-        [&]<typename Filter>() {
-          if constexpr (is_with_v<Filter>) {
-            apply_filter_to_mask<Filter>(
-                include_mask, internal::WorldAccess::registry(world)
-            );
-          } else if constexpr (is_without_v<Filter>) {
-            apply_filter_to_mask<Filter>(
-                exclude_mask, internal::WorldAccess::registry(world)
-            );
-          }
-        }.template operator()<Filters>(),
-        ...);
-  }
-
-  QueryCache *cache = internal::WorldAccess::query_cache(world, include_mask, exclude_mask);
-  for (Archetype *arch : cache->matching_archetypes) {
-    sort<Component>(world, arch, comp);
-  }
-}
-
-template <typename Component, typename... Filters, typename KeyExtractor>
-inline void sort_by_key(World &world, KeyExtractor &&key_fn) {
-  ComponentMask include_mask;
-  ComponentMask exclude_mask;
-  include_mask.set(component_id<Component>());
-  if constexpr (sizeof...(Filters) > 0) {
-    (
-        [&]<typename Filter>() {
-          if constexpr (is_with_v<Filter>) {
-            apply_filter_to_mask<Filter>(
-                include_mask, internal::WorldAccess::registry(world)
-            );
-          } else if constexpr (is_without_v<Filter>) {
-            apply_filter_to_mask<Filter>(
-                exclude_mask, internal::WorldAccess::registry(world)
-            );
-          }
-        }.template operator()<Filters>(),
-        ...);
-  }
-
-  QueryCache *cache = internal::WorldAccess::query_cache(world, include_mask, exclude_mask);
-  for (Archetype *arch : cache->matching_archetypes) {
-    world.advance_version();
-    Sort::by_key<Component>(
-        SortTarget{
-            .arch = arch,
-            .chunks = arch->chunks(),
-            .slot_map = internal::WorldAccess::slot_map(world),
-            .version = world.version(),
-        },
-        key_fn
-    );
-  }
-}
 
 } // namespace arche

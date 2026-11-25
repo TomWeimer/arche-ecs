@@ -158,10 +158,21 @@ void test_comparator_sorting() {
   world.spawn(Position{2.0f, 2.0f}, ParticleKey{900});
   world.spawn(Position{3.0f, 3.0f}, ParticleKey{200});
 
-  // Sort by ParticleKey::morton_code ascending across all archetypes possessing
-  // ParticleKey
-  arche::sort<ParticleKey>(
-      world, [](const ParticleKey &a, const ParticleKey &b) {
+  // Sort by ParticleKey::morton_code ascending via internal::Sort::by_component
+  auto &graph = WorldTestProbe::graph(world);
+  std::vector<arche::ComponentID> types = {
+      arche::component_id<Position>(), arche::component_id<ParticleKey>()
+  };
+  auto *arch = graph.get_or_create(types);
+  world.advance_version();
+  arche::internal::Sort::by_component<ParticleKey>(
+      arche::internal::SortTarget{
+          .arch = arch,
+          .chunks = arch->chunks(),
+          .slot_map = WorldTestProbe::slot_map(world),
+          .version = world.version(),
+      },
+      [](const ParticleKey &a, const ParticleKey &b) {
         return a.morton_code < b.morton_code;
       }
   );
@@ -245,10 +256,22 @@ void test_radix_key_sorting() {
   world.spawn(Position{2.0f, 2.0f}, ParticleKey{9000});
   world.spawn(Position{3.0f, 3.0f}, ParticleKey{2000});
 
-  // Sort by integer key extractor in O(N) Radix sort
-  arche::sort_by_key<ParticleKey>(world, [](const ParticleKey &k) {
-    return k.morton_code;
-  });
+  // Sort by integer key extractor in O(N) Radix sort via internal::Sort::by_key
+  auto &graph = WorldTestProbe::graph(world);
+  std::vector<arche::ComponentID> types = {
+      arche::component_id<Position>(), arche::component_id<ParticleKey>()
+  };
+  auto *arch = graph.get_or_create(types);
+  world.advance_version();
+  arche::internal::Sort::by_key<ParticleKey>(
+      arche::internal::SortTarget{
+          .arch = arch,
+          .chunks = arch->chunks(),
+          .slot_map = WorldTestProbe::slot_map(world),
+          .version = world.version(),
+      },
+      [](const ParticleKey &k) { return k.morton_code; }
+  );
 
   std::vector<uint32_t> keys;
   for (auto [k] : world.query<ParticleKey>()) {

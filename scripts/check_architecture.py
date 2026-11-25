@@ -200,6 +200,7 @@ SUBSYSTEM_RULES: Dict[str, Dict] = {
             "system",
             "access",
             "query",
+            "sort",
             "concurrency",
             "mutation",
             "command",

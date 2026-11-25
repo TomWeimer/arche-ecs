@@ -1,6 +1,7 @@
 import arche;
 #include "common/world_test_probe.hpp"
 
+#include <algorithm>
 #include <cassert>
 #include <iostream>
 #include <vector>
@@ -139,10 +140,38 @@ void test_sorting_and_snapshots_api() {
   world.spawn(Key{10});
   world.spawn(Key{20});
 
-  // In-place sort across all archetypes with Key
-  arche::sort<Key>(world, [](const Key &a, const Key &b) {
-    return a.val < b.val;
-  });
+  // In-place sort across all archetypes with Key via Plugin sort stage
+  struct KeySortPlugin {
+    static std::string_view name() { return "KeySortPlugin"; }
+    void build(World &, arche::PluginContext &ctx) {
+      ctx.add_sort_stage<Key>(
+          "KeySort",
+          [](const arche::SystemContext &) { return true; },
+          [](arche::ColumnView<Key> columns, std::vector<uint32_t> &out_perm) {
+            struct Item {
+              uint32_t val;
+              uint32_t idx;
+            };
+            std::vector<Item> items;
+            uint32_t gid = 0;
+            for (std::span<const Key> span : columns) {
+              for (const auto &k : span) {
+                items.push_back({k.val, gid++});
+              }
+            }
+            std::sort(items.begin(), items.end(), [](const Item &a, const Item &b) {
+              return a.val < b.val;
+            });
+            out_perm.resize(items.size());
+            for (size_t i = 0; i < items.size(); ++i) {
+              out_perm[i] = items[i].idx;
+            }
+          }
+      );
+    }
+  };
+  world.add_plugin<KeySortPlugin>();
+  world.run();
 
   std::vector<uint32_t> vals;
   for (auto [k] : world.query<Key>()) {

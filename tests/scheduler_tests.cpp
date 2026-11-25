@@ -1,6 +1,7 @@
 import arche;
 #include "common/world_test_probe.hpp"
 
+#include <algorithm>
 #include <atomic>
 #include <cassert>
 #include <iostream>
@@ -477,6 +478,103 @@ void test_narrow_systems_exceeding_worker_count() {
 }
 
 // =============================================================================
+// Unit Test 12: Scheduled Sort Stage with ColumnView & Trigger Predicate
+// =============================================================================
+
+void test_scheduled_sort_stage() {
+  std::cout << "Testing Scheduled Sort Stage (ColumnView & Barrier Permutation)... ";
+
+  World world;
+  ThreadPool pool(2);
+
+  world.resources.insert<SimulationClock>(SimulationClock{.total_time = 0.0f, .tick_count = 0});
+
+  // Spawn 3 entities in non-sorted order
+  world.spawn(Position{10.0f, 0.0f, 0.0f}, Score{300});
+  world.spawn(Position{5.0f, 0.0f, 0.0f}, Score{100});
+  world.spawn(Position{20.0f, 0.0f, 0.0f}, Score{200});
+
+  Scheduler scheduler;
+
+  // Add sort stage conditional on clock tick_count > 0
+  scheduler.add_sort_stage<Position, arche::With<Score>>(
+      "SpatialPositionSort",
+      [](const SystemContext &ctx) -> bool {
+        return ctx.read_resource<SimulationClock>().tick_count > 0;
+      },
+      [](arche::ColumnView<Position> columns, std::vector<uint32_t> &out_perm) {
+        assert(columns.total_count() == 3);
+        assert(columns.chunk_count() >= 1);
+        assert(!columns.empty());
+
+        // Extract key and index pairs
+        struct KeyIdx {
+          float x;
+          uint32_t idx;
+        };
+        std::vector<KeyIdx> items;
+        items.reserve(columns.total_count());
+        uint32_t global_idx = 0;
+        for (std::span<const Position> chunk_span : columns) {
+          for (const auto &pos : chunk_span) {
+            items.push_back({pos.x, global_idx++});
+          }
+        }
+
+        // Sort ascending by position.x
+        std::sort(items.begin(), items.end(), [](const KeyIdx &a, const KeyIdx &b) {
+          return a.x < b.x;
+        });
+
+        out_perm.resize(items.size());
+        for (size_t i = 0; i < items.size(); ++i) {
+          out_perm[i] = items[i].idx;
+        }
+      }
+  );
+
+  // Tick 0: clock.tick_count is 0 -> sort condition is FALSE
+  scheduler.run(WorldTestProbe::execution_target(world), pool);
+
+  // Entities must remain in initial order: 10, 5, 20
+  {
+    std::vector<float> xs;
+    for (auto [pos] : world.query<Position>()) {
+      xs.push_back(pos.x);
+    }
+    assert(xs.size() == 3);
+    assert(xs[0] == 10.0f);
+    assert(xs[1] == 5.0f);
+    assert(xs[2] == 20.0f);
+  }
+
+  // Set tick_count = 1 -> sort condition becomes TRUE
+  world.resources.get<SimulationClock>().tick_count = 1;
+  scheduler.run(WorldTestProbe::execution_target(world), pool);
+
+  // Entities must now be sorted ascending: 5, 10, 20
+  {
+    std::vector<float> xs;
+    std::vector<int> scores;
+    for (auto [pos, score] : world.query<Position, Score>()) {
+      xs.push_back(pos.x);
+      scores.push_back(score.points);
+    }
+    assert(xs.size() == 3);
+    assert(xs[0] == 5.0f);
+    assert(xs[1] == 10.0f);
+    assert(xs[2] == 20.0f);
+
+    // Associated columns must also be permuted correctly!
+    assert(scores[0] == 100);
+    assert(scores[1] == 300);
+    assert(scores[2] == 200);
+  }
+
+  std::cout << "PASSED\n";
+}
+
+// =============================================================================
 // Main Test Runner
 // =============================================================================
 
@@ -496,6 +594,7 @@ int main() {
   test_wide_system_chunk_work_stealing();
   test_wide_system_single_threaded_fallback();
   test_narrow_systems_exceeding_worker_count();
+  test_scheduled_sort_stage();
 
   std::cout << "\nAll Scheduler unit tests passed successfully!\n";
   return 0;
